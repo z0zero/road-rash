@@ -172,17 +172,19 @@ export function Hud({ session }: { session: GameSession }) {
       <div
         ref={opponent}
         data-testid="nearest-opponent"
-        className="absolute right-8 top-4 hidden w-56 text-right drop-shadow-[0_3px_0_rgba(27,16,38,0.85)]"
+        className="absolute right-8 top-4 hidden w-60 text-right drop-shadow-[0_3px_0_rgba(27,16,38,0.85)]"
       >
-        <div className="text-sm uppercase tracking-widest text-sand/90">Nearest</div>
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex items-center justify-end gap-2 text-sm uppercase tracking-widest text-sand/90">
           <span
             ref={opponentIsCop}
             data-testid="nearest-opponent-cop"
-            className="hidden rounded-sm bg-[#2a5bd7] px-1.5 py-0.5 text-sm uppercase not-italic leading-none tracking-widest text-sand"
+            className="hidden rounded-sm bg-[#2a5bd7] px-1.5 py-px leading-tight text-sand"
           >
             Cop
           </span>
+          <span>Nearest</span>
+        </div>
+        <div className="flex items-center justify-end gap-2">
           <span ref={opponentClub} data-testid="nearest-opponent-club" role="img" aria-label="Holding a club" className="hidden">
             <ClubIcon className="h-7 w-7 text-sun" />
           </span>
