@@ -19,12 +19,12 @@ const FULL = 100;
  * every rider, the 3-2-1 countdown, the player's stamina and bike condition,
  * a weapon icon while the player holds a club, the nearest opponent's (or
  * cop's) name, stamina and club, warning arrows for riders alongside or
- * coming up from behind, the cop alert while a cop is near, and callouts
- * when a club changes hands with the player or a cop fights back, goes down
- * or busts someone. It is updated straight from the frame loop through refs,
- * never through React state.
+ * coming up from behind, the cop alert while a cop is near (its lights
+ * flashing unless motion is reduced), and callouts when a club changes hands
+ * with the player or a cop fights back, goes down or busts someone. It is
+ * updated straight from the frame loop through refs, never through React state.
  */
-export function Hud({ session }: { session: GameSession }) {
+export function Hud({ session, reduceMotion }: { session: GameSession; reduceMotion: boolean }) {
   const speed = useRef<HTMLSpanElement>(null);
   const position = useRef<HTMLSpanElement>(null);
   const clock = useRef<HTMLSpanElement>(null);
@@ -130,9 +130,13 @@ export function Hud({ session }: { session: GameSession }) {
         className="absolute left-1/2 top-[4.75rem] hidden -translate-x-1/2"
       >
         <div className="flex items-center gap-3 rounded-full border-2 border-sand/80 bg-night/80 px-4 py-1 shadow-lg">
-          <span className="h-4 w-4 rounded-full bg-[#ff2a3d] shadow-[0_0_14px_4px_#ff2a3d] animate-cop-red motion-reduce:animate-none" />
+          <span
+            className={`h-4 w-4 rounded-full bg-[#ff2a3d] shadow-[0_0_14px_4px_#ff2a3d] ${reduceMotion ? "" : "animate-cop-red"}`}
+          />
           <span className="text-3xl uppercase italic leading-none tracking-wide text-sand">Cop</span>
-          <span className="h-4 w-4 rounded-full bg-[#2a7dff] shadow-[0_0_14px_4px_#2a7dff] animate-cop-blue motion-reduce:animate-none" />
+          <span
+            className={`h-4 w-4 rounded-full bg-[#2a7dff] shadow-[0_0_14px_4px_#2a7dff] ${reduceMotion ? "" : "animate-cop-blue"}`}
+          />
         </div>
       </div>
       <div className="absolute left-8 top-4 drop-shadow-[0_3px_0_rgba(27,16,38,0.85)]">
