@@ -20,16 +20,19 @@ export interface Mixer {
 /** The music sits under the engine and the hits: the track is mastered loud. */
 const MUSIC_MIX = 0.42;
 
+/** The compressor lifts everything it lets through; this takes the lift back, leaving headroom for crashes. */
+const OUTPUT_TRIM = 0.6;
+
 /** How quickly levels and volumes ease to a new value, in seconds (a time constant). */
 const EASE_SECONDS = 0.06;
 
-export function createMixer(context: AudioContext): Mixer {
+export function createMixer(context: BaseAudioContext): Mixer {
   const compressor = context.createDynamicsCompressor();
-  compressor.threshold.value = -14;
-  compressor.knee.value = 12;
-  compressor.ratio.value = 4;
-  compressor.attack.value = 0.004;
-  compressor.release.value = 0.25;
+  compressor.threshold.value = -16;
+  compressor.knee.value = 10;
+  compressor.ratio.value = 6;
+  compressor.attack.value = 0.001;
+  compressor.release.value = 0.2;
   const master = context.createGain();
   compressor.connect(master).connect(context.destination);
 
@@ -46,7 +49,7 @@ export function createMixer(context: AudioContext): Mixer {
     music: musicVolume,
     effects: effectsVolume,
     setVolumes(settings) {
-      ease(master.gain, loudness(settings.masterVolume));
+      ease(master.gain, loudness(settings.masterVolume) * OUTPUT_TRIM);
       ease(musicVolume.gain, loudness(settings.musicVolume) * MUSIC_MIX);
       ease(effectsVolume.gain, loudness(settings.effectsVolume));
     },

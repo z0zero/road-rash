@@ -46,7 +46,7 @@ export class MusicLoop {
   private wanted = false;
 
   constructor(
-    private readonly context: AudioContext,
+    private readonly context: BaseAudioContext,
     private readonly destination: AudioNode,
   ) {}
 
