@@ -42,6 +42,8 @@ export interface CopIntent {
   readonly speed: number;
   /** The offset to steer for, metres right of the centreline. */
   readonly line: number;
+  /** Whether the cop is in a hurry, as when it is out to bust someone: it changes speed and line more briskly. */
+  readonly hurrying?: boolean;
 }
 
 /** Where someone is and how fast they are going along the track. */
@@ -77,16 +79,19 @@ const PATROL_MOST_EASING = 20;
 const ACCELERATION = 14;
 /** ...brake as hard as this (m/s²)... */
 const BRAKING = 30;
-/** ...and settle on the speed they want this quickly (1/s). */
+/** ...and settle on the speed they want this quickly (1/s), or this quickly in a hurry. */
 const SPEED_RESPONSE = 4;
+const HURRIED_SPEED_RESPONSE = 8;
 /** A cop rides back down the road, to a crashed rider behind it, gingerly: no faster than this (m/s)... */
 const BACK_SPEED = 8;
 /** ...speeding up to it at this many m/s². */
 const BACK_ACCELERATION = 4;
 /** Cops steer for the line they want this quickly (1/s)... */
 const LINE_RESPONSE = 1.5;
-/** ...at up to this many metres per second sideways. */
+/** ...at up to this many metres per second sideways; in a hurry, quicker still, as far as the bike's steering allows. */
 const LINE_CHANGE_SPEED = 4;
+const HURRIED_LINE_RESPONSE = 4;
+const HURRIED_LINE_CHANGE_SPEED = 7;
 /** A cop riding to bust a crashed rider pulls up this many metres to their side, nearer the middle of the road... */
 const PULL_UP_BESIDE = 1.2;
 /** ...slowing as it gets there to stop by them, as if braking at this rate (m/s²). */
@@ -126,7 +131,7 @@ export function bustingIntent(me: Readonly<Motion>, rider: Place, edge: number):
   const gap = rider.distance - me.distance;
   const speed = rider.speed + Math.sign(gap) * Math.sqrt(2 * PULL_UP_BRAKING * Math.abs(gap));
   const line = rider.offset - (rider.offset >= 0 ? 1 : -1) * PULL_UP_BESIDE;
-  return { speed, line: clamp(line, -edge, edge) };
+  return { speed, line: clamp(line, -edge, edge), hurrying: true };
 }
 
 /**
@@ -137,14 +142,17 @@ export function bustingIntent(me: Readonly<Motion>, rider: Place, edge: number):
  */
 export function moveCop(motion: Motion, intent: CopIntent, edge: number): void {
   const wanted = clamp(intent.speed, -BACK_SPEED, TUNING.cops.topSpeed);
-  const change = SPEED_RESPONSE * (wanted - motion.speed);
+  const change = (intent.hurrying ? HURRIED_SPEED_RESPONSE : SPEED_RESPONSE) * (wanted - motion.speed);
   const braking = motion.speed !== 0 && Math.sign(change) !== Math.sign(motion.speed);
   const most = braking ? BRAKING : change > 0 ? ACCELERATION : BACK_ACCELERATION;
   const before = motion.speed;
   motion.speed += clamp(change, -most, most) * STEP_SECONDS;
   if (braking && Math.sign(motion.speed) !== Math.sign(before)) motion.speed = 0;
-  const reach = Math.min(LINE_CHANGE_SPEED, maxSidewaysSpeed(Math.abs(motion.speed)));
-  motion.steering = clamp(LINE_RESPONSE * (intent.line - motion.offset), -reach, reach);
+  const [response, sideways] = intent.hurrying
+    ? [HURRIED_LINE_RESPONSE, HURRIED_LINE_CHANGE_SPEED]
+    : [LINE_RESPONSE, LINE_CHANGE_SPEED];
+  const reach = Math.min(sideways, maxSidewaysSpeed(Math.abs(motion.speed)));
+  motion.steering = clamp(response * (intent.line - motion.offset), -reach, reach);
   motion.distance += motion.speed * STEP_SECONDS;
   motion.offset = clamp(motion.offset + (motion.steering + motion.shove) * STEP_SECONDS, -edge, edge);
   motion.shove *= Math.exp(-TUNING.shoveDecay * STEP_SECONDS);
