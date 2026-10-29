@@ -112,6 +112,8 @@ export class RiderMotion {
     }
     this.fallen = Math.min(1, this.fallen + delta / FALL_SECONDS);
     this.yaw = -road.heading + this.fallSide * SLEW * this.fallen;
+    // Whatever follows the lean (the camera's tilt) settles back upright while the rider is down.
+    this.lean -= this.lean * (1 - Math.exp(-LEAN_RESPONSE * delta));
 
     const ground = view.track.pointAt(rider.distance, rider.offset);
     this.bodyX = ground.x;
