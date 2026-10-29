@@ -1,17 +1,15 @@
 import { getCoastalTrack } from "./coastal-track";
 import { bumpApart } from "./contact";
-import type { RaceEvent, RaceOutcome, RiderId } from "./events";
+import type { AttackKind, RaceEvent, RaceOutcome, RiderId } from "./events";
 import { lineUpOpponents } from "./field";
+import { attackSteps, awayFrom, nearestWithinReach, windUpSteps, type Attack } from "./fighting";
 import { catchUpFor, opponentControls, paceFor, type OpponentRiding } from "./opponent-riding";
 import { OPPONENTS, PLAYER_NAME, type Temperament } from "./opponents";
 import { createRandom } from "./random";
 import { ride, type Controls, type Motion } from "./riding";
+import { STEP_SECONDS, STEPS_PER_SECOND } from "./steps";
 import type { Track } from "./track";
-
-const STEPS_PER_SECOND = 60;
-
-/** The race advances in fixed steps of exactly this many seconds (60 Hz). */
-export const STEP_SECONDS = 1 / STEPS_PER_SECOND;
+import { TUNING } from "./tuning";
 
 /** The player is always rider 0. */
 export const PLAYER: RiderId = 0;
@@ -64,6 +62,8 @@ export interface RiderSnapshot {
   readonly position: number | null;
   /** Race time at which the rider crossed the finish line, in seconds; null until then. */
   readonly finishTime: number | null;
+  /** How much fight the rider has left: 100 when fresh, down to 0. */
+  readonly stamina: number;
 }
 
 /** Everything visible in the race at one moment. Snapshots are plain data that later steps never change. */
@@ -143,6 +143,9 @@ interface Rider {
   finishTime: number | null;
   /** 1 for the first rider over the finish line, 2 for the next, and so on. */
   finishOrder: number | null;
+  stamina: number;
+  /** The attack the rider is making, or null. */
+  attack: Attack | null;
 }
 
 export function createRace(options: RaceOptions): Race {
@@ -162,6 +165,8 @@ export function createRace(options: RaceOptions): Race {
       status: "racing",
       finishTime: null,
       finishOrder: null,
+      stamina: TUNING.fullStamina,
+      attack: null,
     },
   ];
   lineUpOpponents(track, OPPONENTS.length, random).forEach(({ distance, offset }, index) => {
@@ -174,10 +179,54 @@ export function createRace(options: RaceOptions): Race {
       status: "racing",
       finishTime: null,
       finishOrder: null,
+      stamina: TUNING.fullStamina,
+      attack: null,
     });
   });
 
   const clock = () => Math.max(0, stepsTaken - COUNTDOWN_STEPS) / STEPS_PER_SECOND;
+
+  /** The riders an attack can be aimed at: everyone still racing. */
+  const targets = () => riders.filter((rider) => rider.status === "racing");
+
+  /** Starts an attack's wind-up, aimed at the nearest rider within reach (if any). */
+  function throwAttack(attacker: Rider, kind: AttackKind) {
+    attacker.attack = { kind, steps: 0 };
+    const target = nearestWithinReach(attacker.motion, targets(), kind);
+    events.push({
+      type: "attack-thrown",
+      attacker: { kind: "rider", id: attacker.id },
+      target: target && { kind: "rider", id: target.id },
+      kind,
+    });
+  }
+
+  /** Moves every attack on by a step: each strikes at the end of its wind-up and is over after its recovery. */
+  function advanceAttacks() {
+    for (const attacker of riders) {
+      const attack = attacker.attack;
+      if (!attack) continue;
+      attack.steps++;
+      if (attack.steps === windUpSteps(attack.kind) && attacker.status === "racing") {
+        const target = nearestWithinReach(attacker.motion, targets(), attack.kind);
+        if (target) land(attacker, target, attack.kind);
+      }
+      if (attack.steps >= attackSteps(attack.kind)) attacker.attack = null;
+    }
+  }
+
+  function land(attacker: Rider, target: Rider, kind: AttackKind) {
+    events.push({
+      type: "attack-landed",
+      attacker: { kind: "rider", id: attacker.id },
+      target: { kind: "rider", id: target.id },
+      kind,
+    });
+    const { stamina, shove } = TUNING.attacks[kind];
+    target.stamina = Math.max(0, target.stamina - stamina);
+    // A kick shoves its target sideways, away from the attacker.
+    if (shove > 0) target.motion.shove = awayFrom(attacker.motion, target.motion) * shove;
+  }
 
   /** Finishes the riders who crossed the finish line during the step that began at `clockBefore`, in the order they crossed it. */
   function finishCrossings(distancesBefore: readonly number[], clockBefore: number) {
@@ -255,9 +304,13 @@ export function createRace(options: RaceOptions): Race {
           if (rider.status !== "racing") return FINISHED_CONTROLS;
           return rider.riding ? opponentControls(rider.motion, rider.riding, track, field, catchUp(rider)) : input;
         });
+        if (player.status === "racing" && !player.attack && (input.punch || input.kick)) {
+          throwAttack(player, input.punch ? "punch" : "kick");
+        }
         const distancesBefore = riders.map((rider) => rider.motion.distance);
         riders.forEach((rider, index) => ride(rider.motion, controls[index], track, STEP_SECONDS));
         bumpApart(field, track.roadHalfWidth + track.shoulderWidth);
+        advanceAttacks();
         finishCrossings(distancesBefore, clockBefore);
       }
       stepsTaken++;
@@ -278,6 +331,7 @@ export function createRace(options: RaceOptions): Race {
           status: rider.status,
           position: ranks.get(rider.id) ?? null,
           finishTime: rider.finishTime,
+          stamina: rider.stamina,
         })),
       };
     },

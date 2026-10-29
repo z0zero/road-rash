@@ -9,7 +9,8 @@
  *   race.fastForward();        // once the player's race is over: final results
  *   race.track;                // the road's geometry and placements
  */
-export { createRace, NO_INPUT, PLAYER, STEP_SECONDS } from "./race";
+export { createRace, NO_INPUT, PLAYER } from "./race";
+export { STEP_SECONDS } from "./steps";
 export type {
   PlayerInput,
   Race,
