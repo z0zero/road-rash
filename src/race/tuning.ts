@@ -68,4 +68,10 @@ export const TUNING = {
   remountSpeed: 5,
   /** ...with at least this much stamina. */
   remountStamina: 50,
+  /** A bike in perfect condition; at 0 it is wrecked. */
+  fullCondition: 100,
+  /** Every crash takes this much off the bike's condition... */
+  crashConditionLoss: 6,
+  /** ...plus this much per km/h of the impact speed. */
+  crashConditionLossPerKmh: 0.15,
 } as const;
