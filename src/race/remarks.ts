@@ -120,5 +120,5 @@ export function remarkOn(ending: Ending, opponents: readonly OpponentResult[], r
 
 /** One of `choices` (never empty), chosen with `random`. */
 function pick<T>(choices: readonly T[], random: Random): T {
-  return choices[Math.min(choices.length - 1, Math.floor(random.next() * choices.length))];
+  return choices[Math.floor(random.next() * choices.length)];
 }
