@@ -1,3 +1,4 @@
+import type { Crash } from "./crashing";
 import type { CopId, RiderId } from "./events";
 import type { Attack, Weapon } from "./fighting";
 import { lineAround, safeSpeedAt, type BendLimits } from "./opponent-riding";
@@ -27,6 +28,8 @@ export interface Cop {
   attack: Attack | null;
   /** The weapon the cop holds, or null: every cop carries a club. */
   weapon: Weapon | null;
+  /** Null while the cop is on their bike; how they came off it once knocked off. */
+  crash: Crash | null;
   /** The rider the cop is fighting back against, for hitting it; null when it isn't fighting anyone. */
   fightingBack: RiderId | null;
   /** Steps the cop has still to fight back for, unless it is hit again. */
@@ -54,6 +57,7 @@ export function lineUpCops(track: Track): Cop[] {
     stepsSinceHit: Infinity,
     attack: null,
     weapon: "club",
+    crash: null,
     fightingBack: null,
     fightingBackSteps: 0,
     attackCooldownSteps: 0,

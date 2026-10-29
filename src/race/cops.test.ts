@@ -163,6 +163,29 @@ describe("fighting a cop", () => {
     expect(cop().fightingBack).toBeNull();
     expect(player(race)).toMatchObject({ status: "racing", crash: null });
   });
+
+  it("knocks a cop with no stamina left off its bike with the next hit, out of the race for good", () => {
+    const { race, input } = alongsideTheFirstCop(3);
+    const cop = () => race.snapshot().cops[0];
+    const punching = () => ({ ...input(), punch: true });
+    // Beaten down to no stamina, the cop stays on its bike...
+    secondsUntil(race, punching, () => cop().stamina === 0, 20);
+    expect(cop()).toMatchObject({ status: "riding", crash: null });
+    race.drainEvents();
+
+    // ...until the next hit, which knocks it off at the speed it was riding.
+    let speed = NaN;
+    const events = eventsUntil(race, () => ((speed = cop().speed), punching()), (event) => event.type === "cop-knocked-off", 3);
+
+    expect(events).toContainEqual({ type: "cop-knocked-off", cop: 0, impactSpeed: expect.closeTo(speed, 0) });
+    expect(events).toContainEqual({ type: "cop-gone", cop: 0 });
+    expect(cop()).toMatchObject({ status: "knocked-off", crash: "tumbling", near: false });
+    // It never gets back on its bike, and nobody can fight it now.
+    const later = eventsDuring(race, 20, punching);
+    expect(later.filter((event) => JSON.stringify(event).includes('"cop"'))).toEqual([]);
+    expect(cop()).toMatchObject({ status: "knocked-off", crash: "on-foot", busting: null, fightingBack: null });
+    expect(player(race).status).toBe("racing");
+  });
 });
 
 describe("the cop alert", () => {
