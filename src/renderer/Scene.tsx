@@ -21,7 +21,9 @@ export function Scene({ session }: { session: GameSession }) {
         {/* A low sun in the west, over the sea. */}
         <directionalLight position={[-500, 140, 120]} intensity={2} color="#ffcf9a" />
         <TrackModel track={session.view.track} />
-        <BikeAndRider session={session} />
+        {session.view.current.riders.map(({ id }) => (
+          <BikeAndRider key={id} session={session} rider={id} />
+        ))}
         <ChaseCamera session={session} />
       </Canvas>
     </div>
