@@ -76,6 +76,10 @@ _Avoid_: KO, knockdown
 A rider off their bike after a crash, once they have stopped tumbling along the road: they run back to their bike and get back on it, which is remounting.
 _Avoid_: Running, walking, dismounted
 
+**Knock-down**:
+A car running into a rider on foot and throwing them to the ground: they tumble again, then get up and carry on back to their bike. It is not a crash, so it costs their bike nothing.
+_Avoid_: Run over, hit
+
 **Wrecked**:
 The end of a rider's race because their bike's condition ran out.
 _Avoid_: Totaled, destroyed, DNF
@@ -103,6 +107,22 @@ A club a rider swings instead of punching. A rider takes one by hitting its hold
 _Avoid_: Item, power-up, tool
 
 ### The road
+
+**Lane**:
+One of the road's four 3 m strips: the two right of the centreline carry traffic in the race direction, the two left of it oncoming traffic. Riders may ride anywhere on the road.
+_Avoid_: Carriageway
+
+**Shoulder**:
+The strip of gravel beyond either edge of the road, where a bike slows sharply and obstacles stand. Nobody rides beyond it.
+_Avoid_: Verge, kerb
+
+**Car**:
+One vehicle of the traffic: a hatchback, saloon, van or pickup, driving in the race direction in the right lanes or oncoming in the left lanes. Some change lanes now and then.
+_Avoid_: Vehicle, NPC
+
+**Closed road**:
+A road with no traffic, which a race can be set up on.
+_Avoid_: Empty road, private road
 
 **Traffic**:
 Civilian vehicles on the road that are not part of the race.
