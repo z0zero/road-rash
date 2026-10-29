@@ -353,10 +353,12 @@ for (const [behaviour, blockAudio] of [
 
     await startRacing(page);
     await page.keyboard.down("w");
-    await expect.poll(() => hudSpeed(page), { timeout: 10_000 }).toBeGreaterThan(40);
+    await play(page, 3);
+    expect(await hudSpeed(page)).toBeGreaterThan(40);
     await page.keyboard.up("w");
     await page.keyboard.press("Escape");
     await page.getByRole("dialog", { name: "Paused" }).getByRole("button", { name: "Restart" }).click();
+    await play(page, 0.2);
     await expect(page.getByTestId("countdown")).not.toBeEmpty();
   });
 }
