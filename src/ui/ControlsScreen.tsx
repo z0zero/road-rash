@@ -70,7 +70,7 @@ export function ControlsScreen({ onBack }: { onBack: () => void }) {
         </table>
         <div className="flex flex-col gap-1 text-center text-sm text-sand/80">
           <p>Gamepad buttons are named as on an Xbox controller: A is the bottom one, B the right one and X the left one.</p>
-          <p>In menus, the D-pad moves between buttons and A presses them.</p>
+          <p>In menus, the D-pad or the left stick moves between buttons and A presses them.</p>
         </div>
         <Button autoFocus onClick={onBack}>
           Back
