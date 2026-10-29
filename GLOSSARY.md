@@ -52,6 +52,10 @@ _Avoid_: Health, HP, energy, life
 How intact a bike is, from full to empty. It drops with every crash, and a bike whose condition runs out is wrecked.
 _Avoid_: Damage, durability, bike health
 
+**Bump**:
+Two riders on their bikes running into each other at a small speed difference and being pushed apart, without either of them crashing.
+_Avoid_: Nudge, collision
+
 **Crash**:
 A rider being thrown off their bike, either by a hit or by running into something. After a crash the rider is on foot and runs back to their bike.
 _Avoid_: Wipeout, bail, fall, spill

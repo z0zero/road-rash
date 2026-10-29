@@ -1,4 +1,5 @@
 import { getCoastalTrack } from "./coastal-track";
+import { bumpApart } from "./contact";
 import type { RaceEvent, RaceOutcome, RiderId } from "./events";
 import { lineUpOpponents } from "./field";
 import { opponentControls, paceFor, type OpponentRiding } from "./opponent-riding";
@@ -154,7 +155,7 @@ export function createRace(options: RaceOptions): Race {
       name: PLAYER_NAME,
       temperament: null,
       // On the start line, between the two lanes that run in the race direction.
-      motion: { distance: track.startDistance, offset: track.laneWidth, speed: 0, steering: 0 },
+      motion: { distance: track.startDistance, offset: track.laneWidth, speed: 0, steering: 0, shove: 0 },
       riding: null,
       status: "racing",
       finishTime: null,
@@ -166,7 +167,7 @@ export function createRace(options: RaceOptions): Race {
       id: PLAYER + 1 + index,
       name: OPPONENTS[index].name,
       temperament: OPPONENTS[index].temperament,
-      motion: { distance, offset, speed: 0, steering: 0 },
+      motion: { distance, offset, speed: 0, steering: 0, shove: 0 },
       riding: { pace: paceFor(OPPONENTS[index].skill), lane: offset },
       status: "racing",
       finishTime: null,
@@ -249,6 +250,7 @@ export function createRace(options: RaceOptions): Race {
         });
         const distancesBefore = riders.map((rider) => rider.motion.distance);
         riders.forEach((rider, index) => ride(rider.motion, controls[index], track, STEP_SECONDS));
+        bumpApart(field, track.roadHalfWidth + track.shoulderWidth);
         finishCrossings(distancesBefore, clockBefore);
       }
       stepsTaken++;
