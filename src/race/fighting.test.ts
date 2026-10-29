@@ -123,6 +123,44 @@ describe("attacks", () => {
   });
 });
 
+/** Throws a punch at the racer alongside and rides on until it has landed. */
+function punchTheRacer({ race, input }: ReturnType<typeof alongsideARacer>) {
+  race.step({ ...input(), punch: true });
+  secondsUntil(race, input, () => race.drainEvents().some((event) => event.type === "attack-landed"), 1);
+}
+
+describe("stamina", () => {
+  it("starts recovering at 6 per second once a rider has gone 2 s without being hit, up to 100", () => {
+    const alongside = alongsideARacer();
+    const { race, target, input } = alongside;
+    const stamina = () => race.snapshot().riders[target].stamina;
+    punchTheRacer(alongside);
+    expect(stamina()).toBe(82);
+
+    eventsDuring(race, 1.9, input);
+    expect(stamina()).toBe(82);
+    eventsDuring(race, 1.1, input);
+    expect(stamina()).toBeCloseTo(88, 0);
+    eventsDuring(race, 2, input);
+    expect(stamina()).toBeCloseTo(100, 0);
+    eventsDuring(race, 2, input);
+    expect(stamina()).toBe(100);
+  });
+
+  it("only starts recovering 2 s after the latest hit", () => {
+    const alongside = alongsideARacer();
+    const { race, target, input } = alongside;
+    punchTheRacer(alongside);
+    eventsDuring(race, 1.5, input);
+    punchTheRacer(alongside);
+    expect(race.snapshot().riders[target].stamina).toBe(64);
+
+    eventsDuring(race, 1.9, input);
+
+    expect(race.snapshot().riders[target].stamina).toBe(64);
+  });
+});
+
 describe("kicking", () => {
   it("lowers the target's stamina by 6 and shoves them sideways at about 6 m/s, away from the kicker", () => {
     // Two identical races, ridden with the same input; in one of them the player kicks.

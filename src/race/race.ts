@@ -7,7 +7,7 @@ import { catchUpFor, opponentControls, paceFor, type OpponentRiding } from "./op
 import { OPPONENTS, PLAYER_NAME, type Temperament } from "./opponents";
 import { createRandom } from "./random";
 import { ride, type Controls, type Motion } from "./riding";
-import { STEP_SECONDS, STEPS_PER_SECOND } from "./steps";
+import { STEP_SECONDS, STEPS_PER_SECOND, stepsIn } from "./steps";
 import type { Track } from "./track";
 import { TUNING } from "./tuning";
 
@@ -144,9 +144,14 @@ interface Rider {
   /** 1 for the first rider over the finish line, 2 for the next, and so on. */
   finishOrder: number | null;
   stamina: number;
+  /** Steps since the rider was last hit (Infinity if never). */
+  stepsSinceHit: number;
   /** The attack the rider is making, or null. */
   attack: Attack | null;
 }
+
+/** Stamina starts recovering once a rider has gone this many steps without being hit. */
+const RECOVERY_DELAY_STEPS = stepsIn(TUNING.staminaRecoveryDelay);
 
 export function createRace(options: RaceOptions): Race {
   const random = createRandom(options.seed);
@@ -166,6 +171,7 @@ export function createRace(options: RaceOptions): Race {
       finishTime: null,
       finishOrder: null,
       stamina: TUNING.fullStamina,
+      stepsSinceHit: Infinity,
       attack: null,
     },
   ];
@@ -180,6 +186,7 @@ export function createRace(options: RaceOptions): Race {
       finishTime: null,
       finishOrder: null,
       stamina: TUNING.fullStamina,
+      stepsSinceHit: Infinity,
       attack: null,
     });
   });
@@ -224,8 +231,19 @@ export function createRace(options: RaceOptions): Race {
     });
     const { stamina, shove } = TUNING.attacks[kind];
     target.stamina = Math.max(0, target.stamina - stamina);
+    target.stepsSinceHit = 0;
     // A kick shoves its target sideways, away from the attacker.
     if (shove > 0) target.motion.shove = awayFrom(attacker.motion, target.motion) * shove;
+  }
+
+  /** Riders who have gone long enough without being hit get their stamina back, a little every step. */
+  function recoverStamina() {
+    for (const rider of riders) {
+      rider.stepsSinceHit++;
+      if (rider.stepsSinceHit > RECOVERY_DELAY_STEPS) {
+        rider.stamina = Math.min(TUNING.fullStamina, rider.stamina + TUNING.staminaRecovery * STEP_SECONDS);
+      }
+    }
   }
 
   /** Finishes the riders who crossed the finish line during the step that began at `clockBefore`, in the order they crossed it. */
@@ -311,6 +329,7 @@ export function createRace(options: RaceOptions): Race {
         riders.forEach((rider, index) => ride(rider.motion, controls[index], track, STEP_SECONDS));
         bumpApart(field, track.roadHalfWidth + track.shoulderWidth);
         advanceAttacks();
+        recoverStamina();
         finishCrossings(distancesBefore, clockBefore);
       }
       stepsTaken++;

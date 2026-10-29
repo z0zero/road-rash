@@ -46,6 +46,10 @@ export const TUNING = {
     kick: { windUp: 0.25, recovery: 0.3, reachAcross: 1.8, stamina: 6, shove: 6 },
     "club-swing": { windUp: 0.3, recovery: 0.35, reachAcross: 2.4, stamina: 30, shove: 0 },
   },
-  /** A fresh rider's stamina; it runs down to 0. */
+  /** A fresh rider's stamina; it runs down to 0... */
   fullStamina: 100,
+  /** ...and recovers at this much per second... */
+  staminaRecovery: 6,
+  /** ...once the rider has gone this many seconds without being hit. */
+  staminaRecoveryDelay: 2,
 } as const;
