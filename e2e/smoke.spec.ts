@@ -85,6 +85,40 @@ test("pauses by itself when the browser tab is hidden", async ({ page }) => {
   await expect(page.getByRole("dialog", { name: "Paused" })).toBeVisible();
 });
 
+test("opens Settings from the title screen and goes back", async ({ page }) => {
+  await page.getByRole("button", { name: "Settings" }).click();
+
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await expect(settings).toBeVisible();
+  await expect(settings.getByRole("switch", { name: "Reduce motion" })).toBeVisible();
+
+  await settings.getByRole("button", { name: "Back" }).click();
+  await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
+});
+
+test("remembers Reduce motion after a reload", async ({ page }) => {
+  await page.getByRole("button", { name: "Settings" }).click();
+  const reduceMotion = page.getByRole("switch", { name: "Reduce motion" });
+  await expect(reduceMotion).not.toBeChecked();
+
+  await reduceMotion.click();
+  await expect(reduceMotion).toBeChecked();
+  await page.reload();
+  await page.getByRole("button", { name: "Settings" }).click();
+
+  await expect(page.getByRole("switch", { name: "Reduce motion" })).toBeChecked();
+});
+
+test.describe("when the operating system prefers reduced motion", () => {
+  test.use({ reducedMotion: "reduce" });
+
+  test("starts with Reduce motion on", async ({ page }) => {
+    await page.getByRole("button", { name: "Settings" }).click();
+
+    await expect(page.getByRole("switch", { name: "Reduce motion" })).toBeChecked();
+  });
+});
+
 test("draws the race on a canvas", async ({ page }) => {
   await expect(page.locator("canvas")).toBeVisible();
   await expect(page.locator("canvas")).toHaveCount(1);

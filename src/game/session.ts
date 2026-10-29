@@ -16,12 +16,13 @@ import {
   type PersonalBest,
   type SaveData,
   type SaveStorage,
+  type Settings,
 } from "@/save-data/save-data";
 
 /** Which screen the game shows. The countdown and the race itself are both "racing". */
-export type Screen = "title" | "racing" | "paused" | "results";
+export type Screen = "title" | "settings" | "racing" | "paused" | "results";
 
-/** What React renders from. It changes only on screen changes, never per frame. */
+/** What React renders from. It changes only on screen changes and settings changes, never per frame. */
 export interface SessionState {
   readonly screen: Screen;
   /** The last race's results, while the results screen shows. */
@@ -29,6 +30,8 @@ export interface SessionState {
   readonly personalBest: PersonalBest;
   /** Whether the last race set a new best time. */
   readonly newBestTime: boolean;
+  /** The player's settings, as saved. */
+  readonly settings: Settings;
 }
 
 /**
@@ -76,7 +79,13 @@ export class GameSession {
     this.race = createRace({ seed: options.newSeed() });
     const snapshot = this.race.snapshot();
     this.frame = { track: this.race.track, previous: snapshot, current: snapshot, alpha: 1 };
-    this.state = { screen: "title", results: null, personalBest: this.saveData.personalBest, newBestTime: false };
+    this.state = {
+      screen: "title",
+      results: null,
+      personalBest: this.saveData.personalBest,
+      newBestTime: false,
+      settings: this.saveData.settings,
+    };
   }
 
   /** The current state, for React's useSyncExternalStore. */
@@ -128,6 +137,23 @@ export class GameSession {
   quitToTitle = () => {
     this.loadRace();
     this.setState({ screen: "title", results: null, newBestTime: false });
+  };
+
+  /** Shows the Settings screen; only from the title screen. */
+  openSettings = () => {
+    if (this.state.screen === "title") this.setState({ screen: "settings" });
+  };
+
+  /** Goes back from the Settings screen to the title screen. */
+  closeSettings = () => {
+    if (this.state.screen === "settings") this.setState({ screen: "title" });
+  };
+
+  /** Changes some of the player's settings and saves them. */
+  changeSettings = (change: Partial<Settings>) => {
+    this.saveData = { ...this.saveData, settings: { ...this.saveData.settings, ...change } };
+    storeSaveData(this.options.storage, this.saveData);
+    this.setState({ settings: this.saveData.settings });
   };
 
   /** Moves the game on by `seconds` of real time; call it once per animation frame. */
