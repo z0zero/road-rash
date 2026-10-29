@@ -100,6 +100,24 @@ export function playCrash(kit: Kit, out: AudioNode, force: number) {
     .connect(out);
 }
 
+/** A car running into a rider on foot: its horn blares as it hits them with a dull thud. */
+export function playKnockDown(kit: Kit, out: AudioNode, loudness: number) {
+  const now = kit.context.currentTime;
+  // The horn: two notes a third apart, held for half a second.
+  const horn = filter(kit, "lowpass", 2000);
+  for (const frequency of [392, 494]) tone(kit, "square", frequency, now, 0.6).connect(horn);
+  horn.connect(swell(kit, now, 0.16 * loudness, 0.01, 0.42, 0.12)).connect(out);
+  // The rider thrown against the car.
+  const impact = now + 0.04;
+  const thud = tone(kit, "sine", 120, impact, 0.6);
+  thud.frequency.exponentialRampToValueAtTime(40, impact + 0.2);
+  thud.connect(strike(kit, impact, 1.3 * loudness, 0.003, 0.35)).connect(out);
+  noise(kit, impact, 0.4)
+    .connect(filter(kit, "lowpass", 700))
+    .connect(strike(kit, impact, 0.9 * loudness, 0.002, 0.15))
+    .connect(out);
+}
+
 /** Tyres skidding from `when` for `seconds`: a short, wavering squeal. */
 function playSkid(kit: Kit, out: AudioNode, when: number, seconds: number, loudness: number) {
   const squeal = tone(kit, "sawtooth", 1250, when, seconds + 0.1);

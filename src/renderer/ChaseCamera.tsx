@@ -36,6 +36,8 @@ const RUMBLE = 0.32;
 const OFF_ROAD_RUMBLE = 0.55;
 /** The player's crash jolts the camera this hard... */
 const CRASH_JOLT = 0.85;
+/** ...a car knocking them down this hard... */
+const KNOCKED_DOWN_JOLT = 0.7;
 /** ...a hit they take this hard, by the attack that hit them... */
 const HIT_JOLTS: Record<AttackKind, number> = { punch: 0.45, kick: 0.35, "club-swing": 0.6 };
 /** ...and a hit they land this hard. */
@@ -63,10 +65,15 @@ export function ChaseCamera({
   return null;
 }
 
-/** How hard a race event jolts the camera (0 to 1): the player's crashes and the hits they take, hardest; the hits they land, a little. */
+/**
+ * How hard a race event jolts the camera (0 to 1): the player's crashes, the
+ * cars that knock them down and the hits they take, hardest; the hits they
+ * land, a little.
+ */
 function jolt(event: RaceEvent): number {
   const isPlayer = (who: RiderOrCop) => who.kind === "rider" && who.id === PLAYER;
   if (event.type === "crash") return event.rider === PLAYER ? CRASH_JOLT : 0;
+  if (event.type === "knocked-down") return event.rider === PLAYER ? KNOCKED_DOWN_JOLT : 0;
   if (event.type !== "attack-landed") return 0;
   if (isPlayer(event.target)) return HIT_JOLTS[event.kind];
   return isPlayer(event.attacker) ? LANDED_JOLT : 0;
