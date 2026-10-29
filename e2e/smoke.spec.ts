@@ -21,14 +21,32 @@ test("shows the title screen with a Start Race button", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
 });
 
+declare global {
+  interface Window {
+    /** Everything the countdown has called, in order. Set in the page by `watchTheCountdown`. */
+    countdownCalls: string[];
+  }
+}
+
+/**
+ * Runs in the page: records everything the countdown calls, as it changes. On
+ * a busy machine more than a second can pass between two of Playwright's looks
+ * at the page, long enough to miss a number; the page itself misses none.
+ */
+function watchTheCountdown() {
+  const calls: string[] = [];
+  window.countdownCalls = calls;
+  new MutationObserver(() => {
+    const call = document.querySelector('[data-testid="countdown"]')?.textContent ?? "";
+    if (call && call !== calls.at(-1)) calls.push(call);
+  }).observe(document.body, { subtree: true, childList: true, characterData: true });
+}
+
 test("counts down 3-2-1 after Start Race, then shows the HUD", async ({ page }) => {
+  await page.evaluate(watchTheCountdown);
   await page.getByRole("button", { name: "Start Race" }).click();
 
-  const countdown = page.getByTestId("countdown");
-  await expect(countdown).toHaveText("3");
-  await expect(countdown).toHaveText("2");
-  await expect(countdown).toHaveText("1");
-  await expect(countdown).toHaveText("GO!");
+  await expect.poll(() => page.evaluate(() => window.countdownCalls), { timeout: 15_000 }).toEqual(["3", "2", "1", "GO!"]);
   await expect(page.getByTestId("speed")).toHaveText("0");
   await expect(page.getByText("km/h")).toBeVisible();
   await expect(page.getByTestId("progress")).toBeVisible();
