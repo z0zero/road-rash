@@ -44,6 +44,16 @@ async function hudSpeed(page: Page) {
   return Number(await page.getByTestId("speed").textContent());
 }
 
+test("shows the player's position out of fifteen, starting last, and a progress marker for every rider", async ({
+  page,
+}) => {
+  await startRacing(page);
+
+  await expect(page.getByTestId("position")).toHaveText("15/15");
+  await expect(page.getByTestId("player-marker")).toHaveCount(1);
+  await expect(page.getByTestId("rider-marker")).toHaveCount(14);
+});
+
 test("raises the HUD's speed while the throttle is held", async ({ page }) => {
   await startRacing(page);
   expect(await hudSpeed(page)).toBe(0);

@@ -28,4 +28,10 @@ export const TUNING = {
   offRoadTopSpeed: 18,
   /** ...slows by this much (m/s²) whatever the throttle, and can't speed up past it. */
   offRoadDeceleration: 16,
+  /** Riders who overlap at a speed difference under this (m/s) bump apart; above it, the faster rider crashes. */
+  bumpSpeedLimit: 8,
+  /** A bump shoves each rider sideways, away from the other, at this speed (m/s)... */
+  bumpShove: 2.5,
+  /** ...and a shove dies away at this rate (1/s). */
+  shoveDecay: 6,
 } as const;
