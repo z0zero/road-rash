@@ -24,17 +24,28 @@ export function GameLoader() {
   const touchOnly = useSyncExternalStore(subscribeToPointers, isTouchOnly, () => null);
   const webGL2 = useSyncExternalStore(subscribeToNothing, supportsWebGL2, () => null);
   const [playAnyway, setPlayAnyway] = useState(false);
-  if (touchOnly === null || webGL2 === null) return <Loading />;
+  if (touchOnly === null || webGL2 === null) return <Loading hintIfStuck />;
   if (touchOnly && !playAnyway) return <MadeForDesktopScreen onPlayAnyway={() => setPlayAnyway(true)} />;
   if (!webGL2) return <NewerBrowserScreen />;
   return <Game />;
 }
 
-function Loading() {
+/**
+ * The title while the game loads. On the prerendered page it can also hint,
+ * after a few seconds, at what the game needs: a browser that can't run the
+ * game's scripts never gets past it.
+ */
+function Loading({ hintIfStuck = false }: { hintIfStuck?: boolean }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-6 bg-gradient-to-b from-night via-dusk to-sunset">
+    <div className="flex h-full flex-col items-center justify-center gap-6 bg-gradient-to-b from-night via-dusk to-sunset px-6 text-center">
       <GameTitle />
       <p className="text-lg text-sand/90">Loading&hellip;</p>
+      {hintIfStuck && (
+        <p className="still-loading max-w-md text-sand/85">
+          Still loading? Rev &amp; Wreck needs a recent browser with JavaScript and WebGL 2, such as the latest
+          Chrome, Edge, Firefox or Safari.
+        </p>
+      )}
     </div>
   );
 }
