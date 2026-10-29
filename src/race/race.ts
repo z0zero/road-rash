@@ -1,5 +1,5 @@
 import { getCoastalTrack } from "./coastal-track";
-import { settleContact } from "./contact";
+import { settleContact, settleTraffic, throwClearOf } from "./contact";
 import {
   canRemount,
   carryOn,
@@ -512,6 +512,10 @@ export function createRace(options: RaceOptions): Race {
         });
         traffic.step(whereIs(player));
         for (const { rider, speedDifference } of settleContact(riding, edge)) crash(rider, "rider", speedDifference);
+        for (const { rider, car, speedDifference } of settleTraffic(onTheirBikes(), traffic.cars, edge)) {
+          crash(rider, "traffic", speedDifference);
+          if (rider.crash) throwClearOf(car, rider.motion, rider.crash.body, edge);
+        }
         advanceAttacks();
         recoverStamina();
         finishCrossings(distancesBefore, clockBefore);
