@@ -45,7 +45,7 @@ export interface GameAudio {
 const PAUSED_MUSIC_LEVEL = 0.3;
 
 /** The nearest opponent's engine is heard within this many metres of the player. */
-const RIVAL_EARSHOT = 60;
+const OPPONENT_EARSHOT = 60;
 
 /** The speed of sound, metres per second, for the Doppler shift of a passing opponent's engine. */
 const SPEED_OF_SOUND = 343;
@@ -65,6 +65,9 @@ const FALLEN_ENGINE_LOUDNESS = 0.4;
 /** How deep the music and the riding sounds dip under a landed hit, and under the hardest crash (0 to 1). */
 const HIT_DUCK = 0.45;
 const CRASH_DUCK = 0.6;
+
+/** The sound each kind of attack makes when it lands. */
+const LANDING_SOUNDS = { punch: playPunch, kick: playKick, "club-swing": playClubHit } as const;
 
 /** Off the road, gravel crunches at full strength from this speed (m/s). */
 const LOUDEST_GRAVEL_SPEED = 25;
@@ -143,16 +146,20 @@ class Sound {
   private readonly kit: Kit;
   private readonly engine: EngineSound;
   /** The engine of the opponent nearest the player. */
-  private readonly rivalEngine: EngineSound;
+  private readonly opponentEngine: EngineSound;
   private readonly siren: Siren;
   private readonly skid: Skid;
   private readonly gravel: Gravel;
   private screen: Screen = "title";
-  private rival: number | null = null;
-  /** The snapshot the last frame heard, and how fast the player's and the rival's bikes were gaining speed then (m/s²). */
+  /** The opponent whose engine is heard. */
+  private nearest: number | null = null;
+  /**
+   * The snapshot the last frame heard, and how fast the player's and the
+   * nearest opponent's bikes were gaining speed then (m/s²).
+   */
   private heard: RaceSnapshot | null = null;
   private acceleration = 0;
-  private rivalAcceleration = 0;
+  private opponentAcceleration = 0;
   /** The countdown's last call (3, 2, 1, then 0), so each beeps once; null before a race's countdown is heard. */
   private countdownCall: number | null = null;
   private lastCountdown = 0;
@@ -165,7 +172,7 @@ class Sound {
     this.music = new MusicLoop(context, this.mixer.music);
     this.kit = createKit(context);
     this.engine = new EngineSound(this.kit, this.mixer.riding, PLAYER_ENGINE);
-    this.rivalEngine = new EngineSound(this.kit, this.mixer.riding, OPPONENT_ENGINE);
+    this.opponentEngine = new EngineSound(this.kit, this.mixer.riding, OPPONENT_ENGINE);
     this.skid = new Skid(this.kit, this.mixer.riding);
     this.gravel = new Gravel(this.kit, this.mixer.riding);
     this.siren = new Siren(this.kit, this.mixer.effects);
@@ -220,7 +227,7 @@ class Sound {
         );
         break;
       case "attack-landed": {
-        const play = { punch: playPunch, kick: playKick, "club-swing": playClubHit }[event.kind];
+        const play = LANDING_SOUNDS[event.kind];
         this.play(hearingOf(race, event.target, event.attacker), (out, loudness) => {
           play(this.kit, out, loudness);
           this.mixer.duck(HIT_DUCK * loudness);
@@ -265,37 +272,37 @@ class Sound {
     if (racing) this.countdownCall = call;
 
     const player = current.riders[PLAYER];
-    const rival = racing ? nearestOpponent(current, player) : null;
+    const opponent = racing ? nearestOpponent(current, player) : null;
     if (current !== this.heard) {
       // A new step: how fast the bikes are gaining or losing speed.
       this.acceleration = smooth(this.acceleration, accelerationOf(previous, player));
-      this.rivalAcceleration = rival ? smooth(this.rivalAcceleration, accelerationOf(previous, rival)) : 0;
+      this.opponentAcceleration = opponent ? smooth(this.opponentAcceleration, accelerationOf(previous, opponent)) : 0;
       this.heard = current;
     }
 
     // The engines run while the race is on, and fade out once the player's race is over.
-    const riding = player.crash === null;
-    if (riding) this.engine.follow(player.speed, this.acceleration, racing ? 1 : 0);
+    const onBike = player.crash === null;
+    if (onBike) this.engine.follow(player.speed, this.acceleration, racing ? 1 : 0);
     else this.engine.follow(0, 0, racing ? FALLEN_ENGINE_LOUDNESS : 0);
     // Braking hard squeals the tyres on the road; off it, the gravel crunches.
     const offRoad = Math.abs(player.offset) > track.roadHalfWidth;
-    const skid = racing && riding && !offRoad ? skidding(player.speed, -this.acceleration) : 0;
+    const skid = racing && onBike && !offRoad ? skidding(player.speed, -this.acceleration) : 0;
     this.skid.setIntensity(skid);
-    this.gravel.setIntensity(racing && riding && offRoad ? player.speed / LOUDEST_GRAVEL_SPEED : 0);
+    this.gravel.setIntensity(racing && onBike && offRoad ? player.speed / LOUDEST_GRAVEL_SPEED : 0);
 
-    if ((rival?.id ?? null) !== this.rival) this.rivalEngine.reset();
-    this.rival = rival?.id ?? null;
-    if (!rival) {
-      this.rivalEngine.follow(0, 0, 0);
+    if ((opponent?.id ?? null) !== this.nearest) this.opponentEngine.reset();
+    this.nearest = opponent?.id ?? null;
+    if (!opponent) {
+      this.opponentEngine.follow(0, 0, 0);
       return;
     }
-    const along = rival.distance - player.distance;
-    const across = rival.offset - player.offset;
+    const along = opponent.distance - player.distance;
+    const across = opponent.offset - player.offset;
     // Higher while it comes up on the player, lower as it pulls away.
-    const closing = -Math.sign(along) * (rival.speed - player.speed);
+    const closing = -Math.sign(along) * (opponent.speed - player.speed);
     const doppler = 1 + clamp(closing / SPEED_OF_SOUND, -0.08, 0.08);
     const loudness = 1 / (1 + (Math.hypot(along, across) / 8) ** 2);
-    this.rivalEngine.follow(rival.speed, this.rivalAcceleration, loudness, panFor(along, across), doppler);
+    this.opponentEngine.follow(opponent.speed, this.opponentAcceleration, loudness, panFor(along, across), doppler);
   }
 
   /** Resumes the audio context, or suspends it while the game can't be seen. */
@@ -352,7 +359,7 @@ function hearingOf(race: RaceSnapshot, subject: RiderOrCop, other: RiderOrCop | 
 /** The opponent on their bike nearest the player within earshot, or null. */
 function nearestOpponent(race: RaceSnapshot, player: RiderSnapshot): RiderSnapshot | null {
   let nearest: RiderSnapshot | null = null;
-  let nearestDistance = RIVAL_EARSHOT;
+  let nearestDistance = OPPONENT_EARSHOT;
   for (const rider of race.riders) {
     if (rider.id === PLAYER || rider.crash !== null || rider.status !== "racing") continue;
     const distance = Math.hypot(rider.distance - player.distance, rider.offset - player.offset);
