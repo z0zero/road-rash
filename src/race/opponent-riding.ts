@@ -18,7 +18,7 @@ export function paceFor(skill: number): number {
   return PACE_RANGE[0] + (PACE_RANGE[1] - PACE_RANGE[0]) * clamp(skill, 0, 1);
 }
 
-/** Catch-up leaves opponents within this many metres of the player at their normal pace... */
+/** Catch-up leaves opponents within this many metres of the player at their usual pace... */
 const CATCH_UP_NEAR = 75;
 /** ...and grows with the distance beyond it, to its most at this many metres... */
 const CATCH_UP_FAR = 400;
@@ -27,7 +27,7 @@ const CATCH_UP_MOST = 0.08;
 
 /**
  * The mild catch-up that keeps the field near the player: how many times its
- * normal pace an opponent rides `gap` metres ahead of the player (negative
+ * usual pace an opponent rides `gap` metres ahead of the player (negative
  * when behind). Up to 1.08 far behind, down to 0.92 far ahead.
  */
 export function catchUpFor(gap: number): number {
