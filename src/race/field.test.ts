@@ -31,6 +31,20 @@ function raceWithoutThePlayer(seed: number, seconds: number, watch: (riders: rea
   return { race, finished };
 }
 
+/** Rides a started race with `makeInput`'s input until the player's race is over, then fast-forwards it; collects every event on the way. */
+function rideToTheResults(seed: number, makeInput: (race: Race) => () => PlayerInput) {
+  const race = startedRace(seed);
+  const input = makeInput(race);
+  const events: RaceEvent[] = [];
+  secondsUntil(race, input, () => {
+    events.push(...race.drainEvents());
+    return player(race).status !== "racing";
+  });
+  const results = race.fastForward();
+  events.push(...race.drainEvents());
+  return { race, results, events };
+}
+
 describe("the start", () => {
   it("puts the player last in a field of fifteen riders", () => {
     const { riders } = createRace({ seed: 1 }).snapshot();
@@ -356,6 +370,65 @@ describe("catch-up", () => {
     const speedUp = withThePlayerClose / farBehindThePlayer - 1;
     expect(speedUp).toBeGreaterThan(0.03);
     expect(speedUp).toBeLessThanOrEqual(0.081);
+  });
+});
+
+describe("the results", () => {
+  it("qualify a player who finishes third or better, and only them", () => {
+    const results = [Infinity, 52, 45].map(
+      (targetSpeed) => rideToTheResults(1, (race) => autopilot(race, { targetSpeed })).results,
+    );
+
+    for (const { outcome, position, qualified } of results) {
+      expect(outcome).toBe("finished");
+      expect(qualified).toBe(position !== null && position <= 3);
+    }
+    expect(results.map(({ qualified }) => qualified)).toContain(true);
+    expect(results.map(({ qualified }) => qualified)).toContain(false);
+  });
+
+  it("list every rider by name, position and time once the rest of the field is raced to the finish", () => {
+    const { results, events } = rideToTheResults(1, (race) => autopilot(race));
+    const names = createRace({ seed: 1 }).snapshot().riders.map((rider) => rider.name);
+
+    expect(results.standings.map((standing) => standing.position)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+    expect(new Set(results.standings.map((standing) => standing.rider)).size).toBe(15);
+    for (const standing of results.standings) {
+      expect(standing.status).toBe("finished");
+      expect(standing.name).toBe(names[standing.rider]);
+    }
+    const times = results.standings.map((standing) => standing.time ?? Infinity);
+    expect(times).toEqual([...times].sort((a, b) => a - b));
+    // The standings are the finishes as they happened, the player's among them.
+    const finishes = events.filter((event): event is RiderFinished => event.type === "rider-finished");
+    expect(results.standings.map(({ rider, position, time }) => ({ rider, position, time }))).toEqual(
+      finishes.map(({ rider, position, time }) => ({ rider, position, time })),
+    );
+    expect(results.standings.find((standing) => standing.rider === PLAYER)).toMatchObject({
+      name: "You",
+      position: results.position,
+      time: results.time,
+    });
+  });
+});
+
+describe("determinism with a full field", () => {
+  const record = (seed: number) => {
+    const { race, results, events } = rideToTheResults(seed, (race) => autopilot(race));
+    return { results, events, final: race.snapshot() };
+  };
+
+  it("replays the whole field, its events and its results identically from the same seed and inputs", () => {
+    const first = record(7);
+    const second = record(7);
+
+    expect(second).toEqual(first);
+    expect(first.final.riders).toHaveLength(15);
+    expect(first.events.filter((event) => event.type === "rider-finished")).toHaveLength(15);
+  });
+
+  it("races differently from a different seed", () => {
+    expect(record(8).results.standings).not.toEqual(record(7).results.standings);
   });
 });
 

@@ -95,6 +95,8 @@ export interface RaceResults {
 
 export interface Standing {
   readonly rider: RiderId;
+  /** The opponent's nickname, or "You" for the player. */
+  readonly name: string;
   readonly status: RiderStatus;
   readonly position: number | null;
   /** Finishing time in seconds; null unless the rider finished. */
@@ -218,6 +220,7 @@ export function createRace(options: RaceOptions): Race {
   function results(outcome: RaceOutcome): RaceResults {
     const standing = (rider: Rider, position: number | null): Standing => ({
       rider: rider.id,
+      name: rider.name,
       status: rider.status,
       position,
       time: rider.finishTime,
