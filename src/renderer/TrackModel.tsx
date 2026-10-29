@@ -2,7 +2,7 @@ import { useEffect, useMemo } from "react";
 import type { Track } from "@/race";
 import { buildChequerGeometry, buildMarkingsGeometry, buildRoadGeometry } from "./track-geometry";
 
-/** The road, its markings, the start and finish lines, and the sea below. */
+/** The road, its markings, and the start and finish lines. */
 export function TrackModel({ track }: { track: Track }) {
   const geometries = useMemo(
     () => ({
@@ -14,8 +14,6 @@ export function TrackModel({ track }: { track: Track }) {
     [track],
   );
   useEffect(() => () => Object.values(geometries).forEach((geometry) => geometry.dispose()), [geometries]);
-
-  const middle = track.sampleAt(track.length / 2);
 
   return (
     <group>
@@ -32,10 +30,6 @@ export function TrackModel({ track }: { track: Track }) {
       ))}
       <Gantry track={track} distance={track.startDistance} color="#f2c14e" />
       <Gantry track={track} distance={track.finishDistance} color="#ff7a3d" />
-      <mesh rotation-x={-Math.PI / 2} position={[middle.x, 0, middle.z]}>
-        <planeGeometry args={[30_000, 30_000]} />
-        <meshStandardMaterial color="#2d6f8a" roughness={0.35} metalness={0.15} />
-      </mesh>
     </group>
   );
 }
