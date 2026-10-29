@@ -4,6 +4,7 @@ import type { GameSession } from "@/game/session";
 import { BikeAndRider } from "./BikeAndRider";
 import { ChaseCamera } from "./ChaseCamera";
 import { drawnTrack } from "./drawn-track";
+import { Scenery } from "./Scenery";
 import { Sea } from "./Sea";
 import { Sky } from "./Sky";
 import { installSunsetHaze, SUNSET, sunDirection, sunlightDirection } from "./sunset";
@@ -35,6 +36,7 @@ export function Scene({ session }: { session: GameSession }) {
         <Sea sun={sun} />
         <TrackModel track={drawn} />
         <Terrain track={drawn} />
+        <Scenery track={drawn} />
         <BikeAndRider session={session} />
         <ChaseCamera session={session} />
       </Canvas>
