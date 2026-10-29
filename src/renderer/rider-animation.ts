@@ -3,8 +3,9 @@ import type { AttackSnapshot, Weapon } from "@/race";
 import type { Limb, RiderModel } from "./rider-model";
 
 /**
- * Procedural animation for the rider model's joints: punches and kicks from
- * the saddle, tumbling after a crash, and running back to the bike. Every
+ * Procedural animation for the rider model's joints: punches, kicks and club
+ * swings from the saddle, a held club, tumbling after a crash, and running
+ * back to the bike. Every
  * direction is given in the rider's own frame (x to their right, y up, -z
  * ahead), and each joint is turned so its bone points that way.
  */
@@ -55,22 +56,30 @@ export function poseAttack(model: RiderModel, attack: AttackSnapshot) {
   const kick = attack.kind === "kick";
   const limb = (kick ? model.legs : model.arms)[side < 0 ? 0 : 1];
   const parent = kick ? null : model.torso.quaternion;
+  const weight = attackWeight(attack);
   if (attack.kind === "club-swing") {
     const { x, y, z } = swingDirection(ARM_RAISED, ARM_STRUCK, side, attack);
-    aim(model, limb.upper, parent, x, y, z, swingWeight(attack));
-    if (attack.stage === "recovery") unbend(model, limb, swingWeight(attack));
+    aim(model, limb.upper, parent, x, y, z, weight);
+    if (attack.stage === "recovery") unbend(model, limb, weight);
     return;
   }
   if (attack.stage === "wind-up") {
-    const cock = ease(attack.progress);
-    if (kick) aim(model, limb.upper, parent, side * 0.55, -0.15, -0.65, cock);
-    else aim(model, limb.upper, parent, side * 0.5, -0.25, 0.75, cock);
+    if (kick) aim(model, limb.upper, parent, side * 0.55, -0.15, -0.65, weight);
+    else aim(model, limb.upper, parent, side * 0.5, -0.25, 0.75, weight);
     return;
   }
-  const out = attack.progress < HOLD ? 1 : 1 - ease((attack.progress - HOLD) / (1 - HOLD));
-  if (kick) aim(model, limb.upper, parent, side, -0.5, -0.05, out);
-  else aim(model, limb.upper, parent, side, 0.12, -0.3, out);
-  unbend(model, limb, out);
+  if (kick) aim(model, limb.upper, parent, side, -0.5, -0.05, weight);
+  else aim(model, limb.upper, parent, side, 0.12, -0.3, weight);
+  unbend(model, limb, weight);
+}
+
+/**
+ * How far an attack's pose is from rest (0) to cocked, raised or struck (1):
+ * rising through the wind-up, held a moment after the strike, then easing back.
+ */
+function attackWeight(attack: AttackSnapshot): number {
+  if (attack.stage === "wind-up") return ease(attack.progress);
+  return attack.progress < HOLD ? 1 : 1 - ease((attack.progress - HOLD) / (1 - HOLD));
 }
 
 /** A club swing sweeps from raised to struck over this share of its recovery. */
@@ -87,27 +96,24 @@ const CLUB_RESTING: Direction = [0.3, 0.9, 0.35];
 const CLUB_RAISED: Direction = [0.35, 0.75, 0.6];
 const CLUB_STRUCK: Direction = [1, -0.25, -0.5];
 
-/** How far a swing's pose is from rest (0) to raised or struck (1): rising through the wind-up, held after the strike, then easing back. */
-function swingWeight(attack: AttackSnapshot): number {
-  if (attack.stage === "wind-up") return ease(attack.progress);
-  return attack.progress < HOLD ? 1 : 1 - ease((attack.progress - HOLD) / (1 - HOLD));
-}
-
 const swung = new Vector3();
 const struckWay = new Vector3();
 
 /** The way a swing points on `side` at this moment: `raised` through the wind-up, then swept round to `struck` just after the strike. */
 function swingDirection(raised: Direction, struck: Direction, side: -1 | 1, attack: AttackSnapshot): Vector3 {
-  swung.set(side * raised[0], raised[1], raised[2]).normalize();
-  if (attack.stage === "recovery") {
-    struckWay.set(side * struck[0], struck[1], struck[2]).normalize();
-    swung.lerp(struckWay, ease(attack.progress / SWEEP)).normalize();
-  }
+  mirrored(swung, raised, side);
+  if (attack.stage === "recovery") swung.lerp(mirrored(struckWay, struck, side), ease(attack.progress / SWEEP)).normalize();
   return swung;
 }
 
+/** Sets `target` to the unit vector along `direction`, mirrored to the left when `side` is -1. */
+function mirrored(target: Vector3, direction: Direction, side: -1 | 1): Vector3 {
+  return target.set(side * direction[0], direction[1], direction[2]).normalize();
+}
+
 const clubWay = new Vector3();
-const forearm = new Quaternion();
+/** The turn from the rider's frame into the frame of the forearm that grips the club. */
+const intoForearm = new Quaternion();
 
 /** What a rider holds, as the race last said, and the hand a club is in. */
 interface Armed {
@@ -130,15 +136,15 @@ export function poseClub(model: RiderModel, { weapon, clubHand: hand, attack }: 
   left.visible = holding && hand < 0;
   right.visible = holding && hand > 0;
   if (!holding) return;
-  clubWay.set(hand * CLUB_RESTING[0], CLUB_RESTING[1], CLUB_RESTING[2]).normalize();
+  mirrored(clubWay, CLUB_RESTING, hand);
   if (attack?.kind === "club-swing" && attack.side === hand) {
-    clubWay.lerp(swingDirection(CLUB_RAISED, CLUB_STRUCK, hand, attack), swingWeight(attack)).normalize();
+    clubWay.lerp(swingDirection(CLUB_RAISED, CLUB_STRUCK, hand, attack), attackWeight(attack)).normalize();
   }
   // The club turns with the forearm that grips it, which turns with the upper arm and the torso.
   const arm = model.arms[hand < 0 ? 0 : 1];
-  forearm.copy(model.torso.quaternion).multiply(arm.upper.quaternion).multiply(arm.lower.quaternion).invert();
+  intoForearm.copy(model.torso.quaternion).multiply(arm.upper.quaternion).multiply(arm.lower.quaternion).invert();
   aimed.setFromUnitVectors(UP, clubWay);
-  (hand < 0 ? left : right).quaternion.copy(forearm).multiply(aimed);
+  (hand < 0 ? left : right).quaternion.copy(intoForearm).multiply(aimed);
 }
 
 /** Spreads a tumbling rider's limbs, like a rag doll, `amount` (0 to 1) of the way. */
