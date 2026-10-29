@@ -109,7 +109,7 @@ export default function Game() {
       )}
       {state.screen === "controls" && <ControlsScreen onBack={session.closeControls} />}
       {state.screen === "credits" && <CreditsScreen onBack={session.closeCredits} />}
-      {(state.screen === "racing" || state.screen === "paused") && <Hud session={session} />}
+      {(state.screen === "racing" || state.screen === "paused") && <Hud session={session} reduceMotion={reduceMotion} />}
       {state.screen === "paused" && (
         <PauseMenu onResume={session.resume} onRestart={restart} onQuit={session.quitToTitle} />
       )}
