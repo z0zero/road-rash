@@ -106,7 +106,7 @@ export function Scene({ session, reduceMotion }: { session: GameSession; reduceM
           <BikeAndRider key={motion.rider} session={session} motion={motion} livery={liveryOf(motion.rider)} />
         ))}
         {copMotions.map((motion) => (
-          <BikeAndRider key={`cop-${motion.cop}`} session={session} motion={motion} livery={COP_LIVERY} police />
+          <BikeAndRider key={`cop-${motion.cop}`} session={session} motion={motion} livery={COP_LIVERY} cop />
         ))}
         <ChaseCamera session={session} player={player} shake={shake} reduceMotion={reduceMotion} />
         <PostProcessing session={session} player={player} reduceMotion={reduceMotion} multisampling={software ? 0 : 4} />

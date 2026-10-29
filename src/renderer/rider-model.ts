@@ -91,10 +91,10 @@ const LAMP_DARK = 0.18;
 const LAMP_TURN_SECONDS = 0.3;
 
 /**
- * Builds a rider and their bike in a livery: a cop on a police bike, with
- * panniers and a light bar, if `police`. Call `dispose` when done with it.
+ * Builds a rider and their bike in a livery: a cop on a bike with panniers
+ * and a light bar, if `cop`. Call `dispose` when done with it.
  */
-export function createRiderModel(livery: Livery, { police = false } = {}): RiderModel {
+export function createRiderModel(livery: Livery, { cop = false } = {}): RiderModel {
   const geometries: BufferGeometry[] = [];
   const surface = new MeshPhongMaterial({ vertexColors: true, shininess: 38, specular: "#3a3a3a" });
   // The lamps glow far brighter than white, so they bloom.
@@ -202,8 +202,8 @@ export function createRiderModel(livery: Livery, { police = false } = {}): Rider
   const legs: [Limb, Limb] = [leg(-1), leg(1)];
 
   let lightBar: LightBar | null = null;
-  if (police) {
-    root.add(mesh(policeGeometry()));
+  if (cop) {
+    root.add(mesh(copBikeGeometry()));
     lightBar = { red: new MeshBasicMaterial({ color: LAMP_RED }), blue: new MeshBasicMaterial({ color: LAMP_BLUE }) };
     materials.push(lightBar.red, lightBar.blue);
     for (const [material, side] of [
@@ -324,8 +324,8 @@ function clubGeometry(): BufferGeometry {
     .build();
 }
 
-/** What makes a bike a police bike: white panniers either side of the rear wheel, and the light bar's mast and housing. */
-function policeGeometry(): BufferGeometry {
+/** What makes a bike a cop's: white panniers either side of the rear wheel, and the light bar's mast and housing. */
+function copBikeGeometry(): BufferGeometry {
   return new LowPoly()
     .add(new BoxGeometry(0.2, 0.34, 0.5), PANNIER, { at: [-0.3, 0.66, 0.55] })
     .add(new BoxGeometry(0.2, 0.34, 0.5), PANNIER, { at: [0.3, 0.66, 0.55] })
