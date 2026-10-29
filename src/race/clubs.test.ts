@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createRace, PLAYER, type AttackKind, type RaceEvent, type RiderId } from ".";
+import { createRace, NO_INPUT, PLAYER, type AttackKind, type RaceEvent, type RiderId } from ".";
 import {
   alongsideAn,
   eventsDuring,
@@ -143,5 +143,25 @@ describe("stealing a club", () => {
 
     expect(events.filter((event) => event.type === "weapon-stolen")).toEqual([]);
     expect(player(race).weapon).toBe("club");
+  });
+});
+
+describe("dropping a club", () => {
+  it("happens to a holder who crashes: nobody gets the club, and their punches are punches again", () => {
+    // The player takes the bully's club, then rides on alongside it without attacking until it knocks them off.
+    const { race, input } = punchedMidSwing();
+    const clubs = () => race.snapshot().riders.filter((each) => each.weapon === "club").length;
+    const clubsBefore = clubs();
+
+    eventsUntil(race, input, (event) => event.type === "crash" && event.rider === PLAYER, 30);
+
+    expect(player(race).weapon).toBeNull();
+    expect(clubs()).toBe(clubsBefore - 1);
+
+    eventsUntil(race, NO_INPUT, (event) => event.type === "remounted" && event.rider === PLAYER, 10);
+    race.step({ ...NO_INPUT, punch: true });
+
+    expect(player(race).weapon).toBeNull();
+    expect(thrownBy(PLAYER, race.drainEvents())).toEqual(["punch"]);
   });
 });
