@@ -1,4 +1,4 @@
-# road-rash
+# Rev & Wreck
 
 A browser motorcycle combat racing game inspired by Road Rash on the SEGA Genesis: riders race each other on public roads and fight along the way.
 
