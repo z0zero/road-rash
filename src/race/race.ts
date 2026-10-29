@@ -13,7 +13,7 @@ import {
 import type { AttackKind, CrashCause, RaceEvent, RaceOutcome, RiderId } from "./events";
 import { lineUpOpponents } from "./field";
 import { attackStage, attackSteps, awayFrom, nearestWithinReach, windUpSteps, type Attack } from "./fighting";
-import { opponentAttack, opponentIntent } from "./opponent-fighting";
+import { isDroppingBack, opponentAttack, opponentIntent } from "./opponent-fighting";
 import { catchUpFor, opponentControls, paceFor, type OpponentRiding } from "./opponent-riding";
 import { OPPONENTS, PLAYER_NAME, type Temperament } from "./opponents";
 import { createRandom } from "./random";
@@ -152,6 +152,12 @@ export interface Standing {
 export interface RaceOptions {
   /** Seeds every random choice the race makes, so the same seed and inputs replay the same race. */
   readonly seed: number;
+  /**
+   * How intact the player's bike is at the start, up to 100 (perfect, the
+   * default), for a bike that comes into the race already worn. Every
+   * opponent's bike starts perfect.
+   */
+  readonly playerCondition?: number;
 }
 
 /**
@@ -199,6 +205,8 @@ interface Rider {
   attack: Attack | null;
   /** Null while the rider is on their bike; how they are getting back to it after a crash. */
   crash: Crash | null;
+  /** Whether an opponent is badly beaten and dropping back until it has recovered. */
+  droppingBack: boolean;
 }
 
 /** Where a rider is: on their bike, or wherever they are after being thrown off it. */
@@ -215,40 +223,35 @@ export function createRace(options: RaceOptions): Race {
   let stepsTaken = 0;
   let events: RaceEvent[] = [];
   let finishers = 0;
+  /** A rider on the grid: fresh, on a bike in perfect condition, standing at `distance` and `offset`. */
+  const lineUp = (
+    rider: Pick<Rider, "id" | "name" | "temperament" | "riding">,
+    distance: number,
+    offset: number,
+  ): Rider => ({
+    ...rider,
+    motion: { distance, offset, speed: 0, steering: 0, shove: 0 },
+    status: "racing",
+    finishTime: null,
+    finishOrder: null,
+    stamina: TUNING.fullStamina,
+    condition: TUNING.fullCondition,
+    stepsSinceHit: Infinity,
+    attack: null,
+    crash: null,
+    droppingBack: false,
+  });
+  // The player starts on the start line, between the two lanes that run in the race direction.
   const riders: Rider[] = [
     {
-      id: PLAYER,
-      name: PLAYER_NAME,
-      temperament: null,
-      // On the start line, between the two lanes that run in the race direction.
-      motion: { distance: track.startDistance, offset: track.laneWidth, speed: 0, steering: 0, shove: 0 },
-      riding: null,
-      status: "racing",
-      finishTime: null,
-      finishOrder: null,
-      stamina: TUNING.fullStamina,
-      condition: TUNING.fullCondition,
-      stepsSinceHit: Infinity,
-      attack: null,
-      crash: null,
+      ...lineUp({ id: PLAYER, name: PLAYER_NAME, temperament: null, riding: null }, track.startDistance, track.laneWidth),
+      condition: Math.min(TUNING.fullCondition, options.playerCondition ?? TUNING.fullCondition),
     },
   ];
   lineUpOpponents(track, OPPONENTS.length, random).forEach(({ distance, offset }, index) => {
-    riders.push({
-      id: PLAYER + 1 + index,
-      name: OPPONENTS[index].name,
-      temperament: OPPONENTS[index].temperament,
-      motion: { distance, offset, speed: 0, steering: 0, shove: 0 },
-      riding: { pace: paceFor(OPPONENTS[index].skill), lane: offset },
-      status: "racing",
-      finishTime: null,
-      finishOrder: null,
-      stamina: TUNING.fullStamina,
-      condition: TUNING.fullCondition,
-      stepsSinceHit: Infinity,
-      attack: null,
-      crash: null,
-    });
+    const { name, temperament, skill } = OPPONENTS[index];
+    const riding = { pace: paceFor(skill), lane: offset };
+    riders.push(lineUp({ id: PLAYER + 1 + index, name, temperament, riding }, distance, offset));
   });
 
   const clock = () => Math.max(0, stepsTaken - COUNTDOWN_STEPS) / STEPS_PER_SECOND;
@@ -411,17 +414,18 @@ export function createRace(options: RaceOptions): Race {
         const catchUp = (rider: Rider) =>
           player.status === "racing" ? catchUpFor(rider.motion.distance - whereIs(player).distance) : 1;
         const playerToFight = player.status === "racing" && !player.crash ? player.motion : null;
+        for (const rider of riders) rider.droppingBack = isDroppingBack(rider.droppingBack, rider.stamina);
         const controls = riders.map((rider) => {
           if (rider.status !== "racing") return FINISHED_CONTROLS;
           if (!rider.riding || !rider.temperament) return input;
-          const intent = opponentIntent(rider.temperament, rider.motion, playerToFight);
+          const intent = opponentIntent(rider.temperament, rider.motion, playerToFight, rider.droppingBack);
           return opponentControls(rider.motion, rider.riding, track, field, catchUp(rider), intent);
         });
         if (player.status === "racing" && !player.crash && !player.attack && (input.punch || input.kick)) {
           throwAttack(player, input.punch ? "punch" : "kick");
         }
         for (const opponent of riding) {
-          if (!opponent.temperament || opponent.attack) continue;
+          if (!opponent.temperament || opponent.attack || opponent.droppingBack) continue;
           const nearest = nearestWithinReach(opponent.motion, riding, "punch");
           const kind = nearest && opponentAttack(opponent.temperament, nearest.id === PLAYER, random);
           if (kind) throwAttack(opponent, kind);

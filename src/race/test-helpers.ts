@@ -59,12 +59,16 @@ export function secondsUntil(
 
 /**
  * Scripted input that rides the bike along the track near `lane` (an offset
- * from the centreline) at up to `targetSpeed`, braking for the bends ahead.
+ * from the centreline) at up to `targetSpeed`, braking for the bends ahead
+ * and, like any careful rider, keeping clear of the riders ahead: it steers
+ * around one in its way, and never closes on one still in its way faster
+ * than a bump.
  */
 export function autopilot(race: Race, { targetSpeed = Infinity, lane = 0 } = {}) {
   let lastOffset = player(race).offset;
   return (): PlayerInput => {
-    const rider = player(race);
+    const { riders } = race.snapshot();
+    const rider = riders[PLAYER];
     const sideways = (rider.offset - lastOffset) / STEP_SECONDS;
     lastOffset = rider.offset;
     let wanted = targetSpeed;
@@ -73,9 +77,18 @@ export function autopilot(race: Race, { targetSpeed = Infinity, lane = 0 } = {})
       const cornerSpeed = Math.sqrt(16 / Math.max(curvature, 1e-6));
       wanted = Math.min(wanted, Math.sqrt(cornerSpeed ** 2 + 2 * 9 * ahead));
     }
+    let line = lane;
+    for (const other of riders) {
+      const ahead = other.distance - rider.distance;
+      if (other.id === PLAYER || other.status !== "racing" || other.crash !== null || ahead <= 0 || ahead > 30) continue;
+      if (Math.abs(other.offset - line) < 1.6) line = other.offset + (line >= other.offset ? 1.6 : -1.6);
+      if (Math.abs(other.offset - rider.offset) < 1.2 && ahead < 12) wanted = Math.min(wanted, other.speed + 5);
+    }
+    const edge = race.track.roadHalfWidth - 0.5;
+    line = Math.max(-edge, Math.min(edge, line));
     return {
       ...NO_INPUT,
-      steer: Math.max(-1, Math.min(1, 0.5 * (lane - rider.offset) - 0.25 * sideways)),
+      steer: Math.max(-1, Math.min(1, 0.5 * (line - rider.offset) - 0.25 * sideways)),
       throttle: rider.speed < wanted - 0.5 ? 1 : 0,
       brake: rider.speed > wanted + 1 ? Math.min(1, (rider.speed - wanted) / 4) : 0,
     };
@@ -174,8 +187,17 @@ export function nearestOpponent(race: Race, temperament?: Temperament): RiderId 
  * opponent who rarely attacks): the racer is the nearest rider within reach.
  */
 export function alongsideARacer(seed = 1) {
+  return alongsideAn("racer", seed);
+}
+
+/**
+ * A started race in which the player has ridden up alongside the opponent of
+ * a temperament who lined up nearest them: that opponent is the nearest rider
+ * within reach.
+ */
+export function alongsideAn(temperament: Temperament, seed = 1) {
   const race = startedRace(seed);
-  const target = nearestOpponent(race, "racer");
+  const target = nearestOpponent(race, temperament);
   const input = rideAlongside(race, target);
   const racerNearest = () => {
     const { riders } = race.snapshot();

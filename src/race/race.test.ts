@@ -158,6 +158,8 @@ describe("riding", () => {
    */
   function driftOnCurve(distance: number, speed: number) {
     const race = startedRace();
+    // Let the field ride off first, so no rider bumps or kicks the bike while it is measured.
+    stepFor(race, 30, NO_INPUT);
     const pilot = autopilot(race, { targetSpeed: speed });
     secondsUntil(race, pilot, () => player(race).distance >= distance - speed / 2);
     secondsUntil(race, () => ({ ...pilot(), steer: 0 }), () => player(race).distance >= distance);

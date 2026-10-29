@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NO_INPUT, PLAYER, STEP_SECONDS, type PlayerInput, type RaceEvent, type RiderSnapshot } from ".";
+import { createRace, NO_INPUT, PLAYER, STEP_SECONDS, type PlayerInput, type RaceEvent, type RiderSnapshot } from ".";
 import {
   alongsideARacer,
   chase,
@@ -11,6 +11,7 @@ import {
   racerKnockedOff,
   secondsUntil,
   startedRace,
+  stepFor,
 } from "./test-helpers";
 
 type Crash = Extract<RaceEvent, { type: "crash" }>;
@@ -117,6 +118,43 @@ describe("a bike's condition", () => {
     const crash = events.find(isCrash);
 
     expect(race.snapshot().riders[target].condition).toBeCloseTo(100 - conditionLost(crash?.impactSpeed ?? NaN), 9);
+  });
+
+  it("can start a race already worn, for the player only", () => {
+    const { riders } = createRace({ seed: 1, playerCondition: 30 }).snapshot();
+
+    expect(riders.map((rider) => rider.condition)).toEqual([30, ...Array(14).fill(100)]);
+  });
+
+  it("ends the player's race as Wrecked when it runs out", () => {
+    // A bike with 20 condition left, ridden into another rider twice: the first crash leaves a little, the second wrecks it.
+    const race = createRace({ seed: 1, playerCondition: 20 });
+    stepFor(race, 3);
+    const target = nearestOpponent(race);
+
+    const events = eventsUntil(race, chase(race, target, 12), (event) => event.type === "player-race-over", 300);
+
+    const crashes = events.filter(isCrash).filter((crash) => crash.rider === PLAYER);
+    const lost = crashes.map(({ impactSpeed }) => conditionLost(impactSpeed));
+    expect(crashes).toHaveLength(2);
+    expect(lost[0]).toBeLessThan(20);
+    expect(lost[0] + lost[1]).toBeGreaterThanOrEqual(20);
+    const aboutThePlayer = events.filter(
+      (event) => event.type === "player-race-over" || ("rider" in event && event.rider === PLAYER),
+    );
+    expect(aboutThePlayer.slice(-3)).toEqual([
+      crashes.at(-1),
+      { type: "wrecked", rider: PLAYER },
+      { type: "player-race-over", outcome: "wrecked" },
+    ]);
+    expect(player(race)).toMatchObject({ status: "wrecked", condition: 0, position: null });
+
+    const results = race.fastForward();
+
+    expect(results).toMatchObject({ outcome: "wrecked", position: null, time: null, qualified: false });
+    expect(results.standings).toContainEqual({ rider: PLAYER, name: "You", status: "wrecked", position: null, time: null });
+    const firstUnplaced = results.standings.findIndex((standing) => standing.position === null);
+    expect(results.standings.slice(firstUnplaced).every((standing) => standing.position === null)).toBe(true);
   });
 
   it("takes a wrecked opponent out of the race for good, with no position", () => {
