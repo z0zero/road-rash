@@ -131,7 +131,8 @@ interface Rider {
 }
 
 export function createRace(options: RaceOptions): Race {
-  void options;
+  // A lone player makes no random choices yet; opponents, traffic and cops will draw on the seed.
+  void options.seed;
   const track = getCoastalTrack();
   let stepsTaken = 0;
   let events: RaceEvent[] = [];
@@ -159,38 +160,42 @@ export function createRace(options: RaceOptions): Race {
   }
 
   /**
-   * Finished riders in finishing order, then riders still racing by distance
-   * travelled; wrecked and busted riders have no position.
+   * The riders who have a position, best first: finishers in finishing order,
+   * then riders still racing by distance travelled. Wrecked and busted riders
+   * have no position.
    */
-  function positions() {
-    const ranked = riders
-      .filter((rider) => rider.status === "finished" || rider.status === "racing")
-      .sort(
-        (a, b) =>
-          (a.finishOrder ?? Infinity) - (b.finishOrder ?? Infinity) || b.motion.distance - a.motion.distance,
-      );
-    return new Map(ranked.map((rider, index) => [rider.id, index + 1]));
+  function ranking() {
+    const finished = riders
+      .filter((rider) => rider.status === "finished")
+      .sort((a, b) => (a.finishOrder ?? 0) - (b.finishOrder ?? 0));
+    const racing = riders
+      .filter((rider) => rider.status === "racing")
+      .sort((a, b) => b.motion.distance - a.motion.distance);
+    return [...finished, ...racing];
   }
 
-  function results(): RaceResults {
-    const ranks = positions();
-    const order = (rider: Rider) =>
-      rider.finishOrder ?? (rider.status === "racing" ? riders.length + (ranks.get(rider.id) ?? 0) : Infinity);
-    const standings = [...riders]
-      .sort((a, b) => order(a) - order(b))
-      .map((rider) => ({
-        rider: rider.id,
-        status: rider.status,
-        position: ranks.get(rider.id) ?? null,
-        time: rider.finishTime,
-      }));
-    const player = riders[PLAYER];
-    const position = ranks.get(PLAYER) ?? null;
-    return {
-      outcome: player.status === "racing" ? "finished" : player.status,
-      time: player.finishTime,
+  function positions() {
+    return new Map(ranking().map((rider, index) => [rider.id, index + 1]));
+  }
+
+  function results(outcome: RaceOutcome): RaceResults {
+    const standing = (rider: Rider, position: number | null): Standing => ({
+      rider: rider.id,
+      status: rider.status,
       position,
-      qualified: player.status === "finished" && position !== null && position <= QUALIFYING_POSITION,
+      time: rider.finishTime,
+    });
+    const unplaced = riders.filter((rider) => rider.status === "wrecked" || rider.status === "busted");
+    const standings = [
+      ...ranking().map((rider, index) => standing(rider, index + 1)),
+      ...unplaced.map((rider) => standing(rider, null)),
+    ];
+    const position = standings.find((entry) => entry.rider === PLAYER)?.position ?? null;
+    return {
+      outcome,
+      time: riders[PLAYER].finishTime,
+      position,
+      qualified: outcome === "finished" && position !== null && position <= QUALIFYING_POSITION,
       standings,
     };
   }
@@ -233,12 +238,13 @@ export function createRace(options: RaceOptions): Race {
       return drained;
     },
     fastForward() {
-      if (riders[PLAYER].status === "racing") {
+      const outcome = riders[PLAYER].status;
+      if (outcome === "racing") {
         throw new Error("The player is still racing: fast-forward only once the player's race is over");
       }
       const limit = stepsTaken + FAST_FORWARD_STEPS;
       while (riders.some((rider) => rider.status === "racing") && stepsTaken < limit) race.step(NO_INPUT);
-      return results();
+      return results(outcome);
     },
   };
   return race;
