@@ -186,6 +186,32 @@ describe("running into a car", () => {
     expect(player(race).crash).toBe("tumbling");
   });
 
+  it("head on, crashes a rider at the two speeds added together", () => {
+    const { race } = behindACar();
+    const oncoming = race
+      .snapshot()
+      .traffic.filter((car) => car.oncoming && car.distance - player(race).distance > 60)
+      .sort((a, b) => a.distance - b.distance)[0];
+    const input = (): PlayerInput => {
+      const me = player(race);
+      const car = carOf(race, oncoming.id);
+      const steer = car ? Math.max(-1, Math.min(1, 1.5 * (car.offset - me.offset))) : 0;
+      return { ...NO_INPUT, steer, throttle: me.speed < 30 ? 1 : 0, brake: me.speed > 31 ? 0.5 : 0 };
+    };
+    let meeting = 0;
+    const headingIn = () => {
+      meeting = player(race).speed + (carOf(race, oncoming.id)?.speed ?? NaN);
+      return input();
+    };
+
+    const events = eventsUntil(race, headingIn, playerCrashed, 30);
+
+    expect(events.filter(playerCrashed)).toEqual([
+      { type: "crash", rider: PLAYER, cause: "traffic", impactSpeed: expect.closeTo(meeting, 0) },
+    ]);
+    expect(meeting).toBeGreaterThan(45);
+  });
+
   it("bumps a rider who touches it at a small speed difference: they don't crash, and can't ride through it", () => {
     const { race, car } = behindACar();
     const input = chaseCar(race, car, 4);
