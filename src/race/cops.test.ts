@@ -46,6 +46,26 @@ describe("busting", () => {
     expect(apart(cop(), them())).toBeLessThan(3);
   });
 
+  it("lets a rider go who gets back on their bike before the cop reaches them", () => {
+    const { race, target, input } = alongsideARacerPastTheFirstCop();
+    const cop = () => race.snapshot().cops[0];
+    const them = () => race.snapshot().riders[target];
+    // Knocked off with the cop well ahead, so that it has to stop and come back.
+    knockOffWhen(race, target, input, () => cop().distance - them().distance > 15);
+    expect(apart(cop(), them())).toBeLessThan(80);
+    expect(cop().busting).toBe(target);
+
+    const events = eventsUntil(race, input, (event) => event.type === "remounted" && event.rider === target, 10);
+
+    expect(events.filter((event) => event.type === "busted")).toEqual([]);
+    expect(them()).toMatchObject({ status: "racing", crash: null });
+    // The cop gives up, and rides on near the player.
+    eventsDuring(race, 10, input);
+    expect(cop().busting).toBeNull();
+    expect(apart(cop(), player(race))).toBeLessThan(150);
+    expect(them().status).toBe("racing");
+  });
+
   it("takes a busted opponent out of the race for good, with no position", () => {
     const { race, target, input } = alongsideARacerPastTheFirstCop();
     const cop = () => race.snapshot().cops[0];
