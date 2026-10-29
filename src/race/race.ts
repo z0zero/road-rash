@@ -40,6 +40,7 @@ import { isDroppingBack, opponentAttack, opponentIntent } from "./opponent-fight
 import { catchUpFor, opponentControls, paceFor, type OpponentRiding } from "./opponent-riding";
 import { OPPONENTS, PLAYER_NAME, type Temperament } from "./opponents";
 import { createRandom } from "./random";
+import { remarkOn, type Ending, type Remark } from "./remarks";
 import { ride, type Controls, type Motion } from "./riding";
 import { STEP_SECONDS, STEPS_PER_SECOND, stepsIn } from "./steps";
 import { nearestOpponentOrCop, warningsFor, type Warnings } from "./surroundings";
@@ -74,6 +75,8 @@ const QUALIFYING_POSITION = 3;
 const CLEAR_OF_THE_GRID = 60;
 /** Mixed into the race's seed for the traffic's own random choices, so they never change the riders' choices. */
 const TRAFFIC_SEED = 0x7ea5_1c3a;
+/** Mixed into the race's seed for choosing the remark on the results, so the choice never changes the race. */
+const REMARK_SEED = 0x2e3a_4b51;
 
 /** The player's controls for one step. Values outside their ranges are clamped. */
 export interface PlayerInput {
@@ -229,6 +232,8 @@ export interface RaceResults {
    * the fast-forward ran out of time, by distance, then wrecked and busted riders.
    */
   readonly standings: readonly Standing[];
+  /** A one-line remark on how the player's race went, chosen with the race's seed. */
+  readonly remark: Remark;
 }
 
 export interface Standing {
@@ -387,6 +392,8 @@ export function createRace(options: RaceOptions): Race {
   /** Where the obstacles stand: they never move. */
   const obstacles = track.obstacles.map(footprintOfObstacle);
   const cops = options.cops === false ? [] : lineUpCops(track);
+  /** The cop who busted the player, once one has. */
+  let playerBustedBy: Cop | null = null;
 
   const clock = () => Math.max(0, stepsTaken - COUNTDOWN_STEPS) / STEPS_PER_SECOND;
 
@@ -564,7 +571,10 @@ export function createRace(options: RaceOptions): Race {
       cop.busting = null;
       cop.standingBySteps = stepsIn(TUNING.cops.standingBySeconds);
       events.push({ type: "busted", rider: rider.id, cop: cop.id });
-      if (rider.id === PLAYER) events.push({ type: "player-race-over", outcome: "busted" });
+      if (rider.id === PLAYER) {
+        playerBustedBy = cop;
+        events.push({ type: "player-race-over", outcome: "busted" });
+      }
     }
   }
 
@@ -680,13 +690,20 @@ export function createRace(options: RaceOptions): Race {
       ...unplaced.map((rider) => standing(rider, null)),
     ];
     const position = standings.find((entry) => entry.rider === PLAYER)?.position ?? null;
-    return {
-      outcome,
-      time: riders[PLAYER].finishTime,
-      position,
-      qualified: outcome === "finished" && position !== null && position <= QUALIFYING_POSITION,
-      standings,
-    };
+    const qualified = outcome === "finished" && position !== null && position <= QUALIFYING_POSITION;
+    const opponents = standings.flatMap(({ rider, name, position }) => {
+      const { temperament } = riders[rider];
+      return temperament ? [{ id: rider, name, temperament, position }] : [];
+    });
+    const remark = remarkOn(endingFor(outcome, position, qualified), opponents, createRandom(options.seed ^ REMARK_SEED));
+    return { outcome, time: riders[PLAYER].finishTime, position, qualified, standings, remark };
+  }
+
+  /** How the player's race ended, for the remark on it: a race that neither finished nor got them busted wrecked their bike. */
+  function endingFor(outcome: RaceOutcome, position: number | null, qualified: boolean): Ending {
+    if (outcome === "busted" && playerBustedBy) return { outcome, cop: { id: playerBustedBy.id, name: playerBustedBy.name } };
+    if (outcome === "finished" && position !== null) return { outcome, position, qualified };
+    return { outcome: "wrecked" };
   }
 
   const race: Race = {

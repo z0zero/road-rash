@@ -200,7 +200,7 @@ export function Hud({ session }: { session: GameSession }) {
             </div>
             <div className="leading-none">
               <div className="text-3xl uppercase italic text-sun">Club</div>
-              <div className="mt-1 font-sans text-xs font-semibold uppercase tracking-widest text-sand/90">J or Z swings it</div>
+              <div className="mt-1 font-sans text-xs font-semibold uppercase tracking-widest text-sand/90">Punch to swing it</div>
             </div>
           </div>
         </div>
