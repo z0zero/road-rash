@@ -7,6 +7,7 @@ import { listenToKeyboard, type Keyboard } from "@/input/keyboard";
 import { NO_INPUT } from "@/race";
 import { Scene } from "@/renderer/Scene";
 import { isMotionReduced, type SaveStorage } from "@/save-data/save-data";
+import { ControlsScreen } from "@/ui/ControlsScreen";
 import { CreditsScreen } from "@/ui/CreditsScreen";
 import { Hud } from "@/ui/Hud";
 import { PauseMenu } from "@/ui/PauseMenu";
@@ -92,6 +93,7 @@ export default function Game() {
         <TitleScreen
           personalBest={state.personalBest}
           onStart={startRace}
+          onControls={session.openControls}
           onSettings={session.openSettings}
           onCredits={session.openCredits}
         />
@@ -104,6 +106,7 @@ export default function Game() {
           onBack={session.closeSettings}
         />
       )}
+      {state.screen === "controls" && <ControlsScreen onBack={session.closeControls} />}
       {state.screen === "credits" && <CreditsScreen onBack={session.closeCredits} />}
       {(state.screen === "racing" || state.screen === "paused") && <Hud session={session} />}
       {state.screen === "paused" && (

@@ -198,6 +198,32 @@ test("credits the music and disclaims any tie to Road Rash, from the title scree
   await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
 });
 
+test("lists the keyboard and gamepad controls, from the title screen", async ({ page }) => {
+  await page.getByRole("button", { name: "Controls" }).click();
+
+  const controls = page.getByRole("dialog", { name: "Controls" });
+  await expect(controls).toBeVisible();
+  await expect(controls.getByRole("columnheader", { name: "Keyboard" })).toBeVisible();
+  await expect(controls.getByRole("columnheader", { name: "Gamepad" })).toBeVisible();
+  // The bindings from the spec: each action, its keys, then its gamepad controls.
+  const bindings = [
+    ["Throttle", ["W", "↑"], ["Right trigger", "A"]],
+    ["Brake", ["S", "↓"], ["Left trigger"]],
+    ["Steer", ["A", "D", "←", "→"], ["Left stick", "D-pad"]],
+    ["Punch, or swing a club", ["J", "Z"], ["X"]],
+    ["Kick", ["K", "X"], ["B"]],
+    ["Pause", ["Esc", "P"], ["Start"]],
+  ] as const;
+  for (const [action, keys, buttons] of bindings) {
+    const row = controls.getByRole("row").filter({ has: page.getByRole("rowheader", { name: action, exact: true }) });
+    await expect(row.getByRole("cell").nth(0).locator("kbd")).toHaveText(keys);
+    await expect(row.getByRole("cell").nth(1).locator("kbd")).toHaveText(buttons);
+  }
+
+  await controls.getByRole("button", { name: "Back" }).click();
+  await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
+});
+
 test("remembers Reduce motion after a reload", async ({ page }) => {
   await page.getByRole("button", { name: "Settings" }).click();
   const reduceMotion = page.getByRole("switch", { name: "Reduce motion" });
