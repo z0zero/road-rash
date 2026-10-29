@@ -1,9 +1,12 @@
 import { Canvas } from "@react-three/fiber";
 import { useMemo } from "react";
 import type { GameSession } from "@/game/session";
+import { PLAYER } from "@/race";
 import { BikeAndRider } from "./BikeAndRider";
 import { ChaseCamera } from "./ChaseCamera";
 import { drawnTrack } from "./drawn-track";
+import { RiderMotion } from "./rider-motion";
+import { PLAYER_LIVERY } from "./rider-model";
 import { Scenery } from "./Scenery";
 import { Sea } from "./Sea";
 import { Sky } from "./Sky";
@@ -25,6 +28,7 @@ export function Scene({ session }: { session: GameSession }) {
     installSunsetHaze(sun);
     return { sun, sunlight: sunlightDirection(track.seaHeading).multiplyScalar(400) };
   }, [track.seaHeading]);
+  const player = useMemo(() => new RiderMotion(PLAYER), []);
 
   return (
     <div className="absolute inset-0">
@@ -37,7 +41,7 @@ export function Scene({ session }: { session: GameSession }) {
         <TrackModel track={drawn} />
         <Terrain track={drawn} />
         <Scenery track={drawn} />
-        <BikeAndRider session={session} />
+        <BikeAndRider session={session} motion={player} livery={PLAYER_LIVERY} />
         <ChaseCamera session={session} />
       </Canvas>
     </div>
