@@ -249,6 +249,14 @@ class Sound {
         });
         break;
       }
+      case "cop-knocked-off": {
+        const force = clamp(event.impactSpeed / HARDEST_CRASH_SPEED, 0.35, 1);
+        this.play(hearingOf(race, { kind: "cop", id: event.cop }, null), (out, loudness) => {
+          playCrash(this.kit, out, force * loudness);
+          this.mixer.duck(CRASH_DUCK * force * loudness);
+        });
+        break;
+      }
       case "knocked-down": {
         const force = clamp(event.impactSpeed / HARDEST_CRASH_SPEED, 0.35, 1);
         this.play(hearingOf(race, { kind: "rider", id: event.rider }, null), (out, loudness) => {
@@ -349,19 +357,21 @@ class Sound {
 /**
  * How the player hears something happening to `subject`, with `other` the
  * rider or cop at the other end of it, if any: their own fights at full
- * strength from the other rider's side, and everyone else's fainter the
+ * strength from the other side's direction, and everyone else's fainter the
  * further off they are.
  */
 function hearingOf(race: RaceSnapshot, subject: RiderOrCop, other: RiderOrCop | null): Hearing {
   const player = race.riders[PLAYER];
   const isPlayer = (who: RiderOrCop | null) => who?.kind === "rider" && who.id === PLAYER;
-  const riderOf = (who: RiderOrCop | null) => (who?.kind === "rider" ? race.riders[who.id] : undefined);
+  const whereIs = (who: RiderOrCop | null) => {
+    if (who === null) return undefined;
+    return who.kind === "rider" ? race.riders[who.id] : race.cops[who.id];
+  };
   if (isPlayer(subject) || isPlayer(other)) {
-    const them = riderOf(isPlayer(subject) ? other : subject);
+    const them = whereIs(isPlayer(subject) ? other : subject);
     return { loudness: 1, pan: them ? panFor(them.distance - player.distance, them.offset - player.offset) : 0 };
   }
-  // Cops aren't in the snapshot: a cop's fight is heard where the rider in it is.
-  const where = riderOf(subject) ?? riderOf(other);
+  const where = whereIs(subject);
   if (!where) return { loudness: 0.5, pan: 0 };
   const along = where.distance - player.distance;
   const across = where.offset - player.offset;

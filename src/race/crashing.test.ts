@@ -158,7 +158,8 @@ describe("a bike's condition", () => {
   });
 
   it("takes a wrecked opponent out of the race for good, with no position", () => {
-    const alongside = alongsideARacer();
+    // With no cops about: a cop near the player would bust the racer long before its bike was wrecked.
+    const alongside = alongsideARacer(1, { cops: false });
     const { race, target } = alongside;
     const punching = () => ({ ...alongside.input(), punch: true });
 

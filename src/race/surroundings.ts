@@ -1,4 +1,4 @@
-import type { RiderId } from "./events";
+import type { RiderId, RiderOrCop } from "./events";
 
 /** Where a rider is and how fast they are going along the track. */
 export interface Place {
@@ -19,7 +19,16 @@ export interface Warnings {
   readonly right: boolean;
 }
 
-/** The nearest opponent is named only if they are within this many metres of the player. */
+/** An opponent on their bike or a cop in the race, and where they are. */
+export interface Someone {
+  readonly who: RiderOrCop;
+  /** Metres along the centreline. */
+  readonly distance: number;
+  /** Metres right of the centreline. */
+  readonly offset: number;
+}
+
+/** The nearest opponent or cop is named only if they are within this many metres of the player. */
 const NEAREST_RANGE = 50;
 /** A rider at most this many metres from the player along the track... */
 const ALONGSIDE_ALONG = 3;
@@ -28,13 +37,13 @@ const ALONGSIDE_ACROSS = 4;
 /** A rider up to this many metres behind the player and going faster is coming up from behind. */
 const COMING_UP = 30;
 
-/** The opponent nearest the player (straight-line, in track space) if one is within range; null otherwise. */
-export function nearestOpponent(player: Place, opponents: readonly Place[]): RiderId | null {
-  let nearest: RiderId | null = null;
+/** The opponent or cop nearest the player (straight-line, in track space) if one is within range; null otherwise. */
+export function nearestOpponentOrCop(player: Place, others: readonly Someone[]): RiderOrCop | null {
+  let nearest: RiderOrCop | null = null;
   let nearestApart = NEAREST_RANGE;
-  for (const opponent of opponents) {
-    const apart = Math.hypot(opponent.distance - player.distance, opponent.offset - player.offset);
-    if (apart <= nearestApart) [nearest, nearestApart] = [opponent.id, apart];
+  for (const other of others) {
+    const apart = Math.hypot(other.distance - player.distance, other.offset - player.offset);
+    if (apart <= nearestApart) [nearest, nearestApart] = [other.who, apart];
   }
   return nearest;
 }

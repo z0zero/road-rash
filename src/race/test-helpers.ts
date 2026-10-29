@@ -25,6 +25,9 @@ export const FULL_THROTTLE: PlayerInput = { ...NO_INPUT, throttle: 1 };
 /** Sets a race up on a closed road, with no traffic. */
 export const CLOSED_ROAD = { traffic: false } as const;
 
+/** Sets a race up with no cops, so that nobody is busted. */
+export const NO_COPS = { cops: false } as const;
+
 /** km/h in metres per second. */
 export function kmh(value: number) {
   return value / 3.6;
@@ -318,19 +321,20 @@ export function nearestOpponent(race: Race, temperament?: Temperament): RiderId 
 /**
  * A started race in which the player has ridden up alongside a racer (an
  * opponent who rarely attacks): the racer is the nearest rider within reach.
+ * The race is set up with `options` besides the seed.
  */
-export function alongsideARacer(seed = 1) {
-  return alongsideAn("racer", seed);
+export function alongsideARacer(seed = 1, options: Omit<RaceOptions, "seed"> = {}) {
+  return alongsideAn("racer", seed, options);
 }
 
 /**
  * A started race in which the player has ridden up alongside the opponent of
  * a temperament who lined up nearest them: that opponent is the nearest rider
  * within reach. The race is on a closed road, so that no car comes between
- * them.
+ * them, and set up with `options` besides.
  */
-export function alongsideAn(temperament: Temperament, seed = 1) {
-  const race = startedRace(seed, CLOSED_ROAD);
+export function alongsideAn(temperament: Temperament, seed = 1, options: Omit<RaceOptions, "seed"> = {}) {
+  const race = startedRace(seed, { ...CLOSED_ROAD, ...options });
   const target = nearestOpponent(race, temperament);
   const input = rideAlongside(race, target);
   const racerNearest = () => {

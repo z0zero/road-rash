@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NO_INPUT, PLAYER, STEP_SECONDS, type CarSnapshot, type PlayerInput, type Race, type RaceEvent } from ".";
-import { autopilot, eventsUntil, player, secondsUntil, startedRace, stepFor, STEPS_PER_SECOND } from "./test-helpers";
+import { autopilot, eventsUntil, NO_COPS, player, secondsUntil, startedRace, stepFor, STEPS_PER_SECOND } from "./test-helpers";
 
 type Crash = Extract<RaceEvent, { type: "crash" }>;
 const isCrash = (event: RaceEvent): event is Crash => event.type === "crash";
@@ -94,7 +94,8 @@ describe("traffic", () => {
   });
 
   it("fills a window around the player, from 150 m behind them to 600 m ahead, with about one car per 120 m in each direction", () => {
-    const race = startedRace();
+    // With no cops, who would bust the player if they crashed in traffic, ending their ride through it.
+    const race = startedRace(1, NO_COPS);
     const pilot = autopilot(race);
     const counts = { oncoming: [] as number[], raceDirection: [] as number[] };
     const gaps: number[] = [];
