@@ -8,6 +8,7 @@ import {
   NO_INPUT,
   PLAYER,
   STEP_SECONDS,
+  type AttackKind,
   type CarSnapshot,
   type PlayerInput,
   type Race,
@@ -20,6 +21,9 @@ import {
 
 export const STEPS_PER_SECOND = 60;
 export const FULL_THROTTLE: PlayerInput = { ...NO_INPUT, throttle: 1 };
+
+/** Sets a race up on a closed road, with no traffic. */
+export const CLOSED_ROAD = { traffic: false } as const;
 
 /** km/h in metres per second. */
 export function kmh(value: number) {
@@ -215,17 +219,26 @@ function merge(stretches: readonly Stretch[]): Stretch[] {
   return merged;
 }
 
-/** Whether `target` is within reach of `attacker`'s punches and kicks: at most 1.8 m sideways and 2 m along the track. */
-export function withinReach(attacker: RiderSnapshot, target: RiderSnapshot) {
-  return Math.abs(target.offset - attacker.offset) <= 1.8 && Math.abs(target.distance - attacker.distance) <= 2;
+/** How far sideways each attack reaches: 1.8 m for punches and kicks, 2.4 m for a club swing. */
+const REACH_ACROSS: Record<AttackKind, number> = { punch: 1.8, kick: 1.8, "club-swing": 2.4 };
+
+/** Whether `target` is within reach of an attack of `kind` from `attacker`: at most 2 m along the track, and sideways as far as the attack reaches. */
+export function withinReach(attacker: RiderSnapshot, target: RiderSnapshot, kind: AttackKind = "punch") {
+  return Math.abs(target.offset - attacker.offset) <= REACH_ACROSS[kind] && Math.abs(target.distance - attacker.distance) <= 2;
 }
 
-/** The rider on their bike, still racing, nearest `attacker` and within reach of their punches and kicks; null if none. */
-export function nearestWithinReach(riders: readonly RiderSnapshot[], attacker: RiderSnapshot): RiderId | null {
+/** The rider on their bike, still racing, nearest `attacker` and within reach of an attack of `kind` from them; null if none. */
+export function nearestWithinReach(
+  riders: readonly RiderSnapshot[],
+  attacker: RiderSnapshot,
+  kind: AttackKind = "punch",
+): RiderId | null {
   let nearest: RiderId | null = null;
   let nearestApart = Infinity;
   for (const other of riders) {
-    if (other.id === attacker.id || other.status !== "racing" || other.crash !== null || !withinReach(attacker, other)) continue;
+    if (other.id === attacker.id || other.status !== "racing" || other.crash !== null || !withinReach(attacker, other, kind)) {
+      continue;
+    }
     const apart = Math.hypot(other.distance - attacker.distance, other.offset - attacker.offset);
     if (apart < nearestApart) [nearest, nearestApart] = [other.id, apart];
   }
@@ -313,10 +326,11 @@ export function alongsideARacer(seed = 1) {
 /**
  * A started race in which the player has ridden up alongside the opponent of
  * a temperament who lined up nearest them: that opponent is the nearest rider
- * within reach.
+ * within reach. The race is on a closed road, so that no car comes between
+ * them.
  */
 export function alongsideAn(temperament: Temperament, seed = 1) {
-  const race = startedRace(seed);
+  const race = startedRace(seed, CLOSED_ROAD);
   const target = nearestOpponent(race, temperament);
   const input = rideAlongside(race, target);
   const racerNearest = () => {
@@ -333,6 +347,26 @@ export function racerKnockedOff(seed = 1) {
   const alongside = alongsideARacer(seed);
   const punching = () => ({ ...alongside.input(), punch: true });
   const events = eventsUntil(alongside.race, punching, (event) => event.type === "crash", 10);
+  return { ...alongside, events };
+}
+
+/**
+ * A started race in which the player, riding alongside the bully who lined up
+ * nearest them, has punched it just as it began to wind up a swing of its
+ * club, so that the punch lands in the middle of the swing. Returns every
+ * event from the punch on, over the next half second.
+ */
+export function punchedMidSwing(seed = 1) {
+  const alongside = alongsideAn("bully", seed);
+  const { race, target, input } = alongside;
+  const swingBeginning = () => {
+    const attack = race.snapshot().riders[target].attack;
+    return attack?.kind === "club-swing" && attack.stage === "wind-up" && attack.progress < 0.5;
+  };
+  secondsUntil(race, input, swingBeginning, 30);
+  race.drainEvents();
+  race.step({ ...input(), punch: true });
+  const events = [...race.drainEvents(), ...eventsDuring(race, 0.5, input)];
   return { ...alongside, events };
 }
 

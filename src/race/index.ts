@@ -27,6 +27,7 @@ export type {
 export type { Track, TrackSample, WorldPoint } from "./track";
 export type { CarKind } from "./traffic";
 export type { CrashPhase } from "./crashing";
+export type { Weapon } from "./fighting";
 export type { Warnings } from "./surroundings";
 export type { Temperament } from "./opponents";
 export type { ObstacleKind, ObstaclePlacement, SceneryKind, SceneryPlacement } from "./placements";

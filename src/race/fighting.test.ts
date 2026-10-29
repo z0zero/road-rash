@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NO_INPUT, PLAYER, STEP_SECONDS, type RaceEvent, type RiderId, type RiderSnapshot } from ".";
+import { NO_INPUT, PLAYER, STEP_SECONDS, type AttackKind, type RaceEvent, type RiderId, type RiderSnapshot } from ".";
 import {
   alongsideARacer,
   autopilot,
@@ -128,10 +128,11 @@ describe("attacks", () => {
   it("land on the nearest rider within reach, on either side, and on nobody out of reach", () => {
     const race = startedRace();
     const pilot = autopilot(race, { lane: 2 });
-    const nearestWithinReach = (riders: readonly RiderSnapshot[]) =>
+    // Swings too, if the player takes a club from a bully on the way.
+    const nearestWithinReach = (riders: readonly RiderSnapshot[], kind: AttackKind) =>
       riders
         .filter((other) => other.id !== PLAYER && other.status === "racing" && other.crash === null)
-        .filter((other) => withinReach(riders[PLAYER], other))
+        .filter((other) => withinReach(riders[PLAYER], other, kind))
         .map((other) => ({
           id: other.id,
           apart: Math.hypot(other.distance - riders[PLAYER].distance, other.offset - riders[PLAYER].offset),
@@ -151,11 +152,11 @@ describe("attacks", () => {
       const after = race.snapshot().riders;
       for (const event of race.drainEvents().filter(byThePlayer)) {
         if (event.type === "attack-thrown") {
-          expect(event.target?.id ?? null).toBe(nearestWithinReach(before));
+          expect(event.target?.id ?? null).toBe(nearestWithinReach(before, event.kind));
           if (event.target) thrownAtSomeone++;
           else thrownAtNobody++;
         } else if (event.type === "attack-landed") {
-          expect(event.target.id).toBe(nearestWithinReach(after));
+          expect(event.target.id).toBe(nearestWithinReach(after, event.kind));
           sides.add(Math.sign(after[event.target.id].offset - after[PLAYER].offset));
           landed++;
         }

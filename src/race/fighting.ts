@@ -3,6 +3,9 @@ import type { Motion } from "./riding";
 import { stepsIn } from "./steps";
 import { TUNING } from "./tuning";
 
+/** A weapon a rider can hold and swing instead of punching: in this game, only the club. */
+export type Weapon = "club";
+
 /** An attack under way: it winds up, strikes, then recovers before the next. */
 export interface Attack {
   readonly kind: AttackKind;
@@ -23,6 +26,11 @@ export function attackStage({ kind, steps }: Attack): { stage: "wind-up" | "reco
 /** Steps from throwing an attack to its strike. */
 export function windUpSteps(kind: AttackKind): number {
   return stepsIn(TUNING.attacks[kind].windUp);
+}
+
+/** Whether an attack is a club swing still winding up to its strike: when a hit can take the club from its holder. */
+export function isMidSwing(attack: Attack | null): boolean {
+  return attack !== null && attack.kind === "club-swing" && attack.steps < windUpSteps(attack.kind);
 }
 
 /** Steps from throwing an attack until its attacker can throw the next. */

@@ -14,6 +14,7 @@ import {
   autopilot,
   bendSpeed,
   chase,
+  CLOSED_ROAD,
   player,
   secondsUntil,
   startedRace,
@@ -22,9 +23,6 @@ import {
 } from "./test-helpers";
 
 type RiderFinished = Extract<RaceEvent, { type: "rider-finished" }>;
-
-/** A race on a closed road, with no traffic. */
-const CLOSED_ROAD = { traffic: false } as const;
 
 /** Distances of the tightest point of each hairpin (a bend tighter than 30 m) between the start and the finish. */
 function hairpinApexes(track: Track) {
@@ -470,7 +468,8 @@ describe("determinism with a full field", () => {
 
     expect(second).toEqual(first);
     expect(first.final.riders).toHaveLength(15);
-    expect(first.events.filter((event) => event.type === "rider-finished")).toHaveLength(15);
+    // The whole field raced to the end, though in traffic a rider may be wrecked on the way.
+    expect(first.final.riders.filter((rider) => rider.status === "racing")).toEqual([]);
   });
 
   it("races differently from a different seed", () => {
