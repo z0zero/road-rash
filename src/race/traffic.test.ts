@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PLAYER, STEP_SECONDS, type CarSnapshot } from ".";
+import { PLAYER, STEP_SECONDS, type CarSnapshot, type Race } from ".";
 import { autopilot, player, startedRace, STEPS_PER_SECOND } from "./test-helpers";
 
 describe("traffic", () => {
@@ -71,6 +71,17 @@ describe("traffic", () => {
     }
   });
 
+  it("stays off a closed road", () => {
+    const race = startedRace(1, { traffic: false });
+    const pilot = autopilot(race);
+
+    for (let step = 0; step < 60 * STEPS_PER_SECOND; step++) {
+      race.step(pilot());
+      expect(race.snapshot().traffic).toEqual([]);
+    }
+    expect(player(race).distance).toBeGreaterThan(race.track.startDistance + 1000);
+  });
+
   it("keeps to its lanes, though some cars change lanes now and then, and never runs into itself", () => {
     const race = startedRace();
     const pilot = autopilot(race);
@@ -102,5 +113,75 @@ describe("traffic", () => {
     expect(changedLanes).toBeGreaterThanOrEqual(3);
     expect(changedLanes).toBeLessThan(seenIn.size / 2);
     expect(overlaps).toBe(0);
+  });
+});
+
+/** A car or an obstacle, as something on the road a rider can run into: its middle, and half its length and width (metres). */
+interface Thing {
+  readonly key: string;
+  readonly distance: number;
+  readonly offset: number;
+  readonly halfLength: number;
+  readonly halfWidth: number;
+}
+
+function thingsOn(race: Race): Thing[] {
+  return [
+    ...race.snapshot().traffic.map((car) => ({
+      key: `car ${car.id}`,
+      distance: car.distance,
+      offset: car.offset,
+      halfLength: car.length / 2,
+      halfWidth: car.width / 2,
+    })),
+    ...race.track.obstacles.map((obstacle, index) => ({
+      key: `obstacle ${index}`,
+      distance: obstacle.distance,
+      offset: obstacle.offset,
+      halfLength: obstacle.radius,
+      halfWidth: obstacle.radius,
+    })),
+  ];
+}
+
+/** Whether a rider on a bike, about 2 m long and 0.8 m wide, at `rider` touches `thing`. */
+function touching(rider: { readonly distance: number; readonly offset: number }, thing: Thing) {
+  return Math.abs(thing.distance - rider.distance) < thing.halfLength + 1 && Math.abs(thing.offset - rider.offset) < thing.halfWidth + 0.4;
+}
+
+describe("opponents", () => {
+  it("steer around the cars and obstacles in their way, nearly always without touching them", () => {
+    let inTheWay = 0;
+    let touched = 0;
+    for (const seed of [1, 2]) {
+      const race = startedRace(seed);
+      const pilot = autopilot(race);
+      /** For each opponent coming up to a car or obstacle in its path, whether it has touched it yet. */
+      const comingUp = new Map<string, boolean>();
+      for (let step = 0; step < 180 * STEPS_PER_SECOND && player(race).status === "racing"; step++) {
+        race.step(pilot());
+        const things = thingsOn(race);
+        for (const rider of race.snapshot().riders) {
+          if (rider.id === PLAYER || rider.status !== "racing" || rider.crash !== null) continue;
+          for (const thing of things) {
+            const key = `${rider.id}: ${thing.key}`;
+            const ahead = thing.distance - rider.distance;
+            const inItsPath = Math.abs(thing.offset - rider.offset) < thing.halfWidth + 0.4;
+            if (!comingUp.has(key)) {
+              if (ahead > 20 && ahead < 60 && inItsPath) comingUp.set(key, false);
+            } else if (touching(rider, thing)) {
+              comingUp.set(key, true);
+            } else if (ahead < -thing.halfLength - 1) {
+              inTheWay++;
+              if (comingUp.get(key)) touched++;
+              comingUp.delete(key);
+            }
+          }
+        }
+      }
+    }
+
+    expect(inTheWay).toBeGreaterThan(50);
+    expect(touched / inTheWay).toBeLessThan(0.1);
   });
 });

@@ -87,6 +87,14 @@ export interface Traffic {
   step(player: Around): void;
 }
 
+/** A closed road: no traffic at all. */
+export const CLOSED_ROAD: Traffic = { cars: [], step() {} };
+
+/** A car's speed along the track (m/s): negative for an oncoming car. */
+export function velocityOf(car: Car): number {
+  return car.oncoming ? -car.speed : car.speed;
+}
+
 /** A car about to come onto the road, chosen ahead of time so that waiting for room never changes the choice. */
 interface NextCar {
   readonly kind: (typeof KINDS)[number];
