@@ -42,7 +42,8 @@ export function slide(bike: Motion, edge: number): void {
   bike.speed = Math.max(0, bike.speed - TUNING.slideDeceleration * STEP_SECONDS);
   bike.distance += bike.speed * STEP_SECONDS;
   bike.offset = clamp(bike.offset + (bike.steering + bike.shove) * STEP_SECONDS, -edge, edge);
-  const settle = Math.exp(-TUNING.sideSlideDecay * STEP_SECONDS);
+  // Its sideways slide dies away too, and stops when the bike does.
+  const settle = bike.speed > 0 ? Math.exp(-TUNING.sideSlideDecay * STEP_SECONDS) : 0;
   bike.steering *= settle;
   bike.shove *= settle;
 }
@@ -75,7 +76,11 @@ export function carryOn(crash: Crash, bike: Readonly<Motion>, controls: OnFootCo
   crash.steps++;
   if (crash.phase === "tumbling") {
     tumble(crash, edge);
-    if (crash.steps >= TUMBLE_STEPS) crash.phase = "on-foot";
+    if (crash.steps >= TUMBLE_STEPS) {
+      crash.phase = "on-foot";
+      crash.body.speed = 0;
+      crash.body.sideways = 0;
+    }
   } else {
     run(crash.body, bike, controls, edge);
   }

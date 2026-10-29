@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NO_INPUT, PLAYER, STEP_SECONDS, type RaceEvent, type RiderSnapshot } from ".";
+import { NO_INPUT, PLAYER, STEP_SECONDS, type PlayerInput, type RaceEvent, type RiderSnapshot } from ".";
 import {
   chase,
   eventsUntil,
@@ -48,6 +48,50 @@ describe("after a crash", () => {
     expect(them().speed).toBeLessThan(kmh(30));
     expect(them().distance).toBe(them().bike.distance);
     expect(them().offset).toBe(them().bike.offset);
+  });
+});
+
+/** A started race in which the player has crashed by riding into a rider, and has just got up on foot. */
+function playerOnFoot() {
+  const race = startedRace();
+  const target = nearestOpponent(race);
+  eventsUntil(race, chase(race, target, 12), isCrash);
+  secondsUntil(race, NO_INPUT, () => player(race).crash === "on-foot", 2);
+  return race;
+}
+
+describe("on foot, the player", () => {
+  /** Angle (radians, clockwise in track space) from the way to the bike to the way the player ran during one step with `input`. */
+  function turnWith(input: PlayerInput) {
+    const race = playerOnFoot();
+    const before = player(race);
+    race.step(input);
+    const after = player(race);
+    const toBike = Math.atan2(before.bike.offset - before.offset, before.bike.distance - before.distance);
+    const ran = Math.atan2(after.offset - before.offset, after.distance - before.distance);
+    return { turn: Math.atan2(Math.sin(ran - toBike), Math.cos(ran - toBike)), ran: Math.hypot(after.offset - before.offset, after.distance - before.distance) };
+  }
+
+  it("runs straight back to the bike when left alone", () => {
+    expect(turnWith(NO_INPUT).turn).toBeCloseTo(0, 6);
+  });
+
+  it("turns away from running straight at the bike when steering, to either side", () => {
+    expect(turnWith({ ...NO_INPUT, steer: 1 }).turn).toBeGreaterThan(0.5);
+    expect(turnWith({ ...NO_INPUT, steer: -1 }).turn).toBeLessThan(-0.5);
+  });
+
+  it("stops when braking", () => {
+    expect(turnWith({ ...NO_INPUT, brake: 1 }).ran).toBe(0);
+    expect(turnWith({ ...NO_INPUT, throttle: 1 }).ran).toBeGreaterThan(0.05);
+  });
+
+  it("can't attack", () => {
+    const race = playerOnFoot();
+    race.step({ ...NO_INPUT, punch: true });
+    race.step({ ...NO_INPUT, kick: true });
+
+    expect(race.drainEvents().filter((event) => event.type === "attack-thrown")).toEqual([]);
   });
 });
 
