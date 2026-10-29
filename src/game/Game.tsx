@@ -2,6 +2,7 @@
 
 import { advance } from "@react-three/fiber";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { startGameAudio } from "@/audio/game-audio";
 import { listenToKeyboard, type Keyboard } from "@/input/keyboard";
 import { NO_INPUT } from "@/race";
 import { Scene } from "@/renderer/Scene";
@@ -41,6 +42,12 @@ export default function Game() {
       if (keyboard.current === listening) keyboard.current = null;
     };
   }, [session]);
+
+  // The title screen is up: start the sound, which fetches the music now so it's ready for the race.
+  useEffect(() => {
+    const audio = startGameAudio();
+    return () => audio.dispose();
+  }, []);
 
   useEffect(() => {
     const pauseWhenHidden = () => {

@@ -167,6 +167,18 @@ test.describe("when the operating system prefers reduced motion", () => {
   });
 });
 
+test("fetches a music track of at most 3 MB once the title screen is up", async ({ page }) => {
+  const music = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith(".mp3"));
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
+
+  const response = await music;
+  expect(response.ok()).toBe(true);
+  // Fetched by the game once it runs, not preloaded by the page.
+  expect(response.request().resourceType()).toBe("fetch");
+  expect((await response.body()).byteLength).toBeLessThanOrEqual(3_000_000);
+});
+
 test("downloads less than 10 MB to get racing", async ({ browser, baseURL }) => {
   // A fresh browser context, so nothing comes from the cache.
   const context = await browser.newContext({ baseURL });
