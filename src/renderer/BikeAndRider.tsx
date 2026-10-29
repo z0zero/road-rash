@@ -2,10 +2,10 @@ import { useFrame } from "@react-three/fiber";
 import { useEffect, useMemo } from "react";
 import { Group, Quaternion, Vector3 } from "three";
 import type { GameSession } from "@/game/session";
-import { liveryOf } from "./liveries";
+import type { Livery } from "./liveries";
 import { hipsHeight, poseAttack, poseClub, poseRun, poseTumble, restJoints } from "./rider-animation";
-import type { RiderMotion } from "./rider-motion";
-import { createRiderModel, type RiderModel, WHEEL_RADIUS } from "./rider-model";
+import type { BikeMotion } from "./rider-motion";
+import { createRiderModel, flashLightBar, type RiderModel, WHEEL_RADIUS } from "./rider-model";
 
 /** The bike's lean shifts the rider this many metres towards the inside of the corner per radian... */
 const HANG_OFF = 0.22;
@@ -23,17 +23,29 @@ const LYING = Math.PI / 2 - 0.2;
 const LYING_HEIGHT = 0.24;
 
 /**
- * One rider on their bike, in the rider's own livery: the flat-shaded model
- * built in code, placed from the interpolated snapshots, its wheels turning,
- * leaning into corners with the rider hanging off the inside and tucking in
- * at speed, punching and kicking, and holding and swinging a club if they
- * have one. After a crash the rider drops any club and leaves the bike, which
- * falls on its side and slides to a stop: they tumble along the road, then
- * get up and run back to it. It updates `motion` first each frame, so
- * whatever follows this rider (the camera follows the player) reads it fresh.
+ * One rider, or cop, on their bike, in their own livery: the flat-shaded
+ * model built in code, placed from the interpolated snapshots, its wheels
+ * turning, leaning into corners with the rider hanging off the inside and
+ * tucking in at speed, punching and kicking, and holding and swinging a club
+ * if they have one. After a crash the rider drops any club and leaves the
+ * bike, which falls on its side and slides to a stop: they tumble along the
+ * road, then get up and run back to it. A cop's bike is a `police` bike, its
+ * light bar flashing red and blue while they ride in the race. It updates
+ * `motion` first each frame, so whatever follows this rider (the camera
+ * follows the player) reads it fresh.
  */
-export function BikeAndRider({ session, motion }: { session: GameSession; motion: RiderMotion }) {
-  const model = useMemo(() => createRiderModel(liveryOf(motion.rider)), [motion]);
+export function BikeAndRider({
+  session,
+  motion,
+  livery,
+  police = false,
+}: {
+  session: GameSession;
+  motion: BikeMotion;
+  livery: Livery;
+  police?: boolean;
+}) {
+  const model = useMemo(() => createRiderModel(livery, { police }), [livery, police]);
   // Where the rider is on their own after a crash; while they ride, the model's rider sits on the bike.
   const body = useMemo(() => ({ group: new Group(), seat: model.rider.position.clone() }), [model]);
   useEffect(() => () => model.dispose(), [model]);
@@ -43,6 +55,7 @@ export function BikeAndRider({ session, motion }: { session: GameSession; motion
     restJoints(model);
     if (motion.crash) poseCrashed(model, body, motion);
     else poseRiding(model, body, motion);
+    if (model.lightBar) flashLightBar(model.lightBar, motion.lightsFlashing, session.view.current.clock);
   }, -2);
 
   return (
@@ -57,7 +70,7 @@ const ACROSS = new Vector3(1, 0, 0);
 const tuck = new Quaternion();
 
 /** Puts the model where the motion says, leaning, with its wheels turned, its rider hanging off and attacking. */
-function poseRiding(model: RiderModel, body: { group: Group; seat: Vector3 }, motion: RiderMotion) {
+function poseRiding(model: RiderModel, body: { group: Group; seat: Vector3 }, motion: BikeMotion) {
   const { root, wheels, rider, torso, head, rest } = model;
   if (rider.parent !== root) {
     root.add(rider);
@@ -80,7 +93,7 @@ function poseRiding(model: RiderModel, body: { group: Group; seat: Vector3 }, mo
 }
 
 /** Lays the bike on its side where it slid to, and puts the rider on their own: tumbling, or on foot. */
-function poseCrashed(model: RiderModel, body: { group: Group; seat: Vector3 }, motion: RiderMotion) {
+function poseCrashed(model: RiderModel, body: { group: Group; seat: Vector3 }, motion: BikeMotion) {
   const { root, wheels, rider } = model;
   const roll = motion.fallSide * LYING * motion.fallen;
   root.position.set(motion.x, motion.y + LYING_HEIGHT * motion.fallen, motion.z);
