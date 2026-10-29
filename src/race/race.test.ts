@@ -243,7 +243,10 @@ describe("the finish", () => {
 
     expect(player(race).speed).toBe(0);
     expect(player(race).distance).toBeLessThan(race.track.length);
-    expect(race.drainEvents()).toEqual([]);
+    const aboutThePlayer = race
+      .drainEvents()
+      .filter((event) => event.type === "player-race-over" || ("rider" in event && event.rider === PLAYER));
+    expect(aboutThePlayer).toEqual([]);
   });
 });
 

@@ -1,5 +1,35 @@
 import { describe, expect, it } from "vitest";
-import { createRace, PLAYER } from ".";
+import { createRace, NO_INPUT, PLAYER, type RaceEvent, type RiderSnapshot, type Track } from ".";
+import { startedRace, STEPS_PER_SECOND } from "./test-helpers";
+
+type RiderFinished = Extract<RaceEvent, { type: "rider-finished" }>;
+
+/** Distances of the tightest point of each hairpin (a bend tighter than 30 m) between the start and the finish. */
+function hairpinApexes(track: Track) {
+  const apexes: number[] = [];
+  for (let d = track.startDistance; d <= track.finishDistance; d++) {
+    const curvature = Math.abs(track.sampleAt(d).curvature);
+    const tightest = [-1, 1].every((step) => Math.abs(track.sampleAt(d + step).curvature) <= curvature);
+    if (curvature >= 1 / 30 && tightest && !apexes.some((apex) => d - apex < 100)) apexes.push(d);
+  }
+  return apexes;
+}
+
+/**
+ * Leaves the player on the start line and lets the opponents race for up to
+ * `seconds`, calling `watch` with every snapshot; returns the rider-finished
+ * events in the order they came.
+ */
+function raceWithoutThePlayer(seed: number, seconds: number, watch: (riders: readonly RiderSnapshot[]) => void = () => {}) {
+  const race = startedRace(seed);
+  const finished: RiderFinished[] = [];
+  for (let step = 0; step < seconds * STEPS_PER_SECOND && finished.length < 14; step++) {
+    race.step(NO_INPUT);
+    watch(race.snapshot().riders);
+    for (const event of race.drainEvents()) if (event.type === "rider-finished") finished.push(event);
+  }
+  return { race, finished };
+}
 
 describe("the start", () => {
   it("puts the player last in a field of fifteen riders", () => {
@@ -107,6 +137,49 @@ describe("the opponents", () => {
     expect(new Set(temperaments)).toEqual(new Set(["racer", "brawler", "bully"]));
     expect(temperaments.filter((temperament) => temperament === "bully")).toHaveLength(3);
     expect(riders[PLAYER].temperament).toBeNull();
+  });
+
+  it("race to the finish line by themselves, in finishing order", () => {
+    const { finished } = raceWithoutThePlayer(1, 300);
+
+    expect(finished.map((event) => event.position)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+    expect(new Set(finished.map((event) => event.rider)).size).toBe(14);
+    expect(finished.map((event) => event.rider)).not.toContain(PLAYER);
+    const times = finished.map((event) => event.time);
+    expect(times).toEqual([...times].sort((a, b) => a - b));
+    // About 7 km at racing speed: between two and four minutes.
+    expect(times[0]).toBeGreaterThan(120);
+    expect(times[13]).toBeLessThan(240);
+  });
+
+  it("stay on the road all the way, slowing down for the hairpins", () => {
+    const { track } = createRace({ seed: 1 });
+    const apexes = hairpinApexes(track);
+    const fastest = new Map<number, number>();
+    const atApexes = new Map<number, number[]>();
+    let previous: readonly RiderSnapshot[] | null = null;
+
+    raceWithoutThePlayer(1, 300, (riders) => {
+      for (const rider of riders) {
+        if (rider.id === PLAYER || rider.status !== "racing") continue;
+        expect(Math.abs(rider.offset), `${rider.name} left the road at ${rider.distance.toFixed(0)} m`).toBeLessThanOrEqual(
+          track.roadHalfWidth,
+        );
+        fastest.set(rider.id, Math.max(fastest.get(rider.id) ?? 0, rider.speed));
+        const before = previous?.[rider.id].distance ?? rider.distance;
+        for (const apex of apexes) {
+          if (before < apex && rider.distance >= apex) atApexes.set(rider.id, [...(atApexes.get(rider.id) ?? []), rider.speed]);
+        }
+      }
+      previous = riders;
+    });
+
+    expect(apexes.length).toBeGreaterThanOrEqual(3);
+    for (const [id, speeds] of atApexes) {
+      expect(speeds).toHaveLength(apexes.length);
+      for (const speed of speeds) expect(speed).toBeLessThan(0.6 * (fastest.get(id) ?? 0));
+    }
+    expect(atApexes.size).toBe(14);
   });
 
   it("are the same fourteen riders in every race, whatever their start order", () => {
