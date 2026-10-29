@@ -32,9 +32,9 @@ export function bikePoseOf(view: RaceView, whom: (snapshot: RaceSnapshot) => OnT
   return between(whom(view.previous).bike, whom(view.current).bike, view.alpha, pose);
 }
 
-type Place = Pick<RiderPose, "distance" | "offset" | "speed">;
+type TrackPosition = Pick<RiderPose, "distance" | "offset" | "speed">;
 
-function between(before: Place, after: Place, t: number, pose: RiderPose): RiderPose {
+function between(before: TrackPosition, after: TrackPosition, t: number, pose: RiderPose): RiderPose {
   pose.distance = before.distance + (after.distance - before.distance) * t;
   pose.offset = before.offset + (after.offset - before.offset) * t;
   pose.speed = before.speed + (after.speed - before.speed) * t;

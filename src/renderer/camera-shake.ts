@@ -2,7 +2,7 @@
 const RECOVERY = 1.6;
 
 /**
- * Camera shake driven by "trauma": kicks add trauma that fades away, steady
+ * Camera shake driven by "trauma": jolts add trauma that fades away, steady
  * sources hold it up, and the shake grows with trauma squared, so small
  * rumbles stay subtle while big hits jolt. Offsets come from smooth noise,
  * never from frame-to-frame jitter.
@@ -14,7 +14,7 @@ export class CameraShake {
   readonly offset = { x: 0, y: 0, roll: 0 };
 
   /** A sudden jolt, such as a hit or a crash: `amount` from 0 (none) to 1 (as hard as it gets). */
-  kick(amount: number) {
+  jolt(amount: number) {
     this.trauma = Math.min(1, this.trauma + amount);
   }
 

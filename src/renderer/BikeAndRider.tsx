@@ -89,7 +89,7 @@ function poseRiding(model: RiderModel, body: { group: Group; seat: Vector3 }, mo
     torso.quaternion.copy(tuck).multiply(restTorso);
   }
   if (motion.attack) poseAttack(model, motion.attack);
-  poseClub(model, motion.weapon === "club", motion.clubHand, motion.attack);
+  poseClub(model, motion);
 }
 
 /** Lays the bike on its side where it slid to, and puts the rider on their own: tumbling, or on foot. */
@@ -101,8 +101,8 @@ function poseCrashed(model: RiderModel, body: { group: Group; seat: Vector3 }, m
   for (const wheel of wheels) wheel.rotation.x = -motion.wheelTurn;
 
   if (rider.parent !== body.group) body.group.add(rider);
-  // A rider who crashes drops their club.
-  poseClub(model, false, motion.clubHand, null);
+  // Whatever the race says they still hold: a rider who crashes has dropped their club.
+  poseClub(model, motion);
   const tumbling = motion.crash === "tumbling";
   body.group.position.set(motion.bodyX, motion.bodyY, motion.bodyZ);
   body.group.rotation.set(0, motion.bodyYaw, 0);
