@@ -48,6 +48,9 @@ export function fallenRockModel(): BufferGeometry {
   return model.build();
 }
 
+/** The radius a road sign fills at scale 1, with its footing (metres): stretch it across by its radius over this. */
+export const ROAD_SIGN_RADIUS = 0.3;
+
 /** A warning sign on the shoulder: falling rocks, in a red-rimmed white triangle on a post with a concrete footing. */
 export function roadSignModel(): BufferGeometry {
   const model = new LowPoly();
@@ -65,6 +68,9 @@ export function roadSignModel(): BufferGeometry {
   model.add(new IcosahedronGeometry(0.035, 0), "#1e1a1a", { at: [0.02, 2.02, 0.09], scale: [1, 0.8, 0.3] }, 0);
   return model.build();
 }
+
+/** The radius a marker post fills at scale 1 (metres): stretch it across by its radius over this. */
+export const MARKER_POST_RADIUS = 0.2;
 
 /** A marker post on the shoulder, about 1.3 m tall: white, with a black band and a red reflector near its top. */
 export function markerPostModel(): BufferGeometry {
