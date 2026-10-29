@@ -1,6 +1,17 @@
 import { getCoastalTrack } from "./coastal-track";
 import { settleContact } from "./contact";
-import { bustingIntent, lineUpCops, moveCop, patrolIntent, standingByIntent, type Cop, type CopStatus } from "./cops";
+import {
+  bustingIntent,
+  COP_ATTACK_EVERY_SECONDS,
+  fightingBackIntent,
+  lineUpCops,
+  moveCop,
+  patrolIntent,
+  standingByIntent,
+  type Cop,
+  type CopIntent,
+  type CopStatus,
+} from "./cops";
 import {
   canRemount,
   carryOn,
@@ -155,10 +166,16 @@ export interface CopSnapshot {
   readonly speed: number;
   /** How much fight the cop has left: 150 when fresh, down to 0. */
   readonly stamina: number;
+  /** The attack the cop is making, or null. */
+  readonly attack: AttackSnapshot | null;
+  /** The weapon the cop holds, which their punches swing instead: a club, unless a rider has taken it. */
+  readonly weapon: Weapon | null;
   /** Null while the cop is on their bike; "tumbling" and then "on-foot" once knocked off it. */
   readonly crash: CrashPhase | null;
   /** The crashed rider the cop is riding to, to bust them; null when it isn't busting anyone. */
   readonly busting: RiderId | null;
+  /** The rider the cop is fighting back against, for hitting it; null when it isn't fighting anyone. */
+  readonly fightingBack: RiderId | null;
   /** Whether the cop is in the race within 150 m of the player: the cop alert is on, and the siren sounds, while one is. */
   readonly near: boolean;
 }
@@ -383,6 +400,51 @@ export function createRace(options: RaceOptions): Race {
     if (target.stamina <= 0 && target.kind === "rider") crash(target, "knocked-off", target.motion.speed);
     target.stamina = Math.max(0, target.stamina - stamina);
     target.stepsSinceHit = 0;
+    if (target.kind === "cop" && attacker.kind === "rider" && target.status === "riding") fightBack(target, attacker);
+  }
+
+  /** A cop hit by a rider fights back against them, until a while after it was last hit. */
+  function fightBack(cop: Cop, rider: Rider) {
+    if (cop.fightingBack !== rider.id) events.push({ type: "cop-retaliating", cop: cop.id, target: rider.id });
+    cop.fightingBack = rider.id;
+    cop.fightingBackSteps = stepsIn(TUNING.cops.fightingBackSeconds);
+  }
+
+  /**
+   * What every cop does this step, from where things stand: rides to bust a
+   * crashed rider who hasn't got away yet; or fights back against the rider
+   * who hit it, riding alongside them and swinging at them when they are
+   * within reach; or stands by a rider it has just busted; or else patrols
+   * near the player. Cops find their way around everyone on a bike: the
+   * riders (`field`), and each other. Returns each cop's intent, or null for
+   * a cop not riding in the race.
+   */
+  function decideCops(field: readonly Readonly<Motion>[]): (CopIntent | null)[] {
+    letGo();
+    for (const cop of copsInTheRace()) {
+      const fighting = cop.fightingBack === null ? null : riders[cop.fightingBack];
+      cop.fightingBackSteps = Math.max(0, cop.fightingBackSteps - 1);
+      if (fighting && (cop.fightingBackSteps === 0 || fighting.status !== "racing")) cop.fightingBack = null;
+      cop.attackCooldownSteps = Math.max(0, cop.attackCooldownSteps - 1);
+      cop.standingBySteps = Math.max(0, cop.standingBySteps - 1);
+    }
+    for (const cop of copsInTheRace()) {
+      const fighting = cop.fightingBack === null ? null : riders[cop.fightingBack];
+      if (!fighting || fighting.crash || cop.busting !== null || cop.attack || cop.attackCooldownSteps > 0) continue;
+      if (!withinReach(cop.motion, fighting.motion, punchOf(cop))) continue;
+      throwAttack(cop, "punch");
+      cop.attackCooldownSteps = stepsIn(COP_ATTACK_EVERY_SECONDS);
+    }
+    const player = whereIs(riders[PLAYER]);
+    const everyoneOnABike = [...field, ...copsInTheRace().map((cop) => cop.motion)];
+    return cops.map((cop) => {
+      if (cop.status !== "riding") return null;
+      if (cop.busting !== null) return bustingIntent(cop.motion, whereIs(riders[cop.busting]), edge);
+      const fighting = cop.fightingBack === null ? null : riders[cop.fightingBack];
+      if (fighting && !fighting.crash) return fightingBackIntent(cop.motion, fighting.motion, track, everyoneOnABike);
+      if (cop.standingBySteps > 0) return standingByIntent(cop.motion);
+      return patrolIntent(cop.motion, player, track, everyoneOnABike);
+    });
   }
 
   /**
@@ -569,17 +631,7 @@ export function createRace(options: RaceOptions): Race {
           // A club reaches further than a kick: a club holder swings at a rider its kick can't reach.
           if (kind) throwAttack(opponent, kind === "kick" && !withinReach(opponent.motion, nearest.motion, kind) ? "punch" : kind);
         }
-        // Cops ride to bust crashed riders who haven't got away yet, and stand by the riders they have busted for a
-        // while; the rest patrol near the player, finding their way around everyone on a bike: the riders, and each other.
-        letGo();
-        const everyoneOnABike = [...field, ...cops.filter((cop) => cop.status !== "knocked-off").map((cop) => cop.motion)];
-        const copIntents = cops.map((cop) => {
-          if (cop.status !== "riding") return null;
-          if (cop.busting !== null) return bustingIntent(cop.motion, whereIs(riders[cop.busting]), edge);
-          if (cop.standingBySteps > 0) return standingByIntent(cop.motion);
-          return patrolIntent(cop.motion, whereIs(player), track, everyoneOnABike);
-        });
-        for (const cop of cops) cop.standingBySteps = Math.max(0, cop.standingBySteps - 1);
+        const copIntents = decideCops(field);
         const distancesBefore = riders.map((rider) => whereIs(rider).distance);
         riders.forEach((rider, index) => {
           if (!rider.crash) {
@@ -645,8 +697,11 @@ export function createRace(options: RaceOptions): Race {
           offset: cop.motion.offset,
           speed: cop.motion.speed,
           stamina: cop.stamina,
+          attack: cop.attack && { kind: cop.attack.kind, side: cop.attack.side, ...attackStage(cop.attack) },
+          weapon: cop.weapon,
           crash: null,
           busting: cop.busting,
+          fightingBack: cop.fightingBack,
           near: cop.near,
         })),
       };
