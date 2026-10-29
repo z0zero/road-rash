@@ -164,6 +164,20 @@ describe("fighting a cop", () => {
     expect(player(race)).toMatchObject({ status: "racing", crash: null });
   });
 
+  it("leaves a cop to recover its stamina as a rider does: at 6 per second from 2 s after it was last hit, up to 150", () => {
+    const { race, input } = alongsideTheFirstCop(3);
+    const stamina = () => race.snapshot().cops[0].stamina;
+    eventsUntil(race, () => ({ ...input(), punch: true }), (event) => event.type === "attack-landed", 1);
+    expect(stamina()).toBe(132);
+
+    eventsDuring(race, 1.9, input);
+    expect(stamina()).toBe(132);
+    eventsDuring(race, 1.1, input);
+    expect(stamina()).toBeCloseTo(138, 0);
+    eventsDuring(race, 3, input);
+    expect(stamina()).toBe(150);
+  });
+
   it("knocks a cop with no stamina left off its bike with the next hit, out of the race for good", () => {
     const { race, input } = alongsideTheFirstCop(3);
     const cop = () => race.snapshot().cops[0];
