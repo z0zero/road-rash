@@ -398,7 +398,8 @@ export function createRace(options: RaceOptions): Race {
   const copsInTheRace = () => cops.filter((cop) => cop.status === "riding");
 
   /** Whether a fighter is in a fight: on their bike in the race. */
-  const canFight = (fighter: Fighter) => (fighter.kind === "rider" ? fighter.status === "racing" && !fighter.crash : fighter.status === "riding");
+  const canFight = (fighter: Fighter) =>
+    fighter.kind === "rider" ? fighter.status === "racing" && !fighter.crash : fighter.status === "riding";
 
   /** Whom a fighter's attacks can land on: riders on their bikes, and cops in the race too for a rider. */
   const targetsFor = (attacker: Fighter): Fighter[] =>
@@ -536,12 +537,13 @@ export function createRace(options: RaceOptions): Race {
     }
   }
 
-  /** Every cop in the race within busting range of a rider who has just crashed rides to them, unless it is busting someone already. */
+  /**
+   * Every cop in the race within busting range of a rider who has just
+   * crashed rides to them, unless it is busting someone already.
+   */
   function sendCopsTo(rider: Rider) {
-    for (const cop of cops) {
-      if (cop.status === "riding" && cop.busting === null && apart(cop.motion, whereIs(rider)) <= TUNING.cops.bustingRange) {
-        cop.busting = rider.id;
-      }
+    for (const cop of copsInTheRace()) {
+      if (cop.busting === null && apart(cop.motion, whereIs(rider)) <= TUNING.cops.bustingRange) cop.busting = rider.id;
     }
   }
 
