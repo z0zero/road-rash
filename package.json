@@ -1,0 +1,44 @@
+{
+  "name": "rev-and-wreck",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Rev & Wreck: a browser motorcycle combat racing game inspired by Road Rash.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.race.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:smoke": "playwright test"
+  },
+  "dependencies": {
+    "@react-three/drei": "~10.7.9",
+    "@react-three/fiber": "~9.8.2",
+    "@react-three/postprocessing": "~3.2.2",
+    "next": "16.4.3",
+    "postprocessing": "~6.39.5",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "three": "~0.186.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@tailwindcss/turbopack": "^4.3.3",
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "~0.186.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "16.4.3",
+    "globals": "^16.5.0",
+    "serve": "^14.2.6",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5"
+  }
+}
