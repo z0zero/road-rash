@@ -21,10 +21,11 @@ CI (`.github/workflows/ci.yml`) runs lint, typecheck, unit tests, the build and 
 
 - `src/race`: the **Race** module, the game's rules as a pure, deterministic simulation (ADR 0004). `createRace`, `step`, `snapshot`, `drainEvents`, `fastForward` and the track all come from `@/race`.
 - `src/save-data`: settings and the personal best in localStorage.
-- `src/game`: `GameSession` steps the race from the frame clock and turns its events into screens; `Game.tsx` wires it to React, the keyboard and the renderer.
+- `src/game`: `GameSession` steps the race from the frame clock and turns its events into screens; `Game.tsx` wires it to React, the keyboard, the renderer and the sound.
 - `src/input`: keyboard to player input.
 - `src/renderer`: the React Three Fiber scene, built from the track's data and the session's snapshots. `Scene.tsx` puts it together: the sunset sky, haze and sea (`sunset.ts`, `Sky.tsx`, `Sea.tsx`), the road and the land either side (`track-geometry.ts`, `terrain.ts`), the instanced scenery (`Scenery.tsx`), every rider's bike and rider built in code in their own livery (`rider-model.ts`, `liveries.ts`, posed from `RiderMotion`, which also follows them off their bike after a crash, and animated punching, kicking, tumbling and running by `rider-animation.ts`), the chase camera (shaken by the player's hits and crashes), post-processing and speed effects, and the performance monitor's quality levels (`quality.ts`). No models or textures are loaded: everything is built in code.
-- `src/ui`: the title screen, settings, HUD, pause menu and results screen.
+- `src/audio`: the sound, with Web Audio. `startGameAudio` (`game-audio.ts`) follows the session: the Start Race click unlocks it, the race's events play the hits, crashes and siren (`sounds.ts`), each frame drives the engines (`engine.ts`), skids and gravel, and the screens set the music (`music.ts`) and the mix (`mixer.ts`). Every sound is synthesized except the race music, `public/audio/funked-up.mp3` (CC0; its source and licence check are in `music.ts`). Browsers that block audio leave the game silent, never broken.
+- `src/ui`: the title screen, settings (volumes and Reduce motion), credits, HUD, pause menu and results screen.
 - `e2e`: the Playwright smoke test.
 
 ## Agent skills
