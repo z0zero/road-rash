@@ -27,6 +27,12 @@ export interface Cop {
   attack: Attack | null;
   /** The weapon the cop holds, or null: every cop carries a club. */
   weapon: Weapon | null;
+  /** The rider the cop is fighting back against, for hitting it; null when it isn't fighting anyone. */
+  fightingBack: RiderId | null;
+  /** Steps the cop has still to fight back for, unless it is hit again. */
+  fightingBackSteps: number;
+  /** Steps until the cop may throw its next attack. */
+  attackCooldownSteps: number;
   /** The crashed rider the cop is riding to, to bust them; null when it isn't busting anyone. */
   busting: RiderId | null;
   /** Steps the cop has still to stand by a rider it has busted, before riding on. */
@@ -48,6 +54,9 @@ export function lineUpCops(track: Track): Cop[] {
     stepsSinceHit: Infinity,
     attack: null,
     weapon: "club",
+    fightingBack: null,
+    fightingBackSteps: 0,
+    attackCooldownSteps: 0,
     busting: null,
     standingBySteps: 0,
     near: false,
@@ -150,6 +159,33 @@ export function bustingIntent(me: Readonly<Motion>, rider: Place, edge: number):
   const speed = rider.speed + Math.sign(gap) * Math.sqrt(2 * PULL_UP_BRAKING * Math.abs(gap));
   const line = rider.offset - (rider.offset >= 0 ? 1 : -1) * PULL_UP_BESIDE;
   return { speed, line: clamp(line, -edge, edge), hurrying: true };
+}
+
+/** A cop fighting back throws an attack at most once every this many seconds. */
+export const COP_ATTACK_EVERY_SECONDS = 2.5;
+/** A cop fighting back rides this many metres to the side of the rider it fights... */
+const FIGHTING_GAP = 1.4;
+/** ...closing in on them along the track at this many metres per second for every metre between them... */
+const LEVEL_GAIN = 0.8;
+/** ...but no faster than this (m/s). */
+const MAX_CLOSING = 5;
+
+/**
+ * Where a cop rides to fight back against the rider who hit it, who is at
+ * `rider`: level with them, `FIGHTING_GAP` to their side (the side it is on,
+ * unless that is off the road), within the reach of its club, and no faster
+ * than it can safely go. It finds its way around the riders on the road
+ * (`field`, the motions of everyone on their bikes) as on patrol.
+ */
+export function fightingBackIntent(me: Readonly<Motion>, rider: Place, track: Track, field: readonly Readonly<Motion>[]): CopIntent {
+  const edge = track.roadHalfWidth - EDGE_MARGIN;
+  const side = me.offset >= rider.offset ? 1 : -1;
+  const beside = rider.offset + side * FIGHTING_GAP;
+  const wanted = clamp(Math.abs(beside) <= edge ? beside : rider.offset - side * FIGHTING_GAP, -edge, edge);
+  const { line, holdBehind } = lineAround(me, wanted, field, edge);
+  const closing = clamp(LEVEL_GAIN * (rider.distance - me.distance), -MAX_CLOSING, MAX_CLOSING);
+  const safe = safeSpeedAt(track, me.distance + me.speed * BRAKING_LEAD, COP_LIMITS);
+  return { speed: clamp(Math.min(rider.speed + closing, safe, holdBehind), 0, TUNING.cops.topSpeed), line, hurrying: true };
 }
 
 /** A cop standing by a rider it has busted: it stops where it is. */

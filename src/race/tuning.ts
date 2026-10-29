@@ -89,5 +89,7 @@ export const TUNING = {
     bustingReach: 2.5,
     /** ...then stands by them for this many seconds before riding on. */
     standingBySeconds: 4,
+    /** A cop fights back against the rider who hit it until this many seconds after it was last hit. */
+    fightingBackSeconds: 10,
   },
 } as const;

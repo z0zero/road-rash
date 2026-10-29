@@ -128,6 +128,41 @@ describe("fighting a cop", () => {
     expect(events).toContainEqual({ type: "attack-landed", attacker: ME, target: FIRST_COP, kind: "punch" });
     expect(race.snapshot().cops[0].stamina).toBe(132);
   });
+
+  it("makes the cop fight back with its club for about 10 s after it was last hit, then let it be", () => {
+    // In a race in which no opponent comes to join the fight.
+    const { race, input } = alongsideTheFirstCop(3);
+    const cop = () => race.snapshot().cops[0];
+    expect(cop()).toMatchObject({ weapon: "club", fightingBack: null });
+    // One punch, then the player rides on alongside the cop without hitting it again.
+    const punch = eventsUntil(race, () => ({ ...input(), punch: true }), (event) => event.type === "attack-landed", 1);
+    expect(punch).toContainEqual({ type: "attack-landed", attacker: ME, target: FIRST_COP, kind: "punch" });
+    expect(punch).toContainEqual({ type: "cop-retaliating", cop: 0, target: PLAYER });
+    const hitAt = race.snapshot().clock;
+    const fights: { at: number; event: RaceEvent }[] = [];
+    const watching = () => {
+      for (const event of race.drainEvents()) {
+        if (event.type === "cop-retaliating" || ("attacker" in event && event.attacker.kind === "cop")) {
+          fights.push({ at: race.snapshot().clock - hitAt, event });
+        }
+      }
+      return input();
+    };
+
+    secondsUntil(race, watching, () => race.snapshot().clock - hitAt >= 9.5, 10);
+    expect(cop().fightingBack).toBe(PLAYER);
+    secondsUntil(race, watching, () => race.snapshot().clock - hitAt >= 14, 5);
+
+    expect(fights.filter(({ event }) => event.type === "cop-retaliating")).toEqual([]);
+    const swings = fights.filter(({ event }) => event.type === "attack-thrown");
+    const landed = fights.filter(({ event }) => event.type === "attack-landed");
+    for (const { event } of swings) expect(event).toEqual({ type: "attack-thrown", attacker: FIRST_COP, target: ME, kind: "club-swing" });
+    expect(swings.length).toBeGreaterThanOrEqual(3);
+    expect(landed.length).toBeGreaterThanOrEqual(2);
+    expect(Math.max(...swings.map(({ at }) => at))).toBeLessThan(10);
+    expect(cop().fightingBack).toBeNull();
+    expect(player(race)).toMatchObject({ status: "racing", crash: null });
+  });
 });
 
 describe("the cop alert", () => {
