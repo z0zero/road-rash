@@ -345,10 +345,15 @@ export function createRace(options: RaceOptions): Race {
     target.stepsSinceHit = 0;
   }
 
-  /** Throws a rider off their bike, which loses condition; a bike whose condition runs out is wrecked, and so is the rider's race. */
+  /**
+   * Throws a rider off their bike, which loses condition; a bike whose
+   * condition runs out is wrecked, and so is the rider's race. A rider who
+   * crashes drops their club, which is lost.
+   */
   function crash(rider: Rider, cause: CrashCause, impactSpeed: number) {
     events.push({ type: "crash", rider: rider.id, cause, impactSpeed });
     rider.attack = null;
+    rider.weapon = null;
     rider.crash = throwOff(rider.motion);
     const loss = TUNING.crashConditionLoss + TUNING.crashConditionLossPerKmh * impactSpeed * KMH_PER_METRE_PER_SECOND;
     rider.condition = Math.max(0, rider.condition - loss);
