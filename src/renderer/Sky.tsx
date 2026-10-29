@@ -1,6 +1,7 @@
 import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import { BackSide, type Mesh, type ShaderMaterial, type ShaderMaterialParameters, Vector2, type Vector3 } from "three";
+import { groundDirection } from "./geography";
 import { SUNSET, sunsetHazeGlsl } from "./sunset";
 
 const vertexShader = /* glsl */ `
@@ -117,8 +118,7 @@ export function Sky({ sun, seaHeading }: { sun: Vector3; seaHeading: number }) {
         haze: { value: SUNSET.haze },
         sunColor: { value: SUNSET.sun },
         sunDirection: { value: sun },
-        // Inland is the opposite of out to sea; heading 0 is north (-z) and a quarter turn right is east (+x).
-        inland: { value: new Vector2(-Math.sin(seaHeading), Math.cos(seaHeading)) },
+        inland: { value: inlandDirection(seaHeading) },
         time: { value: 0 },
       },
       side: BackSide,
@@ -140,4 +140,10 @@ export function Sky({ sun, seaHeading }: { sun: Vector3; seaHeading: number }) {
       <shaderMaterial ref={material} args={[parameters]} />
     </mesh>
   );
+}
+
+/** Straight inland, the opposite of out to sea, as (x, z). */
+function inlandDirection(seaHeading: number) {
+  const outToSea = groundDirection(seaHeading);
+  return new Vector2(-outToSea.x, -outToSea.z);
 }

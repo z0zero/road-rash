@@ -1,5 +1,7 @@
 import { BufferGeometry, Color, Float32BufferAttribute } from "three";
 import type { Track } from "@/race";
+import { groundDirection, seaward } from "./geography";
+import { hash, smoothNoise } from "./noise";
 
 /**
  * The land either side of the road, built from the track's own centreline: a
@@ -44,11 +46,11 @@ function createTerrain(track: Track): Terrain {
   const rightZ = new Float64Array(count);
   for (let i = 0; i < count; i++) {
     const { x, z, heading } = track.sampleAt(i * SPACING);
+    const right = groundDirection(heading + Math.PI / 2);
     xs[i] = x;
     zs[i] = z;
-    // Right of the heading is (cos, sin) in (x, z).
-    rightX[i] = Math.cos(heading);
-    rightZ[i] = Math.sin(heading);
+    rightX[i] = right.x;
+    rightZ[i] = right.z;
   }
 
   const coast = coastlineOf(track, xs, zs);
@@ -151,7 +153,7 @@ function createTerrain(track: Track): Terrain {
       const dx = x - xs[i];
       const dz = z - zs[i];
       const across = dx * rightX[i] + dz * rightZ[i];
-      // Forward is (sin, -cos) in (x, z), a quarter turn anticlockwise from the right.
+      // Forward is a quarter turn anticlockwise from the right.
       const along = dx * rightZ[i] - dz * rightX[i];
       const s = across < 0 ? 0 : 1;
       const at = Math.min(count - 1, Math.max(0, i + along / SPACING));
@@ -214,9 +216,8 @@ const COAST_MARGIN = 25;
  * table of land standing in the water.
  */
 function coastlineOf(track: Track, xs: Float64Array, zs: Float64Array) {
-  // Out to sea is (sin, -cos) of the sea's heading in (x, z); along the coast is a quarter turn from it.
-  const seaX = Math.sin(track.seaHeading);
-  const seaZ = -Math.cos(track.seaHeading);
+  // Along the coast is a quarter turn from out to sea.
+  const { x: seaX, z: seaZ } = groundDirection(track.seaHeading);
   const along = (x: number, z: number) => -seaZ * x + seaX * z;
   const out = (x: number, z: number) => seaX * x + seaZ * z;
   let first = Infinity;
@@ -279,9 +280,7 @@ function crossSection(
   const { heading } = track.sampleAt(distance);
   const edge = track.roadHalfWidth + track.shoulderWidth;
   const edgeY = track.pointAt(distance, side * edge).y;
-  // How squarely this side faces the sea: right of the heading is a quarter turn clockwise.
-  const seaward = Math.cos(heading + (side * Math.PI) / 2 - track.seaHeading);
-  const towardsSea = smoothstep(0.15, 0.65, seaward);
+  const towardsSea = smoothstep(0.15, 0.65, seaward(heading, side, track.seaHeading));
   const cliff = 7 + 30 * smoothNoise(distance / 140, 1); // metres of cliff face above the road
   const hill = smoothNoise(distance / 320, 2);
   const jag = smoothNoise(distance / 30, 3);
@@ -385,23 +384,6 @@ function pushQuad(positions: number[], colors: number[], [a, b, c, d]: Quad, see
       colors.push(scratch.r, scratch.g, scratch.b);
     }
   });
-}
-
-/** A repeatable pseudo-random number in [0, 1) for an integer. */
-export function hash(n: number): number {
-  let h = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b);
-  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
-  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
-}
-
-/** Smooth value noise in [0, 1] along one dimension; `seed` picks an unrelated curve. */
-export function smoothNoise(t: number, seed: number): number {
-  const i = Math.floor(t);
-  const f = t - i;
-  const u = f * f * (3 - 2 * f);
-  const a = hash(i * 7919 + seed * 104729);
-  const b = hash((i + 1) * 7919 + seed * 104729);
-  return a + (b - a) * u;
 }
 
 function smoothstep(from: number, to: number, value: number) {

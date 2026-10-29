@@ -1,4 +1,5 @@
 import type { Track, TrackSample, WorldPoint } from "@/race";
+import { groundDirection, seaward } from "./geography";
 
 /** Metres of road drawn beyond the track's far end. */
 const EXTENSION = 700;
@@ -26,8 +27,7 @@ export function drawnTrack(track: Track): Track {
 function extend(track: Track): Track {
   const end = track.sampleAt(track.length);
   // Bend towards the inland side: the side of the road facing away from the sea.
-  const seaOnTheRight = Math.cos(end.heading + Math.PI / 2 - track.seaHeading);
-  const inland = seaOnTheRight > 0 ? -1 : 1;
+  const inland = seaward(end.heading, 1, track.seaHeading) > 0 ? -1 : 1;
   const count = EXTENSION + 1;
   const samples: TrackSample[] = [];
   let { x, y, z, heading } = end;
@@ -37,9 +37,10 @@ function extend(track: Track): Track {
     const grade = end.grade * Math.max(0, 1 - i / EASING);
     samples.push({ x, y, z, heading, curvature, grade, bank: 0 });
     heading += curvature;
-    x += Math.sin(heading);
+    const ahead = groundDirection(heading);
+    x += ahead.x;
     y += grade;
-    z -= Math.cos(heading);
+    z += ahead.z;
   }
 
   const sampleAt = (distance: number): TrackSample => {
@@ -67,8 +68,9 @@ function extend(track: Track): Track {
     pointAt(distance: number, offset: number): WorldPoint {
       if (distance <= track.length) return track.pointAt(distance, offset);
       const centre = sampleAt(distance);
-      // Right of the heading is (cos, sin) in (x, z); the extra road lies flat.
-      return { x: centre.x + Math.cos(centre.heading) * offset, y: centre.y, z: centre.z + Math.sin(centre.heading) * offset };
+      const right = groundDirection(centre.heading + Math.PI / 2);
+      // The extra road lies flat.
+      return { x: centre.x + right.x * offset, y: centre.y, z: centre.z + right.z * offset };
     },
   };
 }
