@@ -68,6 +68,20 @@ test("counts down 3-2-1 after Start Race, then shows the HUD", async ({ page }) 
   await expect(page.getByTestId("progress")).toBeVisible();
 });
 
+test("shows the 3 for its full second even when the race's first frame is slow to draw", async ({ page }) => {
+  await startRace(page);
+
+  // The race's first frame, then the next, after the first took three seconds
+  // to draw, as compiling shaders can on a modest machine.
+  await page.clock.fastForward(FRAME_MS);
+  await page.clock.fastForward(3000);
+  const countdown = page.getByTestId("countdown");
+  await play(page, 0.8);
+  await expect(countdown).toHaveText("3");
+  await play(page, 0.4);
+  await expect(countdown).toHaveText("2");
+});
+
 /** Starts a race and plays through its countdown, stopping while "GO!" shows. */
 async function startRacing(page: Page) {
   await startRace(page);

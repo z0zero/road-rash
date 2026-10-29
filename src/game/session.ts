@@ -61,6 +61,16 @@ export interface SessionOptions {
 const MAX_FRAME_SECONDS = 0.25;
 
 /**
+ * Frames a new race is drawn for before the session starts stepping it, so
+ * that its countdown starts only once the race is on screen. The time passed
+ * in for the first frame went by on the previous screen, and the time passed
+ * in for the second mostly went on drawing the first, which can take seconds
+ * on a modest machine while it compiles shaders. Counting either would eat
+ * into the countdown before the player had seen it.
+ */
+const FRAMES_BEFORE_STEPPING = 2;
+
+/**
  * One player's game: the title screen, races, pausing and results. It steps
  * the race in fixed 1/60 s steps from the frame clock, turns the race's events
  * into screen changes, and keeps the save data. It knows nothing of React or
@@ -70,6 +80,8 @@ export class GameSession {
   private race: Race;
   private readonly frame: { -readonly [K in keyof RaceView]: RaceView[K] };
   private accumulator = 0;
+  /** Frames the current race is still to be drawn for before it is stepped; see `FRAMES_BEFORE_STEPPING`. */
+  private framesBeforeStepping = FRAMES_BEFORE_STEPPING;
   private saveData: SaveData;
   private state: SessionState;
   private readonly stateListeners = new Set<() => void>();
@@ -159,11 +171,12 @@ export class GameSession {
     this.setState({ settings: this.saveData.settings });
   };
 
-  /** Moves the game on by `seconds` of real time; call it once per animation frame. */
+  /** Moves the game on by `seconds` of real time; call it once per animation frame, just before drawing it. */
   advance(seconds: number) {
     const { screen } = this.state;
     if (screen === "racing" || screen === "results") {
-      this.accumulator += Math.min(Math.max(seconds, 0), MAX_FRAME_SECONDS);
+      if (this.framesBeforeStepping > 0) this.framesBeforeStepping--;
+      else this.accumulator += Math.min(Math.max(seconds, 0), MAX_FRAME_SECONDS);
       while (this.accumulator >= STEP_SECONDS) {
         this.accumulator -= STEP_SECONDS;
         this.step(this.state.screen === "racing" ? this.options.readInput() : NO_INPUT);
@@ -212,6 +225,7 @@ export class GameSession {
     this.frame.current = snapshot;
     this.frame.alpha = 1;
     this.accumulator = 0;
+    this.framesBeforeStepping = FRAMES_BEFORE_STEPPING;
   }
 
   private setState(change: Partial<SessionState>) {
