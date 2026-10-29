@@ -139,7 +139,8 @@ export function createRace(options: RaceOptions): Race {
   const riders: Rider[] = [
     {
       id: PLAYER,
-      motion: { distance: track.startDistance, offset: 0, speed: 0, steering: 0 },
+      // On the start line, between the two lanes that run in the race direction.
+      motion: { distance: track.startDistance, offset: track.laneWidth, speed: 0, steering: 0 },
       status: "racing",
       finishTime: null,
       finishOrder: null,
