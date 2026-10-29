@@ -12,6 +12,7 @@
 export { createRace, NO_INPUT, PLAYER } from "./race";
 export { STEP_SECONDS } from "./steps";
 export type {
+  AttackSnapshot,
   BikeSnapshot,
   PlayerInput,
   Race,

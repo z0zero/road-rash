@@ -8,6 +8,16 @@ export interface Attack {
   readonly kind: AttackKind;
   /** Steps since the attack was thrown. */
   steps: number;
+  /** Which way the attack goes: 1 to the attacker's right, -1 to their left. */
+  side: -1 | 1;
+}
+
+/** Where an attack is: winding up to its strike, or recovering after it, and how far through that (0 to 1). */
+export function attackStage({ kind, steps }: Attack): { stage: "wind-up" | "recovery"; progress: number } {
+  const windUp = windUpSteps(kind);
+  return steps < windUp
+    ? { stage: "wind-up", progress: steps / windUp }
+    : { stage: "recovery", progress: (steps - windUp) / (attackSteps(kind) - windUp) };
 }
 
 /** Steps from throwing an attack to its strike. */
