@@ -6,6 +6,7 @@ import { listenToKeyboard, type Keyboard } from "@/input/keyboard";
 import { NO_INPUT } from "@/race";
 import { Scene } from "@/renderer/Scene";
 import { isMotionReduced, type SaveStorage } from "@/save-data/save-data";
+import { CreditsScreen } from "@/ui/CreditsScreen";
 import { Hud } from "@/ui/Hud";
 import { PauseMenu } from "@/ui/PauseMenu";
 import { ResultsScreen } from "@/ui/ResultsScreen";
@@ -66,7 +67,12 @@ export default function Game() {
     <div className="relative h-full w-full overflow-hidden">
       <Scene session={session} reduceMotion={reduceMotion} />
       {state.screen === "title" && (
-        <TitleScreen personalBest={state.personalBest} onStart={session.startRace} onSettings={session.openSettings} />
+        <TitleScreen
+          personalBest={state.personalBest}
+          onStart={session.startRace}
+          onSettings={session.openSettings}
+          onCredits={session.openCredits}
+        />
       )}
       {state.screen === "settings" && (
         <SettingsScreen
@@ -75,6 +81,7 @@ export default function Game() {
           onBack={session.closeSettings}
         />
       )}
+      {state.screen === "credits" && <CreditsScreen onBack={session.closeCredits} />}
       {(state.screen === "racing" || state.screen === "paused") && <Hud session={session} />}
       {state.screen === "paused" && (
         <PauseMenu onResume={session.resume} onRestart={session.restart} onQuit={session.quitToTitle} />
