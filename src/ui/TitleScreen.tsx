@@ -10,7 +10,9 @@ export function TitleScreen({ personalBest, onStart }: { personalBest: PersonalB
       <Button autoFocus onClick={onStart}>
         Start Race
       </Button>
-      <p className="text-sm text-sand/85 drop-shadow">W/A/S/D or the arrow keys to ride &middot; Esc or P to pause</p>
+      <p className="text-sm text-sand/85 drop-shadow">
+        W/A/S/D or the arrow keys to ride &middot; J or Z to punch &middot; K or X to kick &middot; Esc or P to pause
+      </p>
       {personalBest.time !== null && (
         <p className="text-sm text-sun drop-shadow">
           Personal best {formatRaceTime(personalBest.time)}
