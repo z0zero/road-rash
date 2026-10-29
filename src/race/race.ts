@@ -1,5 +1,7 @@
 import { getCoastalTrack } from "./coastal-track";
 import type { RaceEvent, RaceOutcome, RiderId } from "./events";
+import { lineUpOpponents } from "./field";
+import { createRandom } from "./random";
 import { ride, type Controls, type Motion } from "./riding";
 import type { Track } from "./track";
 
@@ -16,6 +18,11 @@ const COUNTDOWN_STEPS = 3 * STEPS_PER_SECOND;
 
 /** Once over the finish line, a rider lets go of the throttle and brakes to a stop. */
 const FINISHED_CONTROLS: Controls = { throttle: 0, brake: 0.7, steer: 0 };
+
+/** The player races fourteen opponents. */
+const OPPONENTS = 14;
+
+const IDLE: Controls = { throttle: 0, brake: 0, steer: 0 };
 
 /** Fast-forwarding races the rest of the field for at most three extra simulated minutes. */
 const FAST_FORWARD_STEPS = 180 * STEPS_PER_SECOND;
@@ -131,8 +138,7 @@ interface Rider {
 }
 
 export function createRace(options: RaceOptions): Race {
-  // A lone player makes no random choices yet; opponents, traffic and cops will draw on the seed.
-  void options.seed;
+  const random = createRandom(options.seed);
   const track = getCoastalTrack();
   let stepsTaken = 0;
   let events: RaceEvent[] = [];
@@ -147,6 +153,15 @@ export function createRace(options: RaceOptions): Race {
       finishOrder: null,
     },
   ];
+  lineUpOpponents(track, OPPONENTS, random).forEach(({ distance, offset }, index) => {
+    riders.push({
+      id: PLAYER + 1 + index,
+      motion: { distance, offset, speed: 0, steering: 0 },
+      status: "racing",
+      finishTime: null,
+      finishOrder: null,
+    });
+  });
 
   const clock = () => Math.max(0, stepsTaken - COUNTDOWN_STEPS) / STEPS_PER_SECOND;
 
@@ -207,7 +222,8 @@ export function createRace(options: RaceOptions): Race {
         const clockBefore = clock();
         for (const rider of riders) {
           const distanceBefore = rider.motion.distance;
-          ride(rider.motion, rider.status === "racing" ? input : FINISHED_CONTROLS, track, STEP_SECONDS);
+          const controls = rider.status !== "racing" ? FINISHED_CONTROLS : rider.id === PLAYER ? input : IDLE;
+          ride(rider.motion, controls, track, STEP_SECONDS);
           if (rider.status === "racing" && rider.motion.distance >= track.finishDistance) {
             finish(rider, distanceBefore, clockBefore);
           }
