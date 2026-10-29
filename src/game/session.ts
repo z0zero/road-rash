@@ -20,7 +20,7 @@ import {
 } from "@/save-data/save-data";
 
 /** Which screen the game shows. The countdown and the race itself are both "racing". */
-export type Screen = "title" | "settings" | "racing" | "paused" | "results";
+export type Screen = "title" | "settings" | "credits" | "racing" | "paused" | "results";
 
 /** What React renders from. It changes only on screen changes and settings changes, never per frame. */
 export interface SessionState {
@@ -162,6 +162,16 @@ export class GameSession {
   /** Goes back from the Settings screen to the title screen. */
   closeSettings = () => {
     if (this.state.screen === "settings") this.setState({ screen: "title" });
+  };
+
+  /** Shows the Credits screen; only from the title screen. */
+  openCredits = () => {
+    if (this.state.screen === "title") this.setState({ screen: "credits" });
+  };
+
+  /** Goes back from the Credits screen to the title screen. */
+  closeCredits = () => {
+    if (this.state.screen === "credits") this.setState({ screen: "title" });
   };
 
   /** Changes some of the player's settings and saves them. */
