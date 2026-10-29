@@ -1,4 +1,5 @@
 import { Color, ShaderChunk, Vector3 } from "three";
+import { groundDirection } from "./geography";
 
 /**
  * The look of the sunset: its colours, where the sun hangs, and the haze that
@@ -41,13 +42,8 @@ const SUNLIGHT_ELEVATION = (24 * Math.PI) / 180;
  * the sea, ahead and to the left of a rider who has the sea on the left.
  */
 export function sunDirection(seaHeading: number, elevation = SUN_ELEVATION): Vector3 {
-  const heading = seaHeading + SUN_AROUND_FROM_SEA;
-  // Heading 0 is north (-z) and a quarter turn right is east (+x).
-  return new Vector3(
-    Math.sin(heading) * Math.cos(elevation),
-    Math.sin(elevation),
-    -Math.cos(heading) * Math.cos(elevation),
-  );
+  const towards = groundDirection(seaHeading + SUN_AROUND_FROM_SEA);
+  return new Vector3(towards.x * Math.cos(elevation), Math.sin(elevation), towards.z * Math.cos(elevation));
 }
 
 /** The direction the sunlight comes from: the sun's direction, raised. */

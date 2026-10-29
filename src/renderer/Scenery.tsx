@@ -19,7 +19,8 @@ import {
   rockModel,
   stonePineModel,
 } from "./scenery-models";
-import { hash, type Terrain, terrainFor } from "./terrain";
+import { hash } from "./noise";
+import { type Terrain, terrainFor } from "./terrain";
 
 /** Metres of track per batch of instances, so the camera's frustum and far plane skip the scenery out of sight. */
 const CHUNK = 500;

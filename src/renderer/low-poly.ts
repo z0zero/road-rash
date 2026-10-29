@@ -8,6 +8,7 @@ import {
   Quaternion,
   Vector3,
 } from "three";
+import { hash } from "./noise";
 
 /** Where a part sits in its model: metres, radians about x, y and z in that order, and a scale. */
 export interface Placing {
@@ -49,7 +50,7 @@ export class LowPoly {
     const face = new Color();
     for (let i = 0; i < position.count; i++) {
       if (i % 3 === 0) {
-        face.copy(base).multiplyScalar(1 + shade * (faceNoise(this.faces++) * 2 - 1));
+        face.copy(base).multiplyScalar(1 + shade * (hash(this.faces++) * 2 - 1));
       }
       this.positions.push(position.getX(i), position.getY(i), position.getZ(i));
       this.colors.push(face.r, face.g, face.b);
@@ -94,16 +95,9 @@ export function roughen(geometry: BufferGeometry, amount: number, seed: number):
     const y = position.getY(i);
     const z = position.getZ(i);
     const key = Math.round(x * 1000) * 73_856_093 ^ Math.round(y * 1000) * 19_349_663 ^ Math.round(z * 1000) * 83_492_791;
-    const factor = 1 + amount * (faceNoise(key + seed * 7919) * 2 - 1);
+    const factor = 1 + amount * (hash(key + seed * 7919) * 2 - 1);
     position.setXYZ(i, x * factor, y * factor, z * factor);
   }
   position.needsUpdate = true;
   return geometry;
-}
-
-/** A repeatable number in [0, 1) for an integer. */
-function faceNoise(n: number): number {
-  let h = Math.imul(n ^ 0x2c1b3c6d, 0x297a2d39);
-  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
-  return ((h ^ (h >>> 13)) >>> 0) / 4294967296;
 }
