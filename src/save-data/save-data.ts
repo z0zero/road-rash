@@ -101,6 +101,14 @@ function isPosition(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 1;
 }
 
+/**
+ * Whether the game reduces motion: the player's choice once they have made
+ * one, and until then whatever the operating system prefers.
+ */
+export function isMotionReduced(settings: Settings, systemPrefersReducedMotion: boolean): boolean {
+  return settings.reduceMotion ?? systemPrefersReducedMotion;
+}
+
 /** Writes the save data. Returns whether it was stored; never throws. */
 export function storeSaveData(storage: SaveStorage | undefined, data: SaveData): boolean {
   if (!storage) return false;
