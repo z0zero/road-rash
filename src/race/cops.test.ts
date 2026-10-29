@@ -264,6 +264,27 @@ describe("busting", () => {
     expect(them().status).toBe("racing");
   });
 
+  it("ends the player's race as Busted, which the results say", () => {
+    // The player hits the first cop and rides on beside it as it fights back; a brawler joins in and knocks them off.
+    const { race, input } = alongsideTheFirstCop();
+    const events = eventsUntil(race, () => ({ ...input(), punch: race.snapshot().cops[0].stamina === 150 }), (event) => event.type === "player-race-over", 30);
+
+    const aboutThePlayer = events.filter((event) => event.type === "player-race-over" || ("rider" in event && event.rider === PLAYER));
+    expect(aboutThePlayer.slice(-3)).toEqual([
+      expect.objectContaining({ type: "crash", rider: PLAYER }),
+      { type: "busted", rider: PLAYER, cop: 0 },
+      { type: "player-race-over", outcome: "busted" },
+    ]);
+    expect(player(race)).toMatchObject({ status: "busted", position: null });
+
+    const results = race.fastForward();
+
+    expect(results).toMatchObject({ outcome: "busted", position: null, time: null, qualified: false });
+    expect(results.standings).toContainEqual({ rider: PLAYER, name: "You", status: "busted", position: null, time: null });
+    const firstUnplaced = results.standings.findIndex((standing) => standing.position === null);
+    expect(results.standings.slice(firstUnplaced).every((standing) => standing.position === null)).toBe(true);
+  });
+
   it("takes a busted opponent out of the race for good, with no position", () => {
     const { race, target, input } = alongsideARacerPastTheFirstCop();
     const cop = () => race.snapshot().cops[0];
