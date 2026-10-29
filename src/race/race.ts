@@ -1,6 +1,6 @@
 import { getCoastalTrack } from "./coastal-track";
 import { settleContact } from "./contact";
-import { lineUpCops, moveCop, patrolIntent, type CopStatus } from "./cops";
+import { bustingIntent, lineUpCops, moveCop, patrolIntent, type CopStatus } from "./cops";
 import {
   canRemount,
   carryOn,
@@ -157,6 +157,8 @@ export interface CopSnapshot {
   readonly stamina: number;
   /** Null while the cop is on their bike; "tumbling" and then "on-foot" once knocked off it. */
   readonly crash: CrashPhase | null;
+  /** The crashed rider the cop is riding to, to bust them; null when it isn't busting anyone. */
+  readonly busting: RiderId | null;
 }
 
 /** How the race went for everyone, once the player's race is over. */
@@ -195,6 +197,8 @@ export interface RaceOptions {
    * opponent's bike starts perfect.
    */
   readonly playerCondition?: number;
+  /** Whether cops wait along the track to join the race (the default). Without them, nobody is busted. */
+  readonly cops?: boolean;
 }
 
 /**
@@ -253,6 +257,11 @@ function whereIs(rider: Rider): { readonly distance: number; readonly offset: nu
   return rider.crash ? rider.crash.body : rider.motion;
 }
 
+/** Metres between two places in track space (straight-line). */
+function apart(a: { readonly distance: number; readonly offset: number }, b: { readonly distance: number; readonly offset: number }) {
+  return Math.hypot(a.distance - b.distance, a.offset - b.offset);
+}
+
 /** Stamina starts recovering once a rider has gone this many steps without being hit. */
 const RECOVERY_DELAY_STEPS = stepsIn(TUNING.staminaRecoveryDelay);
 
@@ -296,7 +305,7 @@ export function createRace(options: RaceOptions): Race {
     const riding = { pace: paceFor(skill), lane: offset };
     riders.push(lineUp({ id: PLAYER + 1 + index, name, temperament, riding }, distance, offset));
   });
-  const cops = lineUpCops(track);
+  const cops = options.cops === false ? [] : lineUpCops(track);
 
   const clock = () => Math.max(0, stepsTaken - COUNTDOWN_STEPS) / STEPS_PER_SECOND;
 
@@ -383,6 +392,37 @@ export function createRace(options: RaceOptions): Race {
       rider.status = "wrecked";
       events.push({ type: "wrecked", rider: rider.id });
       if (rider.id === PLAYER) events.push({ type: "player-race-over", outcome: "wrecked" });
+    } else {
+      sendCopsTo(rider);
+    }
+  }
+
+  /** Every cop in the race within busting range of a rider who has just crashed rides to them, unless it is busting someone already. */
+  function sendCopsTo(rider: Rider) {
+    for (const cop of cops) {
+      if (cop.status === "riding" && cop.busting === null && apart(cop.motion, whereIs(rider)) <= TUNING.cops.bustingRange) {
+        cop.busting = rider.id;
+      }
+    }
+  }
+
+  /** Cops stop riding to crashed riders who are back on their bikes, or whose race is over: they got away. */
+  function letGo() {
+    for (const cop of cops) {
+      const rider = cop.busting === null ? null : riders[cop.busting];
+      if (rider && (rider.status !== "racing" || !rider.crash)) cop.busting = null;
+    }
+  }
+
+  /** A cop that has reached the crashed rider it was riding to busts them, ending their race. */
+  function bustTheCaught() {
+    for (const cop of cops) {
+      const rider = cop.busting === null ? null : riders[cop.busting];
+      if (!rider?.crash || rider.status !== "racing" || apart(cop.motion, whereIs(rider)) > TUNING.cops.bustingReach) continue;
+      rider.status = "busted";
+      cop.busting = null;
+      events.push({ type: "busted", rider: rider.id, cop: cop.id });
+      if (rider.id === PLAYER) events.push({ type: "player-race-over", outcome: "busted" });
     }
   }
 
@@ -507,11 +547,15 @@ export function createRace(options: RaceOptions): Race {
           // A club reaches further than a kick: a club holder swings at a rider its kick can't reach.
           if (kind) throwAttack(opponent, kind === "kick" && !withinReach(opponent.motion, nearest.motion, kind) ? "punch" : kind);
         }
-        // Cops find their way around everyone on a bike: the riders, and each other.
+        // Cops ride to bust crashed riders who haven't got away yet; the rest patrol near the player, finding their
+        // way around everyone on a bike: the riders, and each other.
+        letGo();
         const everyoneOnABike = [...field, ...cops.filter((cop) => cop.status !== "knocked-off").map((cop) => cop.motion)];
-        const copIntents = cops.map((cop) =>
-          cop.status === "riding" ? patrolIntent(cop.motion, whereIs(player), track, everyoneOnABike) : null,
-        );
+        const copIntents = cops.map((cop) => {
+          if (cop.status !== "riding") return null;
+          if (cop.busting !== null) return bustingIntent(cop.motion, whereIs(riders[cop.busting]), edge);
+          return patrolIntent(cop.motion, whereIs(player), track, everyoneOnABike);
+        });
         const distancesBefore = riders.map((rider) => whereIs(rider).distance);
         riders.forEach((rider, index) => {
           if (!rider.crash) {
@@ -527,6 +571,7 @@ export function createRace(options: RaceOptions): Race {
           const intent = copIntents[index];
           if (intent) moveCop(cop.motion, intent, edge);
         });
+        bustTheCaught();
         joinThePlayer();
         for (const { rider, speedDifference } of settleContact(riding, edge)) crash(rider, "rider", speedDifference);
         advanceAttacks();
@@ -576,6 +621,7 @@ export function createRace(options: RaceOptions): Race {
           speed: cop.motion.speed,
           stamina: cop.stamina,
           crash: null,
+          busting: cop.busting,
         })),
       };
     },

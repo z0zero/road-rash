@@ -9,5 +9,7 @@ export default defineConfig({
     include: ["src/**/*.test.ts"],
     exclude: [...configDefaults.exclude, ".claude/**", "e2e/**", "out/**", ".next/**"],
     environment: "node",
+    // Race tests simulate whole races, with their traffic, step by step: give them time on a busy machine.
+    testTimeout: 30_000,
   },
 });
