@@ -14,15 +14,13 @@ import {
 } from "three";
 import type { GameSession, RaceView } from "@/game/session";
 import { STEP_SECONDS, type CarKind, type CarSnapshot } from "@/race";
-import { carModel, paintOf } from "./car-models";
-
-const KINDS: readonly CarKind[] = ["hatchback", "saloon", "van", "pickup"];
+import { CAR_MODELS, isCarKind, paintOf } from "./car-models";
 
 /** At most this many cars of one kind are drawn at a time: more than the road around the player ever holds. */
 const MOST_OF_A_KIND = 32;
 
-/** One kind of car, drawn with instancing: one instance per car of that kind on the road. */
-interface Kind {
+/** The cars of one kind, drawn with instancing: one instance per car of that kind on the road. */
+interface CarsOfAKind {
   /** Painted each car's own colour. */
   readonly body: InstancedMesh;
   readonly trim: InstancedMesh;
@@ -47,8 +45,8 @@ export function Traffic({ session }: { session: GameSession }) {
   const fleet = useMemo(() => buildFleet(), []);
   useEffect(
     () => () => {
-      for (const kind of fleet.kinds.values()) {
-        for (const mesh of kind.meshes) {
+      for (const cars of fleet.kinds.values()) {
+        for (const mesh of cars.meshes) {
           mesh.geometry.dispose();
           mesh.dispose();
         }
@@ -83,9 +81,10 @@ function buildFleet() {
     mesh.receiveShadow = shadows;
     return mesh;
   };
-  const kinds = new Map<CarKind, Kind>();
-  for (const kind of KINDS) {
-    const model = carModel(kind);
+  const kinds = new Map<CarKind, CarsOfAKind>();
+  // Every kind there is a model for, which is every kind the race has.
+  for (const kind of Object.keys(CAR_MODELS).filter(isCarKind)) {
+    const model = CAR_MODELS[kind]();
     const body = instanced(model.body, paint, true);
     // Every car's paint, given before the first frame so the material is built to take it.
     for (let i = 0; i < MOST_OF_A_KIND; i++) body.setColorAt(i, WHITE);
@@ -109,11 +108,11 @@ const angles = new Euler();
 const stretch = new Vector3();
 
 /** Puts every car on the road where the view says it is this frame. */
-function placeCars(kinds: ReadonlyMap<CarKind, Kind>, { track, previous, current, alpha }: RaceView) {
-  for (const kind of kinds.values()) kind.drawn = 0;
+function placeCars(kinds: ReadonlyMap<CarKind, CarsOfAKind>, { track, previous, current, alpha }: RaceView) {
+  for (const cars of kinds.values()) cars.drawn = 0;
   for (const car of current.traffic) {
-    const kind = kinds.get(car.kind);
-    if (!kind || kind.drawn >= MOST_OF_A_KIND) continue;
+    const cars = kinds.get(car.kind);
+    if (!cars || cars.drawn >= MOST_OF_A_KIND) continue;
     // A car that has only just come onto the road is drawn where it came on.
     const before = sameCar(previous.traffic, car.id) ?? car;
     const distance = before.distance + (car.distance - before.distance) * alpha;
@@ -129,21 +128,21 @@ function placeCars(kinds: ReadonlyMap<CarKind, Kind>, { track, previous, current
     matrix.compose(
       position.set(at.x, at.y, at.z),
       turn.setFromEuler(angles),
-      stretch.set(car.width / kind.width, 1, car.length / kind.length),
+      stretch.set(car.width / cars.width, 1, car.length / cars.length),
     );
-    const instance = kind.drawn++;
-    kind.body.setMatrixAt(instance, matrix);
-    kind.trim.setMatrixAt(instance, matrix);
-    kind.lamps.setMatrixAt(instance, matrix);
-    kind.body.setColorAt(instance, paintOf(car.id));
+    const instance = cars.drawn++;
+    cars.body.setMatrixAt(instance, matrix);
+    cars.trim.setMatrixAt(instance, matrix);
+    cars.lamps.setMatrixAt(instance, matrix);
+    cars.body.setColorAt(instance, paintOf(car.id));
   }
-  for (const kind of kinds.values()) {
-    for (const mesh of kind.meshes) {
-      mesh.count = kind.drawn;
-      mesh.visible = kind.drawn > 0;
+  for (const cars of kinds.values()) {
+    for (const mesh of cars.meshes) {
+      mesh.count = cars.drawn;
+      mesh.visible = cars.drawn > 0;
       mesh.instanceMatrix.needsUpdate = true;
     }
-    if (kind.body.instanceColor) kind.body.instanceColor.needsUpdate = true;
+    if (cars.body.instanceColor) cars.body.instanceColor.needsUpdate = true;
   }
 }
 
