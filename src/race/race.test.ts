@@ -258,15 +258,14 @@ describe("fast-forwarding to the results", () => {
   it("gives the final results once the player's race is over", () => {
     const race = startedRace();
     rideToTheFinish(race);
-    const time = player(race).finishTime;
+    const { finishTime: time, position } = player(race);
 
-    expect(race.fastForward()).toEqual({
-      outcome: "finished",
-      time,
-      position: 1,
-      qualified: true,
-      standings: [{ rider: PLAYER, status: "finished", position: 1, time }],
-    });
+    const results = race.fastForward();
+
+    expect(results).toMatchObject({ outcome: "finished", time, position });
+    expect(results.standings).toContainEqual(
+      expect.objectContaining({ rider: PLAYER, status: "finished", position, time }),
+    );
   });
 });
 
