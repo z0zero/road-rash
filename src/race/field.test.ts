@@ -77,3 +77,43 @@ describe("the start, whatever the seed", () => {
     for (const seed of [1, 2, 3]) expect(startOrder(seed).at(-1)).toBe(PLAYER);
   });
 });
+
+/** Rider and cop names from the rosters of Road Rash, Road Rash II and Road Rash 3 (from the series research). */
+const ROAD_RASH_NAMES = [
+  "Natasha", "Biff", "Ikira", "Slater", "Sergio", "Helldog", "Jorg", "Sven", "Public Enemy", "P.E. No",
+  "Kakana", "Lawson", "War Hammer", "Chino", "Roz I Ryde", "Shiva", "Viper", "Grubb", "Gunther", "Odie",
+  "Lucky Luc", "Belladon", "Scab Boy", "Rhonda", "Axle", "Pearl", "Slim", "Nina", "Bolo", "Walleye",
+  "Madame X", "Helmut", "Fang", "Polygon", "O'Leary", "Rourke", "Flynn", "O'Shea", "O'Connor", "Marshall",
+  "Kelly", "Ortega",
+];
+
+describe("the opponents", () => {
+  const { riders } = createRace({ seed: 1 }).snapshot();
+  const opponents = riders.filter((rider) => rider.id !== PLAYER);
+
+  it("have original nicknames, none taken from Road Rash's rosters", () => {
+    const names = opponents.map((opponent) => opponent.name);
+
+    expect(new Set(names).size).toBe(14);
+    for (const name of names) {
+      expect(name.trim().length).toBeGreaterThan(2);
+      for (const taken of ROAD_RASH_NAMES) expect(name.toLowerCase()).not.toContain(taken.toLowerCase());
+    }
+  });
+
+  it("are racers, brawlers and bullies, and three of them are bullies", () => {
+    const temperaments = opponents.map((opponent) => opponent.temperament);
+
+    expect(new Set(temperaments)).toEqual(new Set(["racer", "brawler", "bully"]));
+    expect(temperaments.filter((temperament) => temperament === "bully")).toHaveLength(3);
+    expect(riders[PLAYER].temperament).toBeNull();
+  });
+
+  it("are the same fourteen riders in every race, whatever their start order", () => {
+    const other = createRace({ seed: 99 }).snapshot().riders;
+
+    expect(other.map(({ id, name, temperament }) => ({ id, name, temperament }))).toEqual(
+      riders.map(({ id, name, temperament }) => ({ id, name, temperament })),
+    );
+  });
+});

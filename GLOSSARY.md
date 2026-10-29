@@ -36,6 +36,10 @@ _Avoid_: User, hero
 A rider controlled by the game's AI.
 _Avoid_: Enemy, bot, NPC
 
+**Temperament**:
+How an opponent races and fights: a *racer* concentrates on racing and rarely attacks, a *brawler* attacks often, and a *bully* attacks often and starts the race with a weapon. "Racer" names a temperament here, never a rider.
+_Avoid_: Personality, style, AI type
+
 **Bike**:
 The motorcycle a rider races on.
 _Avoid_: Motorcycle, motorbike, vehicle
