@@ -18,13 +18,18 @@ export const MUSIC = {
 } as const;
 
 /**
- * The loop: 24 bars at 87 bpm (2,919,724 samples at 44.1 kHz), which the MP3
- * encoder delayed by 528 samples and padded at the end, as the file's gapless
- * playback tag records. Decoders that honour the tag drop the delay and the
- * padding; the others keep them, and the loop skips them.
+ * The loop: 24 bars at 87 bpm, 2,919,724 samples at 44.1 kHz. The MP3 encoder
+ * delayed it by 528 samples and padded it to whole frames, as the file's
+ * gapless playback tag records. Decoders that honour the tag drop the delay
+ * and the padding. Others (Chromium's among them) keep the delay, add 529
+ * samples of their own, and end with 1,843 samples of padding after the
+ * music, so the loop starts wherever the music does, before that padding.
  */
 const LOOP_SECONDS = 2_919_724 / 44_100;
-const ENCODER_DELAY_SECONDS = 528 / 44_100;
+const TRAILING_PADDING_SECONDS = 1_843 / 44_100;
+
+/** The loop's last and first moments fade, so its end meets its start without a click. */
+const SEAM_FADE_SECONDS = 0.002;
 
 /** How long the music takes to fade in or out, in seconds. */
 const FADE_SECONDS = 0.6;
@@ -41,7 +46,7 @@ export async function fetchMusic(signal: AbortSignal): Promise<ArrayBuffer | nul
 
 /** Plays the music on a seamless loop, fading in when it starts and out when it stops. */
 export class MusicLoop {
-  private buffer: AudioBuffer | null = null;
+  private loop: { readonly buffer: AudioBuffer; readonly start: number; readonly end: number } | null = null;
   private playing: { readonly source: AudioBufferSourceNode; readonly fade: GainNode } | null = null;
   private wanted = false;
 
@@ -52,22 +57,24 @@ export class MusicLoop {
 
   /** Hands over the decoded music; it starts at once if it should be playing. */
   setBuffer(buffer: AudioBuffer) {
-    this.buffer = buffer;
+    const start = Math.max(0, buffer.duration - LOOP_SECONDS - TRAILING_PADDING_SECONDS);
+    const end = Math.min(start + LOOP_SECONDS, buffer.duration);
+    softenSeam(buffer, start, end);
+    this.loop = { buffer, start, end };
     if (this.wanted) this.play();
   }
 
   /** Plays the music from the top, unless it's playing already (or as soon as it has been decoded). */
   play() {
     this.wanted = true;
-    if (this.playing || !this.buffer) return;
-    const { context, buffer } = this;
-    const delayed = buffer.duration > LOOP_SECONDS + ENCODER_DELAY_SECONDS / 2;
-    const start = delayed ? ENCODER_DELAY_SECONDS : 0;
+    if (this.playing || !this.loop) return;
+    const { context } = this;
+    const { buffer, start, end } = this.loop;
     const source = context.createBufferSource();
     source.buffer = buffer;
     source.loop = true;
     source.loopStart = start;
-    source.loopEnd = Math.min(start + LOOP_SECONDS, buffer.duration);
+    source.loopEnd = end;
     const fade = context.createGain();
     fade.gain.setValueAtTime(0, context.currentTime);
     fade.gain.linearRampToValueAtTime(1, context.currentTime + FADE_SECONDS / 4);
@@ -87,5 +94,20 @@ export class MusicLoop {
     fade.gain.setTargetAtTime(0, now, FADE_SECONDS / 4);
     source.stop(now + FADE_SECONDS * 1.5);
     this.playing = null;
+  }
+}
+
+/** Fades the music in over the loop's first moment and out over its last, where the two meet. */
+function softenSeam(buffer: AudioBuffer, start: number, end: number) {
+  const fade = Math.round(SEAM_FADE_SECONDS * buffer.sampleRate);
+  const first = Math.round(start * buffer.sampleRate);
+  const last = Math.min(Math.round(end * buffer.sampleRate), buffer.length) - 1;
+  if (last - first < 2 * fade) return;
+  for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+    const samples = buffer.getChannelData(channel);
+    for (let i = 0; i < fade; i++) {
+      samples[first + i] *= i / fade;
+      samples[last - i] *= i / fade;
+    }
   }
 }
