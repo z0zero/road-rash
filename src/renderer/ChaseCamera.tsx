@@ -61,7 +61,7 @@ export function ChaseCamera({
   reduceMotion: boolean;
 }) {
   useFrame(({ camera }, delta) => aim(camera, session, player, shake, reduceMotion, delta), -1);
-  useEffect(() => session.onRaceEvent((event) => shake.kick(jolt(event))), [session, shake]);
+  useEffect(() => session.onRaceEvent((event) => shake.jolt(joltOf(event))), [session, shake]);
   return null;
 }
 
@@ -70,7 +70,7 @@ export function ChaseCamera({
  * cars that knock them down and the hits they take, hardest; the hits they
  * land, a little.
  */
-function jolt(event: RaceEvent): number {
+function joltOf(event: RaceEvent): number {
   const isPlayer = (who: RiderOrCop) => who.kind === "rider" && who.id === PLAYER;
   if (event.type === "crash") return event.rider === PLAYER ? CRASH_JOLT : 0;
   if (event.type === "knocked-down") return event.rider === PLAYER ? KNOCKED_DOWN_JOLT : 0;
