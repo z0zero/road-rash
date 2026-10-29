@@ -32,8 +32,10 @@ export const TUNING = {
   bumpSpeedLimit: 8,
   /** A bump shoves each rider sideways, away from the other, at this speed (m/s)... */
   bumpShove: 2.5,
-  /** ...and a shove dies away at this rate (1/s). */
+  /** ...and a bump's shove dies away at this rate (1/s). */
   shoveDecay: 6,
+  /** A kick's shove (see `attacks`) dies away far more slowly (1/s), so it carries its target a few metres. */
+  kickShoveDecay: 1.5,
   /** Attacks reach riders at most this far along the track (m); how far sideways depends on the attack. */
   attackReachAlong: 2,
   /**
