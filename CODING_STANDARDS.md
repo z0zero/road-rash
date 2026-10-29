@@ -27,7 +27,9 @@ See ADR 0004.
 ## React and rendering
 
 - No React state updates in the frame loop. Per-frame changes, such as HUD numbers and object transforms, go through refs. React state changes only on discrete events, such as a screen change.
+- Build three.js objects once (in `useMemo`), and change them per frame through refs or in plain functions that `useFrame` calls; the React Compiler's lint rules reject mutating a memoized value inside the component itself. **(lint)**
 - Don't allocate in the frame loop when reusing an object is easy.
+- Motion that can make players dizzy (camera shake, motion blur, speed lines) checks the Reduce motion setting.
 - Touch browser APIs (`window`, `document`, `localStorage`, `navigator`) only in client code, inside effects or event handlers. The site is prerendered as a static export.
 - Every effect that adds a listener, loop or timer removes it in its cleanup. Strict Mode runs effects twice in development.
 

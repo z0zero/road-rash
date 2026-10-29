@@ -48,6 +48,10 @@ _Avoid_: Personality, style, AI type
 The motorcycle a rider races on.
 _Avoid_: Motorcycle, motorbike, vehicle
 
+**Livery**:
+A rider's colours: their bike's paint and stripes, their jacket and their helmet.
+_Avoid_: Skin, colour scheme, paint job
+
 **Stamina**:
 How much fight a rider has left. Every hit lowers it, it slowly recovers, and a rider with no stamina left is knocked off their bike by the next hit.
 _Avoid_: Health, HP, energy, life
@@ -107,6 +111,10 @@ _Avoid_: NPC cars, obstacles
 **Obstacle**:
 A fixed object on or beside the road, such as a rock or a sign, that makes a rider who runs into it crash.
 _Avoid_: Hazard, barrier
+
+**Scenery**:
+Everything beside the road that nobody can hit: palms, pines, rocks, houses, signs and guard rails beyond the shoulders.
+_Avoid_: Props, decoration
 
 **Cop**:
 A police officer on a motorcycle who rides among the riders and busts anyone who crashes nearby.

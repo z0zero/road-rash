@@ -29,7 +29,10 @@ export interface ObstaclePlacement {
   readonly radius: number;
 }
 
-type Road = Pick<Track, "length" | "startDistance" | "finishDistance" | "roadHalfWidth" | "shoulderWidth" | "sampleAt" | "pointAt">;
+type Road = Pick<
+  Track,
+  "length" | "startDistance" | "finishDistance" | "roadHalfWidth" | "shoulderWidth" | "sampleAt" | "pointAt" | "seaHeading"
+>;
 
 /** Guard rails come in segments this long (metres). */
 const GUARD_RAIL_SEGMENT = 4;
@@ -37,9 +40,9 @@ const GUARD_RAIL_SEGMENT = 4;
 const TREE_LINE = 62;
 
 /**
- * Scenery for a coastal road that runs north with the sea to the west: guard
- * rails on the sea side, trees, rocks and houses mostly inland, and warning
- * signs before sharp bends. Listed in order along the track.
+ * Scenery for a coastal road: guard rails on the sea side, trees, rocks and
+ * houses mostly inland, and warning signs before sharp bends. Listed in order
+ * along the track.
  */
 export function placeScenery(road: Road, random: Random): SceneryPlacement[] {
   const clear = clearanceFrom(road);
@@ -145,12 +148,12 @@ function hairpinApexes(road: Road) {
   return apexes;
 }
 
-/** Which side of the road the sea is on at a distance: -1 left, 1 right, 0 neither (the road heads east or west). */
+/** Which side of the road the sea is on at a distance: -1 left, 1 right, 0 neither (the road heads out to sea or inland). */
 function seaSide(road: Road, distance: number): -1 | 0 | 1 {
-  // The sea lies west; right of the heading is (cos, sin) in (x, z), so it faces west when cos < 0.
-  const northness = Math.cos(road.sampleAt(distance).heading);
-  if (northness > 0.35) return -1;
-  if (northness < -0.35) return 1;
+  // How squarely the right of the road, a quarter turn clockwise from its heading, faces the sea.
+  const seaOnTheRight = Math.cos(road.sampleAt(distance).heading + Math.PI / 2 - road.seaHeading);
+  if (seaOnTheRight > 0.35) return 1;
+  if (seaOnTheRight < -0.35) return -1;
   return 0;
 }
 
