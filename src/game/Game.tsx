@@ -2,7 +2,7 @@
 
 import { advance } from "@react-three/fiber";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { startGameAudio } from "@/audio/game-audio";
+import { startGameAudio, type GameAudio } from "@/audio/game-audio";
 import { listenToKeyboard, type Keyboard } from "@/input/keyboard";
 import { NO_INPUT } from "@/race";
 import { Scene } from "@/renderer/Scene";
@@ -18,6 +18,7 @@ import { GameSession } from "./session";
 /** The whole game: the 3D scene with the screens and HUD over it. Runs in the browser only. */
 export default function Game() {
   const keyboard = useRef<Keyboard | null>(null);
+  const audio = useRef<GameAudio | null>(null);
   const [session] = useState(
     () =>
       new GameSession({
@@ -45,9 +46,23 @@ export default function Game() {
 
   // The title screen is up: start the sound, which fetches the music now so it's ready for the race.
   useEffect(() => {
-    const audio = startGameAudio();
-    return () => audio.dispose();
-  }, []);
+    const playing = startGameAudio(session);
+    audio.current = playing;
+    return () => {
+      playing.dispose();
+      if (audio.current === playing) audio.current = null;
+    };
+  }, [session]);
+
+  // The clicks that start a race start the sound too: browsers only let sound start from a click or a key press.
+  const startRace = () => {
+    audio.current?.unlock();
+    session.startRace();
+  };
+  const restart = () => {
+    audio.current?.unlock();
+    session.restart();
+  };
 
   useEffect(() => {
     const pauseWhenHidden = () => {
@@ -76,7 +91,7 @@ export default function Game() {
       {state.screen === "title" && (
         <TitleScreen
           personalBest={state.personalBest}
-          onStart={session.startRace}
+          onStart={startRace}
           onSettings={session.openSettings}
           onCredits={session.openCredits}
         />
@@ -92,7 +107,7 @@ export default function Game() {
       {state.screen === "credits" && <CreditsScreen onBack={session.closeCredits} />}
       {(state.screen === "racing" || state.screen === "paused") && <Hud session={session} />}
       {state.screen === "paused" && (
-        <PauseMenu onResume={session.resume} onRestart={session.restart} onQuit={session.quitToTitle} />
+        <PauseMenu onResume={session.resume} onRestart={restart} onQuit={session.quitToTitle} />
       )}
       {state.screen === "results" && state.results && (
         <ResultsScreen
@@ -100,7 +115,7 @@ export default function Game() {
           personalBest={state.personalBest}
           newBestTime={state.newBestTime}
           newBestPosition={state.newBestPosition}
-          onRestart={session.restart}
+          onRestart={restart}
           onTitle={session.quitToTitle}
         />
       )}
