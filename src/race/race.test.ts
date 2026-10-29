@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createRace, NO_INPUT, PLAYER, STEP_SECONDS, type PlayerInput, type Race } from ".";
+import { createRace, NO_INPUT, PLAYER, STEP_SECONDS, type PlayerInput, type Race, type Track } from ".";
 
 const STEPS_PER_SECOND = 60;
 const FULL_THROTTLE: PlayerInput = { ...NO_INPUT, throttle: 1 };
@@ -26,14 +26,45 @@ function player(race: Race) {
 }
 
 /** Steps with `input` until `done` holds, and returns how many seconds that took. */
-function secondsUntil(race: Race, input: PlayerInput, done: () => boolean, limitSeconds = 120) {
+function secondsUntil(
+  race: Race,
+  input: PlayerInput | (() => PlayerInput),
+  done: () => boolean,
+  limitSeconds = 600,
+) {
   let steps = 0;
   while (!done()) {
     if (steps >= limitSeconds * STEPS_PER_SECOND) throw new Error(`not done within ${limitSeconds} s`);
-    race.step(input);
+    race.step(typeof input === "function" ? input() : input);
     steps++;
   }
   return steps * STEP_SECONDS;
+}
+
+/**
+ * Scripted input that rides the bike along the track near `lane` (an offset
+ * from the centreline) at up to `targetSpeed`, braking for the bends ahead.
+ * It only reads what any caller can: the snapshot and the track.
+ */
+function autopilot(race: Race, { targetSpeed = Infinity, lane = 0 } = {}) {
+  let lastOffset = player(race).offset;
+  return (): PlayerInput => {
+    const rider = player(race);
+    const sideways = (rider.offset - lastOffset) / STEP_SECONDS;
+    lastOffset = rider.offset;
+    let wanted = targetSpeed;
+    for (let ahead = 0; ahead <= 200; ahead += 5) {
+      const curvature = Math.abs(race.track.sampleAt(rider.distance + ahead).curvature);
+      const cornerSpeed = Math.sqrt(16 / Math.max(curvature, 1e-6));
+      wanted = Math.min(wanted, Math.sqrt(cornerSpeed ** 2 + 2 * 9 * ahead));
+    }
+    return {
+      ...NO_INPUT,
+      steer: Math.max(-1, Math.min(1, 0.5 * (lane - rider.offset) - 0.25 * sideways)),
+      throttle: rider.speed < wanted - 0.5 ? 1 : 0,
+      brake: rider.speed > wanted + 1 ? Math.min(1, (rider.speed - wanted) / 4) : 0,
+    };
+  };
 }
 
 describe("the countdown", () => {
@@ -48,6 +79,18 @@ describe("the countdown", () => {
     race.step(NO_INPUT);
     expect(race.snapshot().countdown).toBe(0);
     expect(race.drainEvents()).toEqual([{ type: "race-started" }]);
+  });
+
+  it("starts the race clock when it runs out", () => {
+    const race = createRace({ seed: 1 });
+    stepFor(race, 2);
+    expect(race.snapshot().clock).toBe(0);
+
+    stepFor(race, 1);
+    expect(race.snapshot().clock).toBe(0);
+
+    stepFor(race, 90, FULL_THROTTLE);
+    expect(race.snapshot().clock).toBeCloseTo(90, 9);
   });
 
   it("holds the player on the start line, even under full throttle", () => {
@@ -75,12 +118,13 @@ describe("riding", () => {
 
   it("reaches a top speed of 225 km/h and never goes faster", () => {
     const race = startedRace();
+    const pilot = autopilot(race);
     let fastest = 0;
 
-    for (let i = 0; i < 30 * STEPS_PER_SECOND; i++) {
-      race.step(FULL_THROTTLE);
+    secondsUntil(race, pilot, () => {
       fastest = Math.max(fastest, player(race).speed);
-    }
+      return player(race).distance >= race.track.finishDistance;
+    });
 
     expect(fastest).toBeCloseTo(kmh(225), 6);
     expect(fastest).toBeLessThanOrEqual(kmh(225) + 1e-9);
@@ -138,5 +182,189 @@ describe("riding", () => {
 
   it("steers sideways more slowly at high speed", () => {
     expect(sidewaysSpeedFromSteering(45)).toBeLessThan(sidewaysSpeedFromSteering(10) - 1);
+  });
+
+  it("slows the bike sharply off the road, even under full throttle", () => {
+    const race = startedRace();
+    const { roadHalfWidth } = race.track;
+    secondsUntil(race, FULL_THROTTLE, () => player(race).speed >= 40);
+    secondsUntil(race, { ...FULL_THROTTLE, steer: 1 }, () => player(race).offset > roadHalfWidth + 0.5);
+    const before = player(race).speed;
+
+    stepFor(race, 1, FULL_THROTTLE);
+
+    expect(player(race).offset).toBeGreaterThan(roadHalfWidth);
+    expect(before - player(race).speed).toBeGreaterThan(8);
+  });
+
+  /** The middle of the first stretch after `from` that curves steadily at a radius between `minRadius` and `maxRadius`. */
+  function steadyCurve(track: Track, from: number, minRadius: number, maxRadius: number) {
+    for (let d = from; d < track.finishDistance; d++) {
+      const curvatures = [-60, -30, 0, 10].map((ahead) => track.sampleAt(d + ahead).curvature);
+      const radius = 1 / Math.abs(curvatures[2]);
+      const steady = curvatures.every((curvature) => Math.abs(curvature - curvatures[2]) < 1e-9);
+      if (steady && radius >= minRadius && radius <= maxRadius) return d;
+    }
+    throw new Error(`no steady curve between ${minRadius} m and ${maxRadius} m`);
+  }
+
+  /**
+   * Rides to `distance` at about `speed`, lets go of the steering for half a
+   * second, then measures how fast the bike drifts sideways.
+   */
+  function driftOnCurve(distance: number, speed: number) {
+    const race = startedRace();
+    const pilot = autopilot(race, { targetSpeed: speed });
+    secondsUntil(race, pilot, () => player(race).distance >= distance - speed / 2);
+    secondsUntil(race, () => ({ ...pilot(), steer: 0 }), () => player(race).distance >= distance);
+    const before = player(race);
+    race.step({ ...pilot(), steer: 0 });
+    const after = player(race);
+    return {
+      drift: (after.offset - before.offset) / STEP_SECONDS,
+      speed: after.speed,
+      curvature: race.track.sampleAt((before.distance + after.distance) / 2).curvature,
+    };
+  }
+
+  it("is pushed outwards on curves in proportion to speed squared times curvature", () => {
+    const { track } = createRace({ seed: 1 });
+    const sweeper = steadyCurve(track, track.startDistance, 200, 450);
+    const bend = steadyCurve(track, track.startDistance, 55, 110);
+    const fastOnSweeper = driftOnCurve(sweeper, 45);
+    const slowOnSweeper = driftOnCurve(sweeper, 28);
+    const onBend = driftOnCurve(bend, 28);
+    const measurements = [fastOnSweeper, slowOnSweeper, onBend];
+
+    // The measurements differ enough in speed and in curvature to tell the law apart.
+    expect(fastOnSweeper.speed ** 2 / slowOnSweeper.speed ** 2).toBeGreaterThan(1.8);
+    expect(Math.abs(onBend.curvature / slowOnSweeper.curvature)).toBeGreaterThan(1.8);
+    for (const { drift, curvature } of measurements) expect(Math.sign(drift)).toBe(-Math.sign(curvature));
+    const pushPerSpeedSquaredCurvature = measurements.map(
+      ({ drift, speed, curvature }) => -drift / (speed * speed * curvature),
+    );
+    for (const ratio of pushPerSpeedSquaredCurvature) {
+      expect(ratio).toBeGreaterThan(0);
+      expect(ratio / pushPerSpeedSquaredCurvature[0]).toBeCloseTo(1, 1);
+    }
+  });
+
+  it("keeps the bike within the shoulders", () => {
+    const race = startedRace();
+    const { roadHalfWidth, shoulderWidth } = race.track;
+    secondsUntil(race, FULL_THROTTLE, () => player(race).speed >= 20);
+
+    stepFor(race, 4, { ...FULL_THROTTLE, steer: 1 });
+    expect(player(race).offset).toBeCloseTo(roadHalfWidth + shoulderWidth, 6);
+    stepFor(race, 6, { ...FULL_THROTTLE, steer: -1 });
+    expect(player(race).offset).toBeCloseTo(-(roadHalfWidth + shoulderWidth), 6);
+  });
+});
+
+/** Rides a started race to the finish line, returning the race clock just before the crossing step. */
+function rideToTheFinish(race: Race) {
+  const pilot = autopilot(race);
+  let clockBefore = 0;
+  secondsUntil(race, pilot, () => {
+    if (player(race).distance >= race.track.finishDistance) return true;
+    clockBefore = race.snapshot().clock;
+    return false;
+  });
+  return clockBefore;
+}
+
+describe("the finish", () => {
+  it("ends the player's race when they cross the finish line", () => {
+    const race = startedRace();
+
+    const clockBefore = rideToTheFinish(race);
+
+    const events = race.drainEvents();
+    expect(events).toEqual([
+      { type: "rider-finished", rider: PLAYER, time: expect.any(Number), position: 1 },
+      { type: "player-race-over", outcome: "finished" },
+    ]);
+    const time = (events[0] as { time: number }).time;
+    expect(time).toBeGreaterThan(clockBefore);
+    expect(time).toBeLessThanOrEqual(race.snapshot().clock);
+    expect(player(race)).toMatchObject({ status: "finished", finishTime: time, position: 1 });
+  });
+
+  it("lets the finished bike coast to a stop before the road runs out, whatever the input", () => {
+    const race = startedRace();
+    rideToTheFinish(race);
+    race.drainEvents();
+
+    stepFor(race, 30, { ...FULL_THROTTLE, steer: 1 });
+
+    expect(player(race).speed).toBe(0);
+    expect(player(race).distance).toBeLessThan(race.track.length);
+    expect(race.drainEvents()).toEqual([]);
+  });
+});
+
+describe("fast-forwarding to the results", () => {
+  it("refuses while the player is still racing", () => {
+    const race = startedRace();
+    stepFor(race, 10, FULL_THROTTLE);
+
+    expect(() => race.fastForward()).toThrow(/still racing/);
+  });
+
+  it("gives the final results once the player's race is over", () => {
+    const race = startedRace();
+    rideToTheFinish(race);
+    const time = player(race).finishTime;
+
+    expect(race.fastForward()).toEqual({
+      outcome: "finished",
+      time,
+      position: 1,
+      qualified: true,
+      standings: [{ rider: PLAYER, status: "finished", position: 1, time }],
+    });
+  });
+});
+
+describe("determinism", () => {
+  /** A busy, repeatable script of inputs: throttle, braking, weaving, punches and kicks. */
+  function scriptedInput(step: number): PlayerInput {
+    return {
+      throttle: step % 300 < 240 ? 1 : 0.3,
+      brake: step % 300 >= 270 ? 0.6 : 0,
+      steer: Math.sin(step / 45) * 0.8,
+      punch: step % 97 === 0,
+      kick: step % 131 === 0,
+    };
+  }
+
+  function record(race: Race, seconds: number) {
+    const snapshots = [];
+    const events = [];
+    for (let step = 0; step < seconds * STEPS_PER_SECOND; step++) {
+      race.step(scriptedInput(step));
+      snapshots.push(race.snapshot());
+      events.push(...race.drainEvents());
+    }
+    return { snapshots, events };
+  }
+
+  it("replays a race identically from the same seed and inputs", () => {
+    const first = record(createRace({ seed: 42 }), 200);
+    const second = record(createRace({ seed: 42 }), 200);
+
+    expect(second).toEqual(first);
+    expect(first.events.map((event) => event.type)).toContain("race-started");
+  });
+
+  it("never changes a snapshot it has handed out", () => {
+    const race = startedRace();
+    stepFor(race, 5, FULL_THROTTLE);
+    const snapshot = race.snapshot();
+    const copy = JSON.parse(JSON.stringify(snapshot));
+
+    stepFor(race, 5, { ...FULL_THROTTLE, steer: 1 });
+
+    expect(snapshot).toEqual(copy);
   });
 });

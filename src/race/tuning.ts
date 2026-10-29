@@ -22,4 +22,10 @@ export const TUNING = {
   steeringPerSpeed: 1.6,
   /** How quickly steering reaches its sideways speed (1/s). */
   steeringResponse: 10,
+  /** Curves push the bike outwards at this many seconds times speed squared times curvature (m/s). */
+  curvePush: 0.3,
+  /** Off the road, a bike faster than this (m/s, 65 km/h)... */
+  offRoadTopSpeed: 18,
+  /** ...slows by this much (m/s²) whatever the throttle, and can't speed up past it. */
+  offRoadDeceleration: 16,
 } as const;
