@@ -160,6 +160,16 @@ test("starts the player without a club, so the HUD's weapon icon is hidden", asy
   await expect(page.getByTestId("weapon")).toBeHidden();
 });
 
+test("starts with the cops waiting far up the road, so the HUD's cop alert is hidden", async ({ page }) => {
+  await startRacing(page);
+  await page.keyboard.down("w");
+  await play(page, 2);
+  await page.keyboard.up("w");
+
+  await expect(page.getByTestId("cop-alert")).toHaveCount(1);
+  await expect(page.getByTestId("cop-alert")).toBeHidden();
+});
+
 test("punches and kicks with J and K while riding", async ({ page }) => {
   await startRacing(page);
   await page.keyboard.down("w");

@@ -57,6 +57,13 @@ export type RaceEvent =
   | { readonly type: "remounted"; readonly rider: RiderId }
   | { readonly type: "wrecked"; readonly rider: RiderId }
   | { readonly type: "busted"; readonly rider: RiderId; readonly cop: CopId }
+  /** A hit knocked a cop with no stamina left off their bike: they are out of the race. */
+  | {
+      readonly type: "cop-knocked-off";
+      readonly cop: CopId;
+      /** Metres per second. */
+      readonly impactSpeed: number;
+    }
   /** A cop came within range of the player (the cop alert and siren start). */
   | { readonly type: "cop-near"; readonly cop: CopId }
   /** A cop left the player's range (the cop alert and siren stop). */
