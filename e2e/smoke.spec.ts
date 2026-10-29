@@ -3,12 +3,30 @@ import { expect, test, type Page } from "@playwright/test";
 /** Console errors and uncaught exceptions seen by the current test. */
 let errors: string[] = [];
 
+/**
+ * Every page runs on Playwright's clock, from this time. The clock runs freely
+ * until a test starts a race, then stops, and moves on only as the test plays
+ * the race on (see `startRace` and `play`). What a test sees after a second of
+ * play is then the same however slowly the machine draws: a software renderer,
+ * as on CI, can take a third of a second to draw a frame.
+ */
+const PAGE_OPENS = new Date("2026-06-01T18:00:00Z");
+/** Where the clock stops when a test starts a race: any time after the page has loaded. */
+const RACE_STARTS = new Date("2026-06-01T19:00:00Z");
+/**
+ * How far each frame of play moves the clock on, in milliseconds: few frames,
+ * so that play is quick where frames are slow to draw, each short enough for
+ * the game to count it in full.
+ */
+const FRAME_MS = 200;
+
 test.beforeEach(async ({ page }) => {
   errors = [];
   page.on("console", (message) => {
     if (message.type() === "error") errors.push(message.text());
   });
   page.on("pageerror", (error) => errors.push(error.message));
+  await page.clock.install({ time: PAGE_OPENS });
   await page.goto("/");
 });
 
@@ -21,45 +39,54 @@ test("shows the title screen with a Start Race button", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
 });
 
-declare global {
-  interface Window {
-    /** Everything the countdown has called, in order. Set in the page by `watchTheCountdown`. */
-    countdownCalls: string[];
-  }
+/** Stops the page's clock and starts a race, which then moves only as the test plays it on. */
+async function startRace(page: Page) {
+  await page.clock.pauseAt(RACE_STARTS);
+  await page.getByRole("button", { name: "Start Race" }).click();
 }
 
-/**
- * Runs in the page: records everything the countdown calls, as it changes. On
- * a busy machine more than a second can pass between two of Playwright's looks
- * at the page, long enough to miss a number; the page itself misses none.
- */
-function watchTheCountdown() {
-  const calls: string[] = [];
-  window.countdownCalls = calls;
-  new MutationObserver(() => {
-    const call = document.querySelector('[data-testid="countdown"]')?.textContent ?? "";
-    if (call && call !== calls.at(-1)) calls.push(call);
-  }).observe(document.body, { subtree: true, childList: true, characterData: true });
+/** Plays the race on by `seconds`, a frame at a time. */
+async function play(page: Page, seconds: number) {
+  const frames = Math.round((seconds * 1000) / FRAME_MS);
+  for (let frame = 0; frame < frames; frame++) await page.clock.fastForward(FRAME_MS);
 }
 
 test("counts down 3-2-1 after Start Race, then shows the HUD", async ({ page }) => {
-  await page.evaluate(watchTheCountdown);
-  await page.getByRole("button", { name: "Start Race" }).click();
+  await startRace(page);
 
-  await expect.poll(() => page.evaluate(() => window.countdownCalls), { timeout: 15_000 }).toEqual(["3", "2", "1", "GO!"]);
+  const countdown = page.getByTestId("countdown");
+  await play(page, 0.6);
+  await expect(countdown).toHaveText("3");
+  await play(page, 1);
+  await expect(countdown).toHaveText("2");
+  await play(page, 1);
+  await expect(countdown).toHaveText("1");
+  await play(page, 1);
+  await expect(countdown).toHaveText("GO!");
   await expect(page.getByTestId("speed")).toHaveText("0");
   await expect(page.getByText("km/h")).toBeVisible();
   await expect(page.getByTestId("progress")).toBeVisible();
 });
 
-/**
- * Starts a race and waits for the countdown to run out. The countdown lasts
- * three seconds of race time, which a busy machine drawing the race in
- * software can stretch well beyond the usual five-second wait.
- */
+test("shows the 3 for its full second even when the race's first frame is slow to draw", async ({ page }) => {
+  await startRace(page);
+
+  // The race's first frame, then the next, after the first took three seconds
+  // to draw, as compiling shaders can on a modest machine.
+  await page.clock.fastForward(FRAME_MS);
+  await page.clock.fastForward(3000);
+  const countdown = page.getByTestId("countdown");
+  await play(page, 0.8);
+  await expect(countdown).toHaveText("3");
+  await play(page, 0.4);
+  await expect(countdown).toHaveText("2");
+});
+
+/** Starts a race and plays through its countdown, stopping while "GO!" shows. */
 async function startRacing(page: Page) {
-  await page.getByRole("button", { name: "Start Race" }).click();
-  await expect(page.getByTestId("countdown")).toHaveText("GO!", { timeout: 20_000 });
+  await startRace(page);
+  await play(page, 3.6);
+  await expect(page.getByTestId("countdown")).toHaveText("GO!");
 }
 
 async function hudSpeed(page: Page) {
@@ -81,8 +108,10 @@ test("raises the HUD's speed while the throttle is held", async ({ page }) => {
   expect(await hudSpeed(page)).toBe(0);
 
   await page.keyboard.down("w");
-  await expect.poll(() => hudSpeed(page), { timeout: 10_000 }).toBeGreaterThan(40);
+  await play(page, 3);
   await page.keyboard.up("w");
+
+  expect(await hudSpeed(page)).toBeGreaterThan(40);
 });
 
 test("pauses on Esc, offering resume, restart and quit to title", async ({ page }) => {
@@ -137,11 +166,11 @@ test("punches and kicks with J and K while riding", async ({ page }) => {
 
   for (const key of ["j", "k", "z", "x"]) {
     await page.keyboard.press(key);
-    await page.waitForTimeout(400);
+    await play(page, 0.4);
   }
   await page.keyboard.up("w");
 
-  await expect.poll(() => hudSpeed(page)).toBeGreaterThan(0);
+  expect(await hudSpeed(page)).toBeGreaterThan(0);
 });
 
 test("opens Settings from the title screen and goes back", async ({ page }) => {
@@ -331,10 +360,12 @@ for (const [behaviour, blockAudio] of [
 
     await startRacing(page);
     await page.keyboard.down("w");
-    await expect.poll(() => hudSpeed(page), { timeout: 10_000 }).toBeGreaterThan(40);
+    await play(page, 3);
+    expect(await hudSpeed(page)).toBeGreaterThan(40);
     await page.keyboard.up("w");
     await page.keyboard.press("Escape");
     await page.getByRole("dialog", { name: "Paused" }).getByRole("button", { name: "Restart" }).click();
+    await play(page, 0.2);
     await expect(page.getByTestId("countdown")).not.toBeEmpty();
   });
 }
@@ -346,6 +377,7 @@ test("downloads less than 10 MB to get racing", async ({ browser, baseURL }) => 
   const sizes: Promise<number>[] = [];
   page.on("requestfinished", (request) => sizes.push(request.sizes().then((size) => size.responseBodySize)));
 
+  await page.clock.install({ time: PAGE_OPENS });
   await page.goto("/");
   await startRacing(page);
   await page.waitForLoadState("networkidle");
