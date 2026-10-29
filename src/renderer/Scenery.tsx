@@ -200,10 +200,7 @@ function footing(track: Track, terrain: Terrain, item: SceneryPlacement, steepes
       const { x, z } = track.pointAt(item.distance, offset);
       const y = terrain.groundAt(x, z);
       if (y < SHORE) continue;
-      let slope = 0;
-      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        slope = Math.max(slope, Math.abs(terrain.groundAt(x + dx, z + dz) - y));
-      }
+      const slope = terrain.slopeAt(x, z);
       if (slope <= steepest) return { x, y, z, slope };
     }
   }
