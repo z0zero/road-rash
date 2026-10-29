@@ -1,11 +1,15 @@
 import { useEffect, useRef, type RefObject } from "react";
 import type { GameSession } from "@/game/session";
-import { PLAYER, type RiderSnapshot } from "@/race";
+import { PLAYER, type RaceEvent, type RiderSnapshot } from "@/race";
 import { liveryOf } from "@/renderer/liveries";
+import { ClubIcon } from "./ClubIcon";
 import { formatRaceTime, toKmh } from "./format";
 
 /** How long "GO!" stays up after the countdown, in seconds of race time. */
 const GO_SECONDS = 0.8;
+
+/** How long a callout, such as a club changing hands, stays up, in seconds of race time. */
+const CALLOUT_SECONDS = 1.8;
 
 /** Stamina and condition run from 0 to this. */
 const FULL = 100;
@@ -13,9 +17,11 @@ const FULL = 100;
 /**
  * Position, speed, race time, progress along the track with a marker for
  * every rider, the 3-2-1 countdown, the player's stamina and bike condition,
- * the nearest opponent's name and stamina, and warning arrows for riders
- * alongside or coming up from behind. It is updated straight from the frame
- * loop through refs, never through React state.
+ * a weapon icon while the player holds a club, the nearest opponent's name,
+ * stamina and club, warning arrows for riders alongside or coming up from
+ * behind, and a callout when the player takes a club or has theirs taken. It
+ * is updated straight from the frame loop through refs, never through React
+ * state.
  */
 export function Hud({ session }: { session: GameSession }) {
   const speed = useRef<HTMLSpanElement>(null);
@@ -32,7 +38,24 @@ export function Hud({ session }: { session: GameSession }) {
   const warnLeft = useRef<HTMLDivElement>(null);
   const warnRight = useRef<HTMLDivElement>(null);
   const status = useRef<HTMLDivElement>(null);
+  const weapon = useRef<HTMLDivElement>(null);
+  const opponentClub = useRef<HTMLSpanElement>(null);
+  const callout = useRef<HTMLDivElement>(null);
+  /** The stretch of race time the callout shows for. */
+  const calloutShown = useRef({ from: 0, until: 0 });
   const riders = session.view.current.riders;
+
+  useEffect(
+    () =>
+      session.onRaceEvent((event) => {
+        const text = calloutFor(event, session.view.current.riders);
+        if (!text) return;
+        setText(callout.current, text);
+        const { clock } = session.view.current;
+        calloutShown.current = { from: clock, until: clock + CALLOUT_SECONDS };
+      }),
+    [session],
+  );
 
   useEffect(
     () =>
@@ -55,10 +78,15 @@ export function Hud({ session }: { session: GameSession }) {
         if (nearest) {
           setText(opponentName.current, nearest.name);
           setBar(opponentStamina.current, nearest.stamina, staminaColour);
+          setShown(opponentClub.current, nearest.weapon === "club");
         }
         setShown(warnLeft.current, current.warnings.left);
         setShown(warnRight.current, current.warnings.right);
         setText(status.current, statusOf(player));
+        setShown(weapon.current, player.weapon === "club");
+        // A callout goes once its time is up, or straight away in a race that has started over.
+        const { from, until } = calloutShown.current;
+        if (current.clock >= until || current.clock < from) setText(callout.current, "");
       }),
     [session],
   );
@@ -75,6 +103,12 @@ export function Hud({ session }: { session: GameSession }) {
         ref={status}
         data-testid="rider-status"
         className="absolute inset-x-0 top-[40%] text-center text-4xl uppercase italic text-sunset drop-shadow-[0_4px_0_rgba(27,16,38,0.85)] empty:hidden"
+      />
+      <div
+        ref={callout}
+        data-testid="callout"
+        role="status"
+        className="absolute inset-x-0 top-[46%] text-center text-3xl italic text-sun drop-shadow-[0_3px_0_rgba(27,16,38,0.85)] empty:hidden"
       />
       <div className="absolute left-8 top-4 drop-shadow-[0_3px_0_rgba(27,16,38,0.85)]">
         <div className="text-sm uppercase tracking-widest text-sand/90">Position</div>
@@ -116,10 +150,26 @@ export function Hud({ session }: { session: GameSession }) {
         className="absolute right-8 top-4 hidden w-56 text-right drop-shadow-[0_3px_0_rgba(27,16,38,0.85)]"
       >
         <div className="text-sm uppercase tracking-widest text-sand/90">Nearest</div>
-        <div ref={opponentName} data-testid="nearest-opponent-name" className="truncate text-3xl italic leading-tight" />
+        <div className="flex items-center justify-end gap-2">
+          <span ref={opponentClub} data-testid="nearest-opponent-club" role="img" aria-label="Holding a club" className="hidden">
+            <ClubIcon className="h-7 w-7 text-sun" />
+          </span>
+          <div ref={opponentName} data-testid="nearest-opponent-name" className="truncate text-3xl italic leading-tight" />
+        </div>
         <Bar fill={opponentStamina} label="Their stamina" />
       </div>
       <div className="absolute bottom-6 left-8 flex w-64 flex-col gap-2 drop-shadow-[0_3px_0_rgba(27,16,38,0.85)]">
+        <div ref={weapon} data-testid="weapon" className="hidden">
+          <div role="img" aria-label="Holding a club" className="flex items-center gap-3">
+            <div className="grid h-14 w-14 place-items-center rounded-md border-2 border-sun/80 bg-night/70">
+              <ClubIcon className="h-10 w-10 text-sun" />
+            </div>
+            <div className="leading-none">
+              <div className="text-3xl uppercase italic text-sun">Club</div>
+              <div className="mt-1 font-sans text-xs font-semibold uppercase tracking-widest text-sand/90">J or Z swings it</div>
+            </div>
+          </div>
+        </div>
         <div>
           <div className="text-sm uppercase tracking-widest text-sand/90">Stamina</div>
           <Bar fill={stamina} label="Stamina" testId="stamina" />
@@ -170,6 +220,19 @@ function Bar({ fill, label, testId }: { fill: RefObject<HTMLDivElement | null>; 
       <div ref={fill} className="h-full w-full" />
     </div>
   );
+}
+
+/** What to call out when a club changes hands to or from the player; null for anything else. */
+function calloutFor(event: RaceEvent, riders: readonly RiderSnapshot[]): string | null {
+  if (event.type !== "weapon-stolen") return null;
+  const { from, by } = event;
+  if (by.kind === "rider" && by.id === PLAYER) {
+    return from.kind === "rider" ? `You took the club from ${riders[from.id].name}!` : "You took the cop's club!";
+  }
+  if (from.kind === "rider" && from.id === PLAYER) {
+    return by.kind === "rider" ? `${riders[by.id].name} took your club!` : "A cop took your club!";
+  }
+  return null;
 }
 
 /** What the player is doing, if they are off their bike. */
