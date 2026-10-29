@@ -4,6 +4,7 @@ import {
   alongsideAn,
   alongsideARacer,
   autopilot,
+  CLOSED_ROAD,
   nearestWithinReach,
   player,
   secondsUntil,
@@ -57,12 +58,13 @@ function tallyAttacks(tallies: Tallies, race: Race, input: () => PlayerInput, se
 const rate = ({ seconds, attacks }: Tally) => attacks / seconds;
 
 describe("opponents", () => {
-  // Three races ridden at the field's pace, so the opponents get plenty of chances to attack the player and each other,
-  // and a long ride alongside a racer, since racers don't come looking for a fight.
+  // Three races ridden at the field's pace, on closed roads, so the opponents get plenty of chances to attack the player
+  // and each other, with no cars to keep them apart; and a long ride alongside a racer, since racers don't come looking
+  // for a fight.
   const tallies = emptyTallies();
   const thrown: AttackThrown[] = [];
   for (const seed of [1, 2, 3]) {
-    const race = startedRace(seed);
+    const race = startedRace(seed, CLOSED_ROAD);
     tallyAttacks(tallies, race, autopilot(race, { targetSpeed: 48 }), 300, thrown);
   }
   const alongside = alongsideARacer();

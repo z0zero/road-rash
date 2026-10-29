@@ -76,7 +76,7 @@ export class RiderMotion {
   /** Moves on to this frame's view, `delta` seconds after the last. */
   update(view: RaceView, delta: number, wheelRadius: number) {
     const snapshot = view.current.riders[this.rider];
-    const wasCrashed = this.crash !== null;
+    const was = this.crash;
     this.crash = snapshot.crash;
     this.attack = snapshot.attack;
     this.weapon = snapshot.weapon;
@@ -112,7 +112,7 @@ export class RiderMotion {
     }
 
     // Down: the bike falls onto the side it leant to and slews round as it slides to a stop.
-    if (!wasCrashed) {
+    if (was === null) {
       this.fallSide = this.lean < 0 ? -1 : 1;
       this.bodyYaw = this.yaw;
     }
@@ -126,8 +126,11 @@ export class RiderMotion {
     this.bodyY = ground.y;
     this.bodyZ = ground.z;
     if (this.crash === "tumbling") {
+      // Knocked down by a car while on foot, they tumble afresh.
+      if (was === "on-foot") this.tumble = 0;
       this.tumble += (ran * Math.PI * 2) / TUMBLE_METRES;
-      this.bodyYaw = -view.track.sampleAt(rider.distance).heading;
+      // Head over heels the way they are thrown: on along the road, or back down it by an oncoming car.
+      this.bodyYaw = -view.track.sampleAt(rider.distance).heading + (rider.speed < 0 ? Math.PI : 0);
     } else {
       this.stride = (this.stride + (ran * Math.PI * 2) / STRIDE_METRES) % (Math.PI * 2);
       // Face the way they run; standing still, keep facing the same way.
