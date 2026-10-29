@@ -76,6 +76,10 @@ _Avoid_: NPC cars, obstacles
 A fixed object on or beside the road, such as a rock or a sign, that makes a rider who runs into it crash.
 _Avoid_: Hazard, barrier
 
+**Scenery**:
+Everything beside the road that nobody can hit: palms, pines, rocks, houses, signs and guard rails beyond the shoulders.
+_Avoid_: Props, decoration
+
 **Cop**:
 A police officer on a motorcycle who rides among the riders and busts anyone who crashes nearby.
 _Avoid_: Police, officer
