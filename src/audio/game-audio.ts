@@ -17,6 +17,7 @@ import {
   playFinish,
   playGrab,
   playKick,
+  playKnockDown,
   playPunch,
   playSwing,
   Gravel,
@@ -244,6 +245,14 @@ class Sound {
         const force = clamp(event.impactSpeed / HARDEST_CRASH_SPEED, 0.35, 1);
         this.play(hearingOf(race, { kind: "rider", id: event.rider }, null), (out, loudness) => {
           playCrash(this.kit, out, force * loudness);
+          this.mixer.duck(CRASH_DUCK * force * loudness);
+        });
+        break;
+      }
+      case "knocked-down": {
+        const force = clamp(event.impactSpeed / HARDEST_CRASH_SPEED, 0.35, 1);
+        this.play(hearingOf(race, { kind: "rider", id: event.rider }, null), (out, loudness) => {
+          playKnockDown(this.kit, out, force * loudness);
           this.mixer.duck(CRASH_DUCK * force * loudness);
         });
         break;
