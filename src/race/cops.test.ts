@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { createRace, NO_INPUT, PLAYER, STEP_SECONDS, type PlayerInput, type Race, type RaceEvent, type RiderId } from ".";
-import { alongsideARacer, autopilot, eventsDuring, eventsUntil, kmh, player, secondsUntil, startedRace } from "./test-helpers";
+import {
+  alongsideARacer,
+  autopilot,
+  CLOSED_ROAD,
+  eventsDuring,
+  eventsUntil,
+  kmh,
+  player,
+  secondsUntil,
+  startedRace,
+} from "./test-helpers";
 
 const ME = { kind: "rider", id: PLAYER } as const;
 const FIRST_COP = { kind: "cop", id: 0 } as const;
@@ -94,12 +104,12 @@ function rideAlongsideTheFirstCop(race: Race) {
 }
 
 /**
- * A started race in which the player has passed the first cop, so that it has
- * joined the race, and ridden up alongside it: the cop is within the reach of
- * a punch, and nearer the player than any rider.
+ * A started race on a closed road in which the player has passed the first
+ * cop, so that it has joined the race, and ridden up alongside it: the cop is
+ * within the reach of a punch, and nearer the player than any rider.
  */
 function alongsideTheFirstCop(seed = 1) {
-  const race = startedRace(seed);
+  const race = startedRace(seed, CLOSED_ROAD);
   const waitingAt = race.snapshot().cops[0].distance;
   secondsUntil(race, autopilot(race), () => player(race).distance >= waitingAt, 120);
   const input = rideAlongsideTheFirstCop(race);
@@ -339,7 +349,8 @@ describe("cops", () => {
   });
 
   it("chase down a player who passes them at speed, at up to 66 m/s, faster than any bike, and stay within 150 m of them", () => {
-    const race = startedRace();
+    // On a closed road, so that no crash in traffic gets the player busted by the first cop on the way to the second.
+    const race = startedRace(1, CLOSED_ROAD);
     const pilot = autopilot(race);
     const second = race.snapshot().cops[1];
     secondsUntil(race, pilot, () => player(race).distance >= second.distance, 300);
