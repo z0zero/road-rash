@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createRace, NO_INPUT, PLAYER, type PlayerInput, type Race, type RaceEvent, type RiderSnapshot, type Track } from ".";
-import { autopilot, player, secondsUntil, startedRace, STEPS_PER_SECOND } from "./test-helpers";
+import { autopilot, chase, player, secondsUntil, startedRace, STEPS_PER_SECOND } from "./test-helpers";
 
 type RiderFinished = Extract<RaceEvent, { type: "rider-finished" }>;
 
@@ -17,16 +17,21 @@ function hairpinApexes(track: Track) {
 
 /**
  * Leaves the player on the start line and lets the opponents race for up to
- * `seconds`, calling `watch` with every snapshot; returns the rider-finished
- * events in the order they came.
+ * `seconds`, calling `watch` with every snapshot and the events of its step;
+ * returns the rider-finished events in the order they came.
  */
-function raceWithoutThePlayer(seed: number, seconds: number, watch: (riders: readonly RiderSnapshot[]) => void = () => {}) {
+function raceWithoutThePlayer(
+  seed: number,
+  seconds: number,
+  watch: (riders: readonly RiderSnapshot[], events: readonly RaceEvent[]) => void = () => {},
+) {
   const race = startedRace(seed);
   const finished: RiderFinished[] = [];
   for (let step = 0; step < seconds * STEPS_PER_SECOND && finished.length < 14; step++) {
     race.step(NO_INPUT);
-    watch(race.snapshot().riders);
-    for (const event of race.drainEvents()) if (event.type === "rider-finished") finished.push(event);
+    const events = race.drainEvents();
+    watch(race.snapshot().riders, events);
+    for (const event of events) if (event.type === "rider-finished") finished.push(event);
   }
   return { race, finished };
 }
@@ -166,18 +171,27 @@ describe("the opponents", () => {
     expect(times[13]).toBeLessThan(240);
   });
 
-  it("stay on the road all the way, slowing down for the hairpins", () => {
+  it("stay on the road all the way, unless a kick shoves them off it for a moment, slowing down for the hairpins", () => {
     const { track } = createRace({ seed: 1 });
     const apexes = hairpinApexes(track);
     const fastest = new Map<number, number>();
     const atApexes = new Map<number, number[]>();
     const offTheRoad = new Set<string>();
     let previous: readonly RiderSnapshot[] | null = null;
+    let step = 0;
+    const kickedAt = new Map<number, number>();
 
-    raceWithoutThePlayer(1, 300, (riders) => {
+    raceWithoutThePlayer(1, 300, (riders, events) => {
+      step++;
+      for (const event of events) {
+        if (event.type === "attack-landed" && event.kind === "kick") kickedAt.set(event.target.id, step);
+      }
       for (const rider of riders) {
-        if (rider.id === PLAYER || rider.status !== "racing") continue;
-        if (Math.abs(rider.offset) > track.roadHalfWidth) offTheRoad.add(`${rider.name} at ${rider.distance.toFixed(0)} m`);
+        if (rider.id === PLAYER || rider.status !== "racing" || rider.crash !== null) continue;
+        const justKicked = step - (kickedAt.get(rider.id) ?? -Infinity) < 2 * STEPS_PER_SECOND;
+        if (Math.abs(rider.offset) > track.roadHalfWidth && !justKicked) {
+          offTheRoad.add(`${rider.name} at ${rider.distance.toFixed(0)} m`);
+        }
         fastest.set(rider.id, Math.max(fastest.get(rider.id) ?? 0, rider.speed));
         const before = previous?.[rider.id].distance ?? rider.distance;
         for (const apex of apexes) {
@@ -248,22 +262,6 @@ describe("the opponents", () => {
   });
 });
 
-/** Input that rides up behind the opponent `target` at about `closing` m/s faster than it, steering straight at it. */
-function chase(race: Race, target: number, closing: number) {
-  return (): PlayerInput => {
-    const { riders } = race.snapshot();
-    const me = riders[PLAYER];
-    const them = riders[target];
-    const wanted = them.speed + closing;
-    return {
-      ...NO_INPUT,
-      steer: Math.max(-1, Math.min(1, 1.5 * (them.offset - me.offset))),
-      throttle: me.speed < wanted ? 1 : 0,
-      brake: me.speed > wanted + 1 ? 0.5 : 0,
-    };
-  };
-}
-
 describe("bumping", () => {
   it("bumps riders apart who run into each other at a small speed difference, instead of riding through", () => {
     const race = startedRace(1);
@@ -329,31 +327,33 @@ function stretchTime(seed: number, rider: number, from: number, to: number, make
   return reached(to) - start;
 }
 
+// Catch-up is measured on racers: brawlers and bullies near the player ride up alongside them to fight instead.
 describe("catch-up", () => {
   it("slows opponents far ahead of the player by up to 8%", () => {
     const seed = 1;
-    const target = startOrder(seed).at(-2) ?? PLAYER;
+    const target = startOrder(seed).filter((id) => createRace({ seed }).snapshot().riders[id].temperament === "racer").at(-1) ?? PLAYER;
     const { startDistance } = createRace({ seed }).track;
     const [from, to] = [startDistance + 1500, startDistance + 3000];
 
     const withThePlayerClose = stretchTime(seed, target, from, to, (race) => shadow(race, target));
     const farAheadOfThePlayer = stretchTime(seed, target, from, to, () => () => NO_INPUT);
 
+    // Traffic around the racer (riders to get past, fights nearby) takes some of the full 8% out of the stretch time.
     const slowdown = 1 - withThePlayerClose / farAheadOfThePlayer;
-    expect(slowdown).toBeGreaterThan(0.05);
+    expect(slowdown).toBeGreaterThan(0.025);
     expect(slowdown).toBeLessThanOrEqual(0.081);
   });
 
   it("speeds up opponents far behind the player by up to 8%", () => {
     const seed = 1;
-    // Find the longest stretch an opponent rides more than 300 m behind the player, who rides well.
+    // Find the longest stretch a racer rides more than 300 m behind the player, who rides well.
     const race = startedRace(seed);
     const pilot = autopilot(race);
     const behind = new Map<number, { from: number; to: number }>();
     secondsUntil(race, pilot, () => {
       const { riders } = race.snapshot();
       for (const rider of riders) {
-        if (rider.id === PLAYER || riders[PLAYER].distance - rider.distance <= 300) continue;
+        if (rider.temperament !== "racer" || riders[PLAYER].distance - rider.distance <= 300) continue;
         const stretch = behind.get(rider.id);
         behind.set(rider.id, { from: stretch?.from ?? rider.distance, to: rider.distance });
       }

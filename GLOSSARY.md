@@ -68,6 +68,14 @@ _Avoid_: Nudge, collision
 A rider being thrown off their bike, either by a hit or by running into something. After a crash the rider is on foot and runs back to their bike.
 _Avoid_: Wipeout, bail, fall, spill
 
+**Knock-off**:
+A crash caused by a hit landing on a rider who has no stamina left.
+_Avoid_: KO, knockdown
+
+**On foot**:
+A rider off their bike after a crash, once they have stopped tumbling along the road: they run back to their bike and get back on it, which is remounting.
+_Avoid_: Running, walking, dismounted
+
 **Wrecked**:
 The end of a rider's race because their bike's condition ran out.
 _Avoid_: Totaled, destroyed, DNF
@@ -77,6 +85,18 @@ _Avoid_: Totaled, destroyed, DNF
 **Attack**:
 A punch, kick or weapon swing aimed at the nearest rider within reach. Punches and weapon swings lower stamina; a kick mostly shoves its target sideways.
 _Avoid_: Strike, move, hit (for the action)
+
+**Reach**:
+How far from an attacker an attack can land: up to 2 m along the track and, on either side, 1.8 m across it (2.4 m for a weapon swing).
+_Avoid_: Range
+
+**Wind-up**:
+The moment between throwing an attack and its striking; after it strikes comes a short recovery before the next attack.
+_Avoid_: Charge, startup
+
+**Dropping back**:
+A badly beaten opponent easing off and keeping out of fights until it has recovered its stamina.
+_Avoid_: Retreating, fleeing
 
 **Weapon**:
 A club a rider swings instead of punching. A rider takes one by hitting its holder in the middle of a swing, and drops it in a crash.
