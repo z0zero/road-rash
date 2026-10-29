@@ -10,6 +10,7 @@
  *   race.track;                // the road's geometry and placements
  */
 export { createRace, NO_INPUT, PLAYER } from "./race";
+export { COP_FULL_STAMINA } from "./cops";
 export { STEP_SECONDS } from "./steps";
 export type {
   AttackSnapshot,

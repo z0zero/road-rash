@@ -11,6 +11,9 @@ import { TUNING } from "./tuning";
 /** Where a cop is in the race: waiting on the shoulder for the player to pass, riding in the race, or knocked off and out of it. */
 export type CopStatus = "waiting" | "riding" | "knocked-off";
 
+/** A fresh cop's stamina, which runs down to 0 as a rider's does from 100. */
+export const COP_FULL_STAMINA: number = TUNING.cops.fullStamina;
+
 /** The cops, in cop-id order: original names, none taken from Road Rash's rosters. */
 const COP_NAMES = ["Sergeant Pike", "Deputy Gale"];
 

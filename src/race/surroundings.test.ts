@@ -1,20 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { NO_INPUT, PLAYER, type RaceSnapshot, type RiderSnapshot } from ".";
-import { autopilot, startedRace, STEPS_PER_SECOND } from "./test-helpers";
+import { NO_INPUT, PLAYER, type RaceOptions, type RaceSnapshot, type RiderOrCop } from ".";
+import { autopilot, NO_COPS, startedRace, STEPS_PER_SECOND } from "./test-helpers";
 
 /** Opponents still racing on their bikes. */
 const opponentsRiding = ({ riders }: RaceSnapshot) =>
   riders.filter((rider) => rider.id !== PLAYER && rider.status === "racing" && rider.crash === null);
 
-const apart = (a: RiderSnapshot, b: RiderSnapshot) => Math.hypot(a.distance - b.distance, a.offset - b.offset);
+type Place = { readonly distance: number; readonly offset: number };
+
+const apart = (a: Place, b: Place) => Math.hypot(a.distance - b.distance, a.offset - b.offset);
 
 /**
- * Rides a race with the player passing the pack at full speed for a minute,
- * then easing right off so that the riders behind come back up past them,
- * and hands every snapshot to `watch`.
+ * Rides a race (set up with `options` besides the seed) with the player
+ * passing the pack at full speed for a minute, then easing right off so that
+ * the riders behind come back up past them, and hands every snapshot to
+ * `watch`.
  */
-function passThenEaseOff(watch: (snapshot: RaceSnapshot) => void) {
-  const race = startedRace();
+function passThenEaseOff(watch: (snapshot: RaceSnapshot) => void, options: Omit<RaceOptions, "seed"> = {}) {
+  const race = startedRace(1, options);
   const pilot = autopilot(race);
   for (let step = 0; step < 90 * STEPS_PER_SECOND; step++) {
     race.step(step < 60 * STEPS_PER_SECOND ? pilot() : { ...pilot(), throttle: 0, brake: 0.2 });
@@ -23,21 +26,41 @@ function passThenEaseOff(watch: (snapshot: RaceSnapshot) => void) {
 }
 
 describe("the player's surroundings", () => {
+  /** Who the HUD should name in a snapshot: the opponent on their bike, or the cop in the race, nearest the player within 50 m. */
+  function nearestWithin50m(snapshot: RaceSnapshot): RiderOrCop | null {
+    const me = snapshot.riders[PLAYER];
+    const candidates: { who: RiderOrCop; at: Place }[] = [
+      ...opponentsRiding(snapshot).map((rider) => ({ who: { kind: "rider", id: rider.id } as const, at: rider })),
+      ...snapshot.cops.filter((cop) => cop.status === "riding").map((cop) => ({ who: { kind: "cop", id: cop.id } as const, at: cop })),
+    ];
+    const within = candidates.filter(({ at }) => apart(at, me) <= 50);
+    return within.sort((a, b) => apart(a.at, me) - apart(b.at, me))[0]?.who ?? null;
+  }
+
   it("name the opponent on their bike nearest the player, if one is within 50 m", () => {
     const named = new Set<number>();
     let nobody = 0;
+    // With no cops, one of whom would be near the player from the first one on.
     passThenEaseOff((snapshot) => {
-      const me = snapshot.riders[PLAYER];
-      const nearest = opponentsRiding(snapshot)
-        .filter((other) => apart(other, me) <= 50)
-        .sort((a, b) => apart(a, me) - apart(b, me))[0];
-      expect(snapshot.nearestOpponent).toBe(nearest?.id ?? null);
+      const nearest = nearestWithin50m(snapshot);
+      expect(snapshot.nearestOpponentOrCop).toEqual(nearest);
       if (nearest) named.add(nearest.id);
       else nobody++;
-    });
+    }, NO_COPS);
 
     expect(named.size).toBeGreaterThanOrEqual(5);
     expect(nobody).toBeGreaterThan(0);
+  });
+
+  it("name the cop in the race instead when it is the nearest", () => {
+    let copNamed = 0;
+    passThenEaseOff((snapshot) => {
+      const nearest = nearestWithin50m(snapshot);
+      expect(snapshot.nearestOpponentOrCop).toEqual(nearest);
+      if (nearest?.kind === "cop") copNamed++;
+    });
+
+    expect(copNamed).toBeGreaterThan(0);
   });
 
   it("warn of riders alongside the player, or coming up from behind, on the side they are on", () => {
