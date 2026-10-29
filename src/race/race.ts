@@ -2,7 +2,7 @@ import { getCoastalTrack } from "./coastal-track";
 import { bumpApart } from "./contact";
 import type { RaceEvent, RaceOutcome, RiderId } from "./events";
 import { lineUpOpponents } from "./field";
-import { opponentControls, paceFor, type OpponentRiding } from "./opponent-riding";
+import { catchUpFor, opponentControls, paceFor, type OpponentRiding } from "./opponent-riding";
 import { OPPONENTS, PLAYER_NAME, type Temperament } from "./opponents";
 import { createRandom } from "./random";
 import { ride, type Controls, type Motion } from "./riding";
@@ -244,9 +244,13 @@ export function createRace(options: RaceOptions): Race {
         const clockBefore = clock();
         // Everyone decides what to do from where things stand, then everyone moves.
         const field = riders.filter((rider) => rider.status === "racing").map((rider) => rider.motion);
+        const player = riders[PLAYER];
+        // Catch-up keeps the field near the player, so it stops once the player's race is over.
+        const catchUp = (rider: Rider) =>
+          player.status === "racing" ? catchUpFor(rider.motion.distance - player.motion.distance) : 1;
         const controls = riders.map((rider) => {
           if (rider.status !== "racing") return FINISHED_CONTROLS;
-          return rider.riding ? opponentControls(rider.motion, rider.riding, track, field) : input;
+          return rider.riding ? opponentControls(rider.motion, rider.riding, track, field, catchUp(rider)) : input;
         });
         const distancesBefore = riders.map((rider) => rider.motion.distance);
         riders.forEach((rider, index) => ride(rider.motion, controls[index], track, STEP_SECONDS));

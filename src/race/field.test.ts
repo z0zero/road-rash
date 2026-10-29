@@ -277,6 +277,88 @@ describe("bumping", () => {
   });
 });
 
+/**
+ * Input that keeps the player about `gap` metres behind the opponent `target`,
+ * a lane to the side of it, so the opponent always has the player close by.
+ */
+function shadow(race: Race, target: number, gap = 15) {
+  let lastOffset = player(race).offset;
+  return (): PlayerInput => {
+    const { riders } = race.snapshot();
+    const me = riders[PLAYER];
+    const them = riders[target];
+    const sideways = (me.offset - lastOffset) * STEPS_PER_SECOND;
+    lastOffset = me.offset;
+    const lane = them.offset > 0 ? them.offset - 3 : them.offset + 3;
+    const wanted = Math.max(0, them.speed + 0.5 * (them.distance - me.distance - gap));
+    return {
+      ...NO_INPUT,
+      steer: Math.max(-1, Math.min(1, 0.6 * (lane - me.offset) - 0.25 * sideways)),
+      throttle: me.speed < wanted ? 1 : 0,
+      brake: me.speed > wanted + 1 ? Math.min(1, (me.speed - wanted) / 4) : 0,
+    };
+  };
+}
+
+/**
+ * Seconds the opponent `rider` takes to ride from `from` to `to` (distances
+ * along the track), while the player rides with the input `makeInput` gives.
+ */
+function stretchTime(seed: number, rider: number, from: number, to: number, makeInput: (race: Race) => () => PlayerInput) {
+  const race = startedRace(seed);
+  const input = makeInput(race);
+  const reached = (distance: number) => {
+    secondsUntil(race, input, () => race.snapshot().riders[rider].distance >= distance);
+    return race.snapshot().clock;
+  };
+  const start = reached(from);
+  return reached(to) - start;
+}
+
+describe("catch-up", () => {
+  it("slows opponents far ahead of the player by up to 8%", () => {
+    const seed = 1;
+    const target = startOrder(seed).at(-2) ?? PLAYER;
+    const { startDistance } = createRace({ seed }).track;
+    const [from, to] = [startDistance + 1500, startDistance + 3000];
+
+    const withThePlayerClose = stretchTime(seed, target, from, to, (race) => shadow(race, target));
+    const farAheadOfThePlayer = stretchTime(seed, target, from, to, () => () => NO_INPUT);
+
+    const slowdown = 1 - withThePlayerClose / farAheadOfThePlayer;
+    expect(slowdown).toBeGreaterThan(0.05);
+    expect(slowdown).toBeLessThanOrEqual(0.081);
+  });
+
+  it("speeds up opponents far behind the player by up to 8%", () => {
+    const seed = 1;
+    // Find the longest stretch an opponent rides more than 300 m behind the player, who rides well.
+    const race = startedRace(seed);
+    const pilot = autopilot(race);
+    const behind = new Map<number, { from: number; to: number }>();
+    secondsUntil(race, pilot, () => {
+      const { riders } = race.snapshot();
+      for (const rider of riders) {
+        if (rider.id === PLAYER || riders[PLAYER].distance - rider.distance <= 300) continue;
+        const stretch = behind.get(rider.id);
+        behind.set(rider.id, { from: stretch?.from ?? rider.distance, to: rider.distance });
+      }
+      return riders[PLAYER].status !== "racing";
+    });
+    const [rider, { from, to }] = [...behind].reduce((longest, entry) =>
+      entry[1].to - entry[1].from > longest[1].to - longest[1].from ? entry : longest,
+    );
+    expect(to - from).toBeGreaterThan(300);
+
+    const farBehindThePlayer = stretchTime(seed, rider, from, to, (race) => autopilot(race));
+    const withThePlayerClose = stretchTime(seed, rider, from, to, (race) => shadow(race, rider));
+
+    const speedUp = withThePlayerClose / farBehindThePlayer - 1;
+    expect(speedUp).toBeGreaterThan(0.03);
+    expect(speedUp).toBeLessThanOrEqual(0.081);
+  });
+});
+
 describe("positions", () => {
   it("change as the player passes riders, climbing from last place", () => {
     const race = startedRace(1);

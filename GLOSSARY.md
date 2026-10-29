@@ -36,6 +36,10 @@ _Avoid_: User, hero
 A rider controlled by the game's AI.
 _Avoid_: Enemy, bot, NPC
 
+**Catch-up**:
+Opponents far behind the player riding a little faster than their usual pace, and those far ahead a little slower, so the field stays near the player.
+_Avoid_: Rubber-banding
+
 **Temperament**:
 How an opponent races and fights: a *racer* concentrates on racing and rarely attacks, a *brawler* attacks often, and a *bully* attacks often and starts the race with a weapon. "Racer" names a temperament here, never a rider.
 _Avoid_: Personality, style, AI type

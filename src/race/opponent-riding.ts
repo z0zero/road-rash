@@ -18,6 +18,23 @@ export function paceFor(skill: number): number {
   return PACE_RANGE[0] + (PACE_RANGE[1] - PACE_RANGE[0]) * clamp(skill, 0, 1);
 }
 
+/** Catch-up leaves opponents within this many metres of the player at their normal pace... */
+const CATCH_UP_NEAR = 75;
+/** ...and grows with the distance beyond it, to its most at this many metres... */
+const CATCH_UP_FAR = 400;
+/** ...where opponents behind the player ride this share faster than their pace, and those ahead this share slower. */
+const CATCH_UP_MOST = 0.08;
+
+/**
+ * The mild catch-up that keeps the field near the player: how many times its
+ * normal pace an opponent rides `gap` metres ahead of the player (negative
+ * when behind). Up to 1.08 far behind, down to 0.92 far ahead.
+ */
+export function catchUpFor(gap: number): number {
+  const share = clamp((Math.abs(gap) - CATCH_UP_NEAR) / (CATCH_UP_FAR - CATCH_UP_NEAR), 0, 1);
+  return 1 - Math.sign(gap) * CATCH_UP_MOST * share;
+}
+
 /** Opponents hold their line through a bend using at most this share of the sideways speed steering gives... */
 const CORNER_GRIP = 0.78;
 /** ...and plan to brake for the bends ahead at this rate (m/s²), short of the bike's full braking. */
@@ -52,15 +69,17 @@ const HOLD_BACK_TIME = 0.8;
 
 /**
  * An opponent's controls for one step: the throttle and brake to ride at its
- * pace, slowing in time for the bends ahead, and the steering to follow its
- * racing line, cutting towards the inside of bends, and to get around the
- * other riders on the road (`field`, the motions of every rider still racing).
+ * pace (times `catchUp`, see `catchUpFor`), slowing in time for the bends
+ * ahead, and the steering to follow its racing line, cutting towards the
+ * inside of bends, and to get around the other riders on the road (`field`,
+ * the motions of every rider still racing).
  */
 export function opponentControls(
   motion: Readonly<Motion>,
   riding: OpponentRiding,
   track: Track,
   field: readonly Readonly<Motion>[],
+  catchUp: number,
 ): Controls {
   const edge = track.roadHalfWidth - EDGE_MARGIN;
   const bendAhead = track.sampleAt(motion.distance + motion.speed * APEX_LOOK_AHEAD).curvature;
@@ -68,7 +87,7 @@ export function opponentControls(
   const { line, holdBehind } = lineAround(motion, clamp(riding.lane + apexShift, -edge, edge), field, edge);
 
   const safe = safeSpeedAt(track, motion.distance + motion.speed * BRAKING_LEAD);
-  const wanted = Math.min(riding.pace * Math.min(TUNING.topSpeed, safe), holdBehind);
+  const wanted = Math.min(riding.pace * catchUp * Math.min(TUNING.topSpeed, safe), holdBehind);
   const throttle = clamp((wanted - motion.speed) * THROTTLE_PER_SPEED, 0, 1);
   const brake = clamp((motion.speed - wanted) * BRAKE_PER_SPEED, 0, 1);
 
