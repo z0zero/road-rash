@@ -13,6 +13,8 @@ export interface Motion {
   steering: number;
   /** Metres per second sideways from being bumped (positive is right); it dies away by itself. */
   shove: number;
+  /** Metres per second sideways from being kicked (positive is right); it dies away by itself, but slowly. */
+  kickShove: number;
 }
 
 export interface Controls {
@@ -47,8 +49,9 @@ export function ride(motion: Motion, controls: Controls, track: Track, dt: numbe
 
   motion.distance += motion.speed * dt;
   const edge = track.roadHalfWidth + track.shoulderWidth;
-  motion.offset = clamp(motion.offset + (motion.steering + push + motion.shove) * dt, -edge, edge);
+  motion.offset = clamp(motion.offset + (motion.steering + push + motion.shove + motion.kickShove) * dt, -edge, edge);
   motion.shove *= Math.exp(-TUNING.shoveDecay * dt);
+  motion.kickShove *= Math.exp(-TUNING.kickShoveDecay * dt);
 }
 
 function driveAcceleration(speed: number) {

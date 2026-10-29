@@ -283,7 +283,7 @@ export function createRace(options: RaceOptions): Race {
     offset: number,
   ): Rider => ({
     ...rider,
-    motion: { distance, offset, speed: 0, steering: 0, shove: 0 },
+    motion: { distance, offset, speed: 0, steering: 0, shove: 0, kickShove: 0 },
     status: "racing",
     finishTime: null,
     finishOrder: null,
@@ -381,7 +381,7 @@ export function createRace(options: RaceOptions): Race {
     }
     const { stamina, shove } = TUNING.attacks[kind];
     // A kick shoves its target sideways, away from the attacker.
-    if (shove > 0) target.motion.shove = awayFrom(attacker.motion, target.motion) * shove;
+    if (shove > 0) target.motion.kickShove = awayFrom(attacker.motion, target.motion) * shove;
     // A hit on a rider with no stamina left knocks them off their bike.
     if (target.stamina <= 0) crash(target, "knocked-off", target.motion.speed);
     target.stamina = Math.max(0, target.stamina - stamina);
