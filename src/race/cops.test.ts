@@ -128,16 +128,22 @@ function alongsideTheFirstCop(seed = 1) {
 }
 
 describe("fighting a cop", () => {
-  it("is punching and kicking it like a rider: a cop starts with 150 stamina, and a punch lowers it by 18", () => {
+  it("is punching and kicking it like a rider: a cop starts with 150 stamina, a punch lowers it by 18 and a kick by 6", () => {
     const { race, input } = alongsideTheFirstCop();
     expect(race.snapshot().cops[0].stamina).toBe(150);
 
     race.step({ ...input(), punch: true });
-    const events = [...race.drainEvents(), ...eventsDuring(race, 0.5, input)];
+    const punch = [...race.drainEvents(), ...eventsDuring(race, 0.5, input)];
 
-    expect(events).toContainEqual({ type: "attack-thrown", attacker: ME, target: FIRST_COP, kind: "punch" });
-    expect(events).toContainEqual({ type: "attack-landed", attacker: ME, target: FIRST_COP, kind: "punch" });
+    expect(punch).toContainEqual({ type: "attack-thrown", attacker: ME, target: FIRST_COP, kind: "punch" });
+    expect(punch).toContainEqual({ type: "attack-landed", attacker: ME, target: FIRST_COP, kind: "punch" });
     expect(race.snapshot().cops[0].stamina).toBe(132);
+
+    race.step({ ...input(), kick: true });
+    const kick = [...race.drainEvents(), ...eventsDuring(race, 0.5, input)];
+
+    expect(kick).toContainEqual({ type: "attack-landed", attacker: ME, target: FIRST_COP, kind: "kick" });
+    expect(race.snapshot().cops[0].stamina).toBe(126);
   });
 
   it("makes the cop fight back with its club for about 10 s after it was last hit, then let it be", () => {
