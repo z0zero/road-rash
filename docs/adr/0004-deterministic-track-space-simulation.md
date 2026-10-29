@@ -1,0 +1,3 @@
+# Deterministic track-space simulation, separate from rendering
+
+The race is simulated by a pure TypeScript module that knows nothing about React, Three.js or the browser: every rider, cop and traffic vehicle is a distance along the track plus a sideways offset, advanced in fixed 60 Hz steps with a seeded random generator. The 3D scene only reads the simulation's state and draws it. We chose this over a 3D physics engine because Road Rash's handling is arcade, not physical, and a deterministic headless simulation can be tested without a browser, can replay the same race from the same seed, and can fast-forward the rest of the field to the finish once the player's race ends.
