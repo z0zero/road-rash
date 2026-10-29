@@ -114,12 +114,28 @@ function buildScenery(track: Track): InstancedMesh[] {
 }
 
 const UP = new Vector3(0, 1, 0);
+/** Trees and houses stand where the land rises no more than this many metres per metre... */
+const STEEPEST_FOOTING = 1;
+/** ...and boulders, sunk deeper, where it rises up to this much... */
+const STEEPEST_FOOTING_FOR_ROCKS = 1.8;
+/** ...looking up to this far further from the road for such a place (metres)... */
+const FOOTING_SEARCH = 14;
+/** ...and never in the sea. */
+const SHORE = 0.5;
 
-/** The models and their transforms that draw one scenery item. */
+/** The models and their transforms that draw one scenery item; none if it finds nowhere to stand. */
 function placeItem(track: Track, terrain: Terrain, item: SceneryPlacement, index: number): [Model, Matrix4][] {
-  const at = track.pointAt(item.distance, item.offset);
-  const ground = terrain.groundAt(at.x, at.z);
   const { heading } = track.sampleAt(item.distance);
+  const placed = track.pointAt(item.distance, item.offset);
+  // Right of the heading is (cos, sin) in (x, z): away from the road on the item's side.
+  const away = Math.sign(item.offset);
+  const stands = item.kind === "palm" || item.kind === "pine" || item.kind === "rock" || item.kind === "house";
+  const steepest = item.kind === "rock" ? STEEPEST_FOOTING_FOR_ROCKS : STEEPEST_FOOTING;
+  const at = stands
+    ? footing(terrain, placed.x, placed.z, away * Math.cos(heading), away * Math.sin(heading), steepest)
+    : { ...placed, slope: 0 };
+  if (!at) return [];
+  const ground = terrain.groundAt(at.x, at.z);
   const random = hash(index * 2654435761);
   // Heading 0 is north (-z); a model's -z points along the road's heading turned by the item's yaw.
   const facing = new Quaternion().setFromAxisAngle(UP, -(heading + item.yaw));
@@ -134,7 +150,8 @@ function placeItem(track: Track, terrain: Terrain, item: SceneryPlacement, index
       return [[random < 0.55 ? "stone-pine" : "conical-pine", standing(0, uniform)]];
     case "rock": {
       const squash = new Vector3(item.scale * (0.8 + 0.5 * random), item.scale * (0.7 + 0.4 * hash(index + 99)), item.scale);
-      return [["rock", standing(0.15 * item.scale, squash)]];
+      // Sunk deeper on a slope, so its downhill side doesn't float.
+      return [["rock", standing(0.3 * item.scale * (1 + at.slope), squash)]];
     }
     case "house": {
       const house = standing(0, uniform);
@@ -163,4 +180,25 @@ function placeItem(track: Track, terrain: Terrain, item: SceneryPlacement, index
       return [["guard-rail", matrix]];
     }
   }
+}
+
+/**
+ * Somewhere firm to stand at or beyond a point, moving away from the road
+ * along (`awayX`, `awayZ`): ground that rises no more than `steepest` metres
+ * per metre, above the shore, so nothing floats off a cliff face or stands in
+ * the sea. Also says how steep the ground there is.
+ */
+function footing(terrain: Terrain, x: number, z: number, awayX: number, awayZ: number, steepest: number) {
+  for (let step = 0; step <= FOOTING_SEARCH; step += 1.5) {
+    const px = x + awayX * step;
+    const pz = z + awayZ * step;
+    const y = terrain.groundAt(px, pz);
+    if (y < SHORE) return null;
+    let slope = 0;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      slope = Math.max(slope, Math.abs(terrain.groundAt(px + dx, pz + dz) - y));
+    }
+    if (slope <= steepest) return { x: px, y, z: pz, slope };
+  }
+  return null;
 }
