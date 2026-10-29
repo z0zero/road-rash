@@ -87,6 +87,18 @@ export function withinReach(attacker: RiderSnapshot, target: RiderSnapshot) {
   return Math.abs(target.offset - attacker.offset) <= 1.8 && Math.abs(target.distance - attacker.distance) <= 2;
 }
 
+/** The rider on their bike, still racing, nearest `attacker` and within reach of their punches and kicks; null if none. */
+export function nearestWithinReach(riders: readonly RiderSnapshot[], attacker: RiderSnapshot): RiderId | null {
+  let nearest: RiderId | null = null;
+  let nearestApart = Infinity;
+  for (const other of riders) {
+    if (other.id === attacker.id || other.status !== "racing" || other.crash !== null || !withinReach(attacker, other)) continue;
+    const apart = Math.hypot(other.distance - attacker.distance, other.offset - attacker.offset);
+    if (apart < nearestApart) [nearest, nearestApart] = [other.id, apart];
+  }
+  return nearest;
+}
+
 /**
  * Scripted input that rides the player up alongside the opponent `target`,
  * `across` metres to its side (towards the middle of the road) and level with
@@ -157,12 +169,19 @@ export function nearestOpponent(race: Race, temperament?: Temperament): RiderId 
     .reduce((nearest, other) => (other.distance < nearest.distance ? other : nearest)).id;
 }
 
-/** A started race in which the player has ridden up alongside a racer (an opponent who rarely attacks), within reach of them. */
+/**
+ * A started race in which the player has ridden up alongside a racer (an
+ * opponent who rarely attacks): the racer is the nearest rider within reach.
+ */
 export function alongsideARacer(seed = 1) {
   const race = startedRace(seed);
   const target = nearestOpponent(race, "racer");
   const input = rideAlongside(race, target);
-  secondsUntil(race, input, () => withinReach(player(race), race.snapshot().riders[target]), 60);
+  const racerNearest = () => {
+    const { riders } = race.snapshot();
+    return nearestWithinReach(riders, riders[PLAYER]) === target;
+  };
+  secondsUntil(race, input, racerNearest, 60);
   race.drainEvents();
   return { race, target, input };
 }

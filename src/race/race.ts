@@ -12,7 +12,8 @@ import {
 } from "./crashing";
 import type { AttackKind, CrashCause, RaceEvent, RaceOutcome, RiderId } from "./events";
 import { lineUpOpponents } from "./field";
-import { attackSteps, awayFrom, nearestWithinReach, windUpSteps, type Attack } from "./fighting";
+import { attackStage, attackSteps, awayFrom, nearestWithinReach, windUpSteps, type Attack } from "./fighting";
+import { opponentAttack, opponentIntent } from "./opponent-fighting";
 import { catchUpFor, opponentControls, paceFor, type OpponentRiding } from "./opponent-riding";
 import { OPPONENTS, PLAYER_NAME, type Temperament } from "./opponents";
 import { createRandom } from "./random";
@@ -84,10 +85,22 @@ export interface RiderSnapshot {
   readonly stamina: number;
   /** How intact the rider's bike is: 100 when perfect, down to 0, when it is wrecked. */
   readonly condition: number;
+  /** The attack the rider is making, or null. */
+  readonly attack: AttackSnapshot | null;
   /** Null while the rider is on their bike; after a crash, "tumbling" and then "on-foot" until they remount. */
   readonly crash: CrashPhase | null;
   /** Where the rider's bike is: under them while they ride it, or wherever it slid to after a crash. */
   readonly bike: BikeSnapshot;
+}
+
+/** An attack under way: it winds up, strikes at the end of its wind-up, then recovers before the next. */
+export interface AttackSnapshot {
+  readonly kind: AttackKind;
+  /** Which way the attack goes: 1 to the attacker's right, -1 to their left. */
+  readonly side: -1 | 1;
+  readonly stage: "wind-up" | "recovery";
+  /** How far through its stage the attack is, from 0 to 1. */
+  readonly progress: number;
 }
 
 export interface BikeSnapshot {
@@ -247,10 +260,10 @@ export function createRace(options: RaceOptions): Race {
   /** The riders an attack can be aimed at. */
   const targets = onTheirBikes;
 
-  /** Starts an attack's wind-up, aimed at the nearest rider within reach (if any). */
+  /** Starts an attack's wind-up, aimed at the nearest rider within reach (if any): towards them, or else to the right. */
   function throwAttack(attacker: Rider, kind: AttackKind) {
-    attacker.attack = { kind, steps: 0 };
     const target = nearestWithinReach(attacker.motion, targets(), kind);
+    attacker.attack = { kind, steps: 0, side: target ? awayFrom(attacker.motion, target.motion) : 1 };
     events.push({
       type: "attack-thrown",
       attacker: { kind: "rider", id: attacker.id },
@@ -267,7 +280,10 @@ export function createRace(options: RaceOptions): Race {
       attack.steps++;
       if (attack.steps === windUpSteps(attack.kind) && attacker.status === "racing" && !attacker.crash) {
         const target = nearestWithinReach(attacker.motion, targets(), attack.kind);
-        if (target) land(attacker, target, attack.kind);
+        if (target) {
+          attack.side = awayFrom(attacker.motion, target.motion);
+          land(attacker, target, attack.kind);
+        }
       }
       if (attack.steps >= attackSteps(attack.kind)) attacker.attack = null;
     }
@@ -394,12 +410,21 @@ export function createRace(options: RaceOptions): Race {
         // Catch-up keeps the field near the player, so it stops once the player's race is over.
         const catchUp = (rider: Rider) =>
           player.status === "racing" ? catchUpFor(rider.motion.distance - whereIs(player).distance) : 1;
+        const playerToFight = player.status === "racing" && !player.crash ? player.motion : null;
         const controls = riders.map((rider) => {
           if (rider.status !== "racing") return FINISHED_CONTROLS;
-          return rider.riding ? opponentControls(rider.motion, rider.riding, track, field, catchUp(rider)) : input;
+          if (!rider.riding || !rider.temperament) return input;
+          const intent = opponentIntent(rider.temperament, rider.motion, playerToFight);
+          return opponentControls(rider.motion, rider.riding, track, field, catchUp(rider), intent);
         });
         if (player.status === "racing" && !player.crash && !player.attack && (input.punch || input.kick)) {
           throwAttack(player, input.punch ? "punch" : "kick");
+        }
+        for (const opponent of riding) {
+          if (!opponent.temperament || opponent.attack) continue;
+          const nearest = nearestWithinReach(opponent.motion, riding, "punch");
+          const kind = nearest && opponentAttack(opponent.temperament, nearest.id === PLAYER, random);
+          if (kind) throwAttack(opponent, kind);
         }
         const distancesBefore = riders.map((rider) => whereIs(rider).distance);
         riders.forEach((rider, index) => {
@@ -439,6 +464,7 @@ export function createRace(options: RaceOptions): Race {
             finishTime: rider.finishTime,
             stamina: rider.stamina,
             condition: rider.condition,
+            attack: rider.attack && { kind: rider.attack.kind, side: rider.attack.side, ...attackStage(rider.attack) },
             crash: rider.crash?.phase ?? null,
             bike: { distance: rider.motion.distance, offset: rider.motion.offset, speed: rider.motion.speed },
           };

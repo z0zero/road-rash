@@ -92,6 +92,28 @@ describe("attacks", () => {
     expect(windUp("kick")).toBeLessThan(0.28);
   });
 
+  it("show in the attacker's snapshot: winding up towards the target's side, then recovering", () => {
+    const { race, target, input } = alongsideARacer();
+    const side = Math.sign(race.snapshot().riders[target].offset - player(race).offset);
+    expect(player(race).attack).toBeNull();
+    const stages: string[] = [];
+    let progress = -1;
+
+    race.step({ ...input(), punch: true });
+    for (let step = 0; step < STEPS_PER_SECOND && player(race).attack; step++) {
+      const attack = player(race).attack;
+      expect(attack).toMatchObject({ kind: "punch", side });
+      if (attack?.stage !== stages.at(-1)) [stages[stages.length], progress] = [attack?.stage ?? "", -1];
+      expect(attack?.progress).toBeGreaterThan(progress);
+      expect(attack?.progress).toBeLessThanOrEqual(1);
+      progress = attack?.progress ?? NaN;
+      race.step(input());
+    }
+
+    expect(stages).toEqual(["wind-up", "recovery"]);
+    expect(player(race).attack).toBeNull();
+  });
+
   it("can't be thrown again until the last one has struck and a short recovery is over", () => {
     const { race, input } = alongsideARacer();
     const mashing = () => ({ ...input(), punch: true });
@@ -168,14 +190,17 @@ describe("stamina", () => {
   it("only starts recovering 2 s after the latest hit", () => {
     const alongside = alongsideARacer();
     const { race, target, input } = alongside;
+    const stamina = () => race.snapshot().riders[target].stamina;
     punchTheRacer(alongside);
     eventsDuring(race, 1.5, input);
     punchTheRacer(alongside);
-    expect(race.snapshot().riders[target].stamina).toBe(64);
+    const afterTheLatestHit = stamina();
+    expect(afterTheLatestHit).toBeLessThan(82);
 
     eventsDuring(race, 1.9, input);
-
-    expect(race.snapshot().riders[target].stamina).toBe(64);
+    expect(stamina()).toBe(afterTheLatestHit);
+    eventsDuring(race, 0.3, input);
+    expect(stamina()).toBeGreaterThan(afterTheLatestHit);
   });
 });
 
