@@ -67,12 +67,32 @@ const IN_THE_WAY = 1.1;
 /** ...if it would reach them within this many seconds. */
 const HOLD_BACK_TIME = 0.8;
 
+/** What an opponent is up to besides racing. */
+export interface Intent {
+  /** A rider the opponent is riding up alongside, to fight them; null when it is just racing. */
+  readonly alongside: Readonly<Motion> | null;
+  /** Its pace as a share of its usual pace: above 1 to keep up with a fight, below 1 while it drops back. */
+  readonly paceShare: number;
+}
+
+/** Just racing. */
+export const RACING: Intent = { alongside: null, paceShare: 1 };
+
+/** An opponent riding alongside a rider to fight them keeps this many metres to their side, within reach... */
+const FIGHTING_GAP = 1.4;
+/** ...closing in on them along the track at this many metres per second for every metre between them... */
+const LEVEL_GAIN = 0.8;
+/** ...but no faster than this (m/s), so that running into them only bumps them. */
+const MAX_CLOSING = 5;
+
 /**
  * An opponent's controls for one step: the throttle and brake to ride at its
  * pace (times `catchUp`, see `catchUpFor`), slowing in time for the bends
  * ahead, and the steering to follow its racing line, cutting towards the
  * inside of bends, and to get around the other riders on the road (`field`,
- * the motions of every rider still racing).
+ * the motions of every rider still racing). With an `intent` to ride
+ * alongside someone, it rides level with them, to their side, instead of
+ * following its racing line, though never faster than its pace allows.
  */
 export function opponentControls(
   motion: Readonly<Motion>,
@@ -80,14 +100,21 @@ export function opponentControls(
   track: Track,
   field: readonly Readonly<Motion>[],
   catchUp: number,
+  intent: Intent = RACING,
 ): Controls {
   const edge = track.roadHalfWidth - EDGE_MARGIN;
   const bendAhead = track.sampleAt(motion.distance + motion.speed * APEX_LOOK_AHEAD).curvature;
   const apexShift = clamp(bendAhead * APEX_SHIFT_PER_CURVATURE, -MAX_APEX_SHIFT, MAX_APEX_SHIFT);
-  const { line, holdBehind } = lineAround(motion, clamp(riding.lane + apexShift, -edge, edge), field, edge);
+  const racingLine = clamp(riding.lane + apexShift, -edge, edge);
+  const { alongside } = intent;
+  const { line, holdBehind } = lineAround(motion, alongside ? lineBeside(motion, alongside, edge) : racingLine, field, edge);
 
   const safe = safeSpeedAt(track, motion.distance + motion.speed * BRAKING_LEAD);
-  const wanted = Math.min(riding.pace * catchUp * Math.min(TUNING.topSpeed, safe), holdBehind);
+  let wanted = Math.min(riding.pace * intent.paceShare * catchUp * Math.min(TUNING.topSpeed, safe), holdBehind);
+  if (alongside) {
+    const closing = clamp(LEVEL_GAIN * (alongside.distance - motion.distance), -MAX_CLOSING, MAX_CLOSING);
+    wanted = Math.min(wanted, Math.max(0, alongside.speed + closing));
+  }
   const throttle = clamp((wanted - motion.speed) * THROTTLE_PER_SPEED, 0, 1);
   const brake = clamp((motion.speed - wanted) * BRAKE_PER_SPEED, 0, 1);
 
@@ -97,6 +124,13 @@ export function opponentControls(
   const reach = maxSidewaysSpeed(motion.speed);
   const steer = reach > 0 ? clamp((sideways - push) / reach, -1, 1) : 0;
   return { throttle, brake, steer };
+}
+
+/** The line `FIGHTING_GAP` to the side of `rider` that `me` is on, or their other side if that one is off the road. */
+function lineBeside(me: Readonly<Motion>, rider: Readonly<Motion>, edge: number) {
+  const side = me.offset >= rider.offset ? 1 : -1;
+  const line = rider.offset + side * FIGHTING_GAP;
+  return clamp(Math.abs(line) <= edge ? line : rider.offset - side * FIGHTING_GAP, -edge, edge);
 }
 
 /**
