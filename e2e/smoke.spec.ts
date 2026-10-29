@@ -205,10 +205,17 @@ interface SoundSpy {
   outputs: AnalyserNode[];
 }
 
+declare global {
+  interface Window {
+    /** Set in the page by `spyOnSound`. */
+    soundSpy: SoundSpy;
+  }
+}
+
 /** Runs in the page before its scripts: spies on Web Audio without changing what it does. */
 function spyOnSound() {
   const spy: SoundSpy = { contexts: [], outputs: [] };
-  (window as unknown as { soundSpy: SoundSpy }).soundSpy = spy;
+  window.soundSpy = spy;
   const Original = window.AudioContext;
   window.AudioContext = class extends Original {
     constructor(options?: AudioContextOptions) {
@@ -229,14 +236,14 @@ function spyOnSound() {
 
 /** The state of every audio context the page made, oldest first. */
 function audioStates(page: Page) {
-  return page.evaluate(() => (window as unknown as { soundSpy: SoundSpy }).soundSpy.contexts.map((c) => c.state));
+  return page.evaluate(() => window.soundSpy.contexts.map((context) => context.state));
 }
 
 /** The loudest sample going to the speakers right now, from 0 (silence) up. */
 function loudness(page: Page) {
   return page.evaluate(() => {
     let peak = 0;
-    for (const output of (window as unknown as { soundSpy: SoundSpy }).soundSpy.outputs) {
+    for (const output of window.soundSpy.outputs) {
       const samples = new Float32Array(output.fftSize);
       output.getFloatTimeDomainData(samples);
       for (const sample of samples) peak = Math.max(peak, Math.abs(sample));
