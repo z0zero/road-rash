@@ -527,12 +527,13 @@ export function createRace(options: RaceOptions): Race {
     events.push({ type: "remounted", rider: rider.id });
   }
 
-  /** Riders who have gone long enough without being hit get their stamina back, a little every step. */
+  /** Riders and cops who have gone long enough without being hit get their stamina back, a little every step. */
   function recoverStamina() {
-    for (const rider of riders) {
-      rider.stepsSinceHit++;
-      if (rider.stepsSinceHit > RECOVERY_DELAY_STEPS) {
-        rider.stamina = Math.min(TUNING.fullStamina, rider.stamina + TUNING.staminaRecovery * STEP_SECONDS);
+    for (const fighter of [...riders, ...cops]) {
+      fighter.stepsSinceHit++;
+      if (fighter.stepsSinceHit > RECOVERY_DELAY_STEPS) {
+        const full = fighter.kind === "rider" ? TUNING.fullStamina : TUNING.cops.fullStamina;
+        fighter.stamina = Math.min(full, fighter.stamina + TUNING.staminaRecovery * STEP_SECONDS);
       }
     }
   }
