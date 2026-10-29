@@ -531,6 +531,27 @@ for (const [behaviour, blockAudio] of [
   });
 }
 
+/** Runs in the page before its scripts: a browser without WebGL 2, or with it turned off. */
+function withoutWebGL2() {
+  const getContext = HTMLCanvasElement.prototype.getContext as (this: HTMLCanvasElement, ...args: unknown[]) => unknown;
+  Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+    configurable: true,
+    value(this: HTMLCanvasElement, type: string, ...options: unknown[]) {
+      return type === "webgl2" ? null : getContext.call(this, type, ...options);
+    },
+  });
+}
+
+test("explains that the game needs a newer browser where there is no WebGL 2", async ({ page }) => {
+  await page.addInitScript(withoutWebGL2);
+  await page.reload();
+
+  await expect(page.getByRole("heading", { name: "Rev & Wreck needs a newer browser" })).toBeVisible();
+  await expect(page.getByText(/WebGL\s2/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start Race" })).toHaveCount(0);
+  await expect(page.locator("canvas")).toHaveCount(0);
+});
+
 test("downloads less than 10 MB to get racing", async ({ browser, baseURL }) => {
   // A fresh browser context, so nothing comes from the cache.
   const context = await browser.newContext({ baseURL });
