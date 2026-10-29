@@ -29,7 +29,7 @@ const LYING_HEIGHT = 0.24;
  * tucking in at speed, punching and kicking, and holding and swinging a club
  * if they have one. After a crash the rider drops any club and leaves the
  * bike, which falls on its side and slides to a stop: they tumble along the
- * road, then get up and run back to it. A cop's bike is a `police` bike, its
+ * road, then get up and run back to it. A `cop`'s bike has panniers, its
  * light bar flashing red and blue while they ride in the race. It updates
  * `motion` first each frame, so whatever follows this rider (the camera
  * follows the player) reads it fresh.
@@ -38,14 +38,14 @@ export function BikeAndRider({
   session,
   motion,
   livery,
-  police = false,
+  cop = false,
 }: {
   session: GameSession;
   motion: BikeMotion;
   livery: Livery;
-  police?: boolean;
+  cop?: boolean;
 }) {
-  const model = useMemo(() => createRiderModel(livery, { police }), [livery, police]);
+  const model = useMemo(() => createRiderModel(livery, { cop }), [livery, cop]);
   // Where the rider is on their own after a crash; while they ride, the model's rider sits on the bike.
   const body = useMemo(() => ({ group: new Group(), seat: model.rider.position.clone() }), [model]);
   useEffect(() => () => model.dispose(), [model]);
