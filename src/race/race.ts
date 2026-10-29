@@ -1,5 +1,6 @@
 import { getCoastalTrack } from "./coastal-track";
 import { settleContact } from "./contact";
+import { lineUpCops, moveCop, patrolIntent, type CopStatus } from "./cops";
 import {
   canRemount,
   carryOn,
@@ -10,7 +11,7 @@ import {
   type CrashPhase,
   type OnFootControls,
 } from "./crashing";
-import type { AttackKind, CrashCause, RaceEvent, RaceOutcome, RiderId } from "./events";
+import type { AttackKind, CopId, CrashCause, RaceEvent, RaceOutcome, RiderId } from "./events";
 import { lineUpOpponents } from "./field";
 import {
   attackStage,
@@ -137,6 +138,25 @@ export interface RaceSnapshot {
   readonly nearestOpponent: RiderId | null;
   /** Opponents alongside the player, or coming up from behind, on either side of them. */
   readonly warnings: Warnings;
+  /** Every cop, indexed by `CopId`. */
+  readonly cops: readonly CopSnapshot[];
+}
+
+/** A cop on a motorcycle, as the riders see them. */
+export interface CopSnapshot {
+  readonly id: CopId;
+  readonly name: string;
+  readonly status: CopStatus;
+  /** Metres along the track's centreline. */
+  readonly distance: number;
+  /** Metres sideways from the centreline; positive is right of the race direction. */
+  readonly offset: number;
+  /** Metres per second along the track. */
+  readonly speed: number;
+  /** How much fight the cop has left: 150 when fresh, down to 0. */
+  readonly stamina: number;
+  /** Null while the cop is on their bike; "tumbling" and then "on-foot" once knocked off it. */
+  readonly crash: CrashPhase | null;
 }
 
 /** How the race went for everyone, once the player's race is over. */
@@ -276,6 +296,7 @@ export function createRace(options: RaceOptions): Race {
     const riding = { pace: paceFor(skill), lane: offset };
     riders.push(lineUp({ id: PLAYER + 1 + index, name, temperament, riding }, distance, offset));
   });
+  const cops = lineUpCops(track);
 
   const clock = () => Math.max(0, stepsTaken - COUNTDOWN_STEPS) / STEPS_PER_SECOND;
 
@@ -383,6 +404,15 @@ export function createRace(options: RaceOptions): Race {
     }
   }
 
+  /** Cops waiting on the shoulder join the race once the player, still racing, has passed them. */
+  function joinThePlayer() {
+    const player = riders[PLAYER];
+    if (player.status !== "racing") return;
+    for (const cop of cops) {
+      if (cop.status === "waiting" && whereIs(player).distance >= cop.motion.distance) cop.status = "riding";
+    }
+  }
+
   /** Finishes the riders who crossed the finish line during the step that began at `clockBefore`, in the order they crossed it. */
   function finishCrossings(distancesBefore: readonly number[], clockBefore: number) {
     const crossings = riders
@@ -477,6 +507,11 @@ export function createRace(options: RaceOptions): Race {
           // A club reaches further than a kick: a club holder swings at a rider its kick can't reach.
           if (kind) throwAttack(opponent, kind === "kick" && !withinReach(opponent.motion, nearest.motion, kind) ? "punch" : kind);
         }
+        // Cops find their way around everyone on a bike: the riders, and each other.
+        const everyoneOnABike = [...field, ...cops.filter((cop) => cop.status !== "knocked-off").map((cop) => cop.motion)];
+        const copIntents = cops.map((cop) =>
+          cop.status === "riding" ? patrolIntent(cop.motion, whereIs(player), track, everyoneOnABike) : null,
+        );
         const distancesBefore = riders.map((rider) => whereIs(rider).distance);
         riders.forEach((rider, index) => {
           if (!rider.crash) {
@@ -488,6 +523,11 @@ export function createRace(options: RaceOptions): Race {
             if (rider.status === "racing" && canRemount(rider.crash, rider.motion)) getBackOn(rider);
           }
         });
+        cops.forEach((cop, index) => {
+          const intent = copIntents[index];
+          if (intent) moveCop(cop.motion, intent, edge);
+        });
+        joinThePlayer();
         for (const { rider, speedDifference } of settleContact(riding, edge)) crash(rider, "rider", speedDifference);
         advanceAttacks();
         recoverStamina();
@@ -527,6 +567,16 @@ export function createRace(options: RaceOptions): Race {
             bike: { distance: rider.motion.distance, offset: rider.motion.offset, speed: rider.motion.speed },
           };
         }),
+        cops: cops.map((cop) => ({
+          id: cop.id,
+          name: cop.name,
+          status: cop.status,
+          distance: cop.motion.distance,
+          offset: cop.motion.offset,
+          speed: cop.motion.speed,
+          stamina: cop.stamina,
+          crash: null,
+        })),
       };
     },
     drainEvents() {
