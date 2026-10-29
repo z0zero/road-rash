@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { createRace, PLAYER, type AttackKind, type RaceEvent, type RiderId } from ".";
-import { alongsideAn, eventsDuring, eventsUntil, player, punchedMidSwing, secondsUntil } from "./test-helpers";
+import {
+  alongsideAn,
+  eventsDuring,
+  eventsUntil,
+  player,
+  punchedMidSwing,
+  rideAlongside,
+  secondsUntil,
+} from "./test-helpers";
+
+type AttackThrown = Extract<RaceEvent, { type: "attack-thrown" }>;
 
 const ME = { kind: "rider", id: PLAYER } as const;
 const rider = (id: RiderId) => ({ kind: "rider", id }) as const;
@@ -16,9 +26,9 @@ describe("clubs", () => {
   it("are held at the start by the three bullies, and by nobody else", () => {
     const { riders } = createRace({ seed: 1 }).snapshot();
 
-    const holders = riders.filter((rider) => rider.weapon === "club");
-    expect(holders.map((rider) => rider.temperament)).toEqual(["bully", "bully", "bully"]);
-    expect(riders.filter((rider) => rider.weapon !== "club").every((rider) => rider.weapon === null)).toBe(true);
+    const holders = riders.filter((each) => each.weapon === "club");
+    expect(holders.map((holder) => holder.temperament)).toEqual(["bully", "bully", "bully"]);
+    expect(riders.filter((each) => each.weapon !== "club").every((other) => other.weapon === null)).toBe(true);
   });
 
   it("are swung instead of punching: a bully holding one swings it or kicks, and never punches", () => {
@@ -39,6 +49,57 @@ describe("clubs", () => {
 
     expect(before).toBeGreaterThanOrEqual(30);
     expect(before - player(race).stamina).toBe(30);
+  });
+
+  it("are swung with a wind-up of about 0.3 s before the swing strikes", () => {
+    const { race, target, input } = alongsideAn("bully");
+    const them = () => race.snapshot().riders[target];
+    eventsUntil(race, input, (event) => event.type === "attack-thrown" && event.attacker.id === target && event.kind === "club-swing", 30);
+
+    const windUp = secondsUntil(race, input, () => them().attack?.stage !== "wind-up", 1);
+
+    expect(them().attack).toMatchObject({ kind: "club-swing", stage: "recovery" });
+    expect(windUp).toBeGreaterThan(0.25);
+    expect(windUp).toBeLessThan(0.33);
+  });
+
+  it("are swung by the player's punch button once they hold one", () => {
+    const { race, input } = punchedMidSwing();
+    expect(player(race).weapon).toBe("club");
+
+    race.step({ ...input(), punch: true });
+
+    expect(race.drainEvents().filter((event) => event.type === "attack-thrown" && event.attacker.id === PLAYER)).toEqual([
+      expect.objectContaining({ kind: "club-swing" }),
+    ]);
+  });
+
+  it("reach riders up to 2.4 m to the side, further than a punch reaches, but no further", () => {
+    /** The rider a swing is aimed at when the player throws it with the bully they took it from `low` to `high` metres to their side. */
+    const aimedAt = (low: number, high: number) => {
+      // A race in which nobody else comes near while the player, holding the club, edges away from the bully.
+      const { race, target } = punchedMidSwing(3);
+      const edgingAway = rideAlongside(race, target, { across: 3.2 });
+      const aside = () => {
+        const { riders } = race.snapshot();
+        const [me, them] = [riders[PLAYER], riders[target]];
+        const gap = Math.abs(them.offset - me.offset);
+        const alone = riders.every(
+          (other) => other.id === PLAYER || other.id === target || Math.hypot(other.distance - me.distance, other.offset - me.offset) > 3.5,
+        );
+        return me.weapon === "club" && me.attack === null && alone && gap >= low && gap <= high && Math.abs(them.distance - me.distance) < 1.5;
+      };
+      secondsUntil(race, edgingAway, aside, 10);
+      race.drainEvents();
+      race.step({ ...edgingAway(), punch: true });
+      const thrown = race.drainEvents().find((event): event is AttackThrown => event.type === "attack-thrown" && event.attacker.id === PLAYER);
+      expect(thrown?.kind).toBe("club-swing");
+      return { target, aimedAt: thrown?.target };
+    };
+
+    const near = aimedAt(2.0, 2.3);
+    expect(near.aimedAt).toEqual(rider(near.target));
+    expect(aimedAt(2.5, 2.9).aimedAt).toBeNull();
   });
 });
 
