@@ -119,6 +119,23 @@ test.describe("when the operating system prefers reduced motion", () => {
   });
 });
 
+test("downloads less than 10 MB to get racing", async ({ browser, baseURL }) => {
+  // A fresh browser context, so nothing comes from the cache.
+  const context = await browser.newContext({ baseURL });
+  const page = await context.newPage();
+  const sizes: Promise<number>[] = [];
+  page.on("requestfinished", (request) => sizes.push(request.sizes().then((size) => size.responseBodySize)));
+
+  await page.goto("/");
+  await startRacing(page);
+  await page.waitForLoadState("networkidle");
+
+  const bytes = (await Promise.all(sizes)).reduce((total, size) => total + size, 0);
+  expect(bytes).toBeGreaterThan(0);
+  expect(bytes).toBeLessThan(10 * 1024 * 1024);
+  await context.close();
+});
+
 test("draws the race on a canvas", async ({ page }) => {
   await expect(page.locator("canvas")).toBeVisible();
   await expect(page.locator("canvas")).toHaveCount(1);
