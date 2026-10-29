@@ -14,6 +14,7 @@ export { STEP_SECONDS } from "./steps";
 export type {
   AttackSnapshot,
   BikeSnapshot,
+  CopSnapshot,
   PlayerInput,
   Race,
   RaceOptions,
@@ -25,6 +26,7 @@ export type {
 } from "./race";
 export type { Track, TrackSample, WorldPoint } from "./track";
 export type { CrashPhase } from "./crashing";
+export type { CopStatus } from "./cops";
 export type { Weapon } from "./fighting";
 export type { Warnings } from "./surroundings";
 export type { Temperament } from "./opponents";

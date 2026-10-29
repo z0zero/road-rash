@@ -138,9 +138,10 @@ function lineBeside(me: Readonly<Motion>, rider: Readonly<Motion>, edge: number)
  * clear, otherwise the clear line nearest to where the opponent is now. Riders
  * it is catching block the lines close to theirs, and a rider alongside blocks
  * everything beyond them, so an opponent never steers across one. When a rider
- * it is about to reach is in the way, it holds back to their speed.
+ * it is about to reach is in the way, it holds back to their speed. Cops find
+ * their way around the riders the same way.
  */
-function lineAround(me: Readonly<Motion>, racingLine: number, field: readonly Readonly<Motion>[], edge: number) {
+export function lineAround(me: Readonly<Motion>, racingLine: number, field: readonly Readonly<Motion>[], edge: number) {
   const blocked: [number, number][] = [];
   let holdBehind = Infinity;
   for (const other of field) {
@@ -180,34 +181,52 @@ function nearestClearLine(racingLine: number, current: number, blocked: [number,
   return ends.reduce((best, end) => (Math.abs(end - current) < Math.abs(best - current) ? end : best));
 }
 
-const safeSpeeds = new WeakMap<Track, Float64Array>();
+/** How hard a bike is ridden through bends. */
+export interface BendLimits {
+  /** The bike's top speed, m/s. */
+  readonly topSpeed: number;
+  /** The share of the sideways speed steering gives that holds the bike's line through a bend. */
+  readonly grip: number;
+  /** How hard (m/s²) its rider plans to brake for the bends ahead. */
+  readonly braking: number;
+}
+
+/** Opponents ride a rider's bike, and hold their line with some steering to spare. */
+const OPPONENT_LIMITS: BendLimits = { topSpeed: TUNING.topSpeed, grip: CORNER_GRIP, braking: PLANNED_BRAKING };
+
+const safeSpeeds = new WeakMap<Track, Map<BendLimits, Float64Array>>();
 
 /**
- * The fastest an opponent riding flat out goes at a distance: slow enough to
- * hold its line through the bend there, and to brake in time for the bends
- * ahead. Worked out once per track, a metre at a time.
+ * The fastest a bike ridden flat out within `limits` (an opponent's, unless
+ * given) goes at a distance: slow enough to hold its line through the bend
+ * there, and to brake in time for the bends ahead. Worked out once per track
+ * and limits, a metre at a time.
  */
-function safeSpeedAt(track: Track, distance: number): number {
-  let speeds = safeSpeeds.get(track);
+export function safeSpeedAt(track: Track, distance: number, limits: BendLimits = OPPONENT_LIMITS): number {
+  let byLimits = safeSpeeds.get(track);
+  if (!byLimits) {
+    byLimits = new Map();
+    safeSpeeds.set(track, byLimits);
+  }
+  let speeds = byLimits.get(limits);
   if (!speeds) {
     speeds = new Float64Array(track.length + 1);
-    for (let d = 0; d <= track.length; d++) speeds[d] = holdingSpeed(Math.abs(track.sampleAt(d).curvature));
+    for (let d = 0; d <= track.length; d++) speeds[d] = holdingSpeed(Math.abs(track.sampleAt(d).curvature), limits);
     for (let d = track.length - 1; d >= 0; d--) {
-      speeds[d] = Math.min(speeds[d], Math.sqrt(speeds[d + 1] * speeds[d + 1] + 2 * PLANNED_BRAKING));
+      speeds[d] = Math.min(speeds[d], Math.sqrt(speeds[d + 1] * speeds[d + 1] + 2 * limits.braking));
     }
-    safeSpeeds.set(track, speeds);
+    byLimits.set(limits, speeds);
   }
   const metre = clamp(Math.floor(distance), 0, track.length - 1);
   return Math.min(speeds[metre], speeds[metre + 1]);
 }
 
-/** The fastest speed at which steering, using CORNER_GRIP of its reach, can hold a line against a curve's push. */
-function holdingSpeed(curvature: number): number {
-  const holds = (speed: number) =>
-    TUNING.curvePush * speed * speed * curvature <= CORNER_GRIP * maxSidewaysSpeed(speed);
-  if (holds(TUNING.topSpeed)) return TUNING.topSpeed;
+/** The fastest speed, up to the bike's top speed, at which steering, using the limits' grip, can hold a line against a curve's push. */
+function holdingSpeed(curvature: number, { topSpeed, grip }: BendLimits): number {
+  const holds = (speed: number) => TUNING.curvePush * speed * speed * curvature <= grip * maxSidewaysSpeed(speed);
+  if (holds(topSpeed)) return topSpeed;
   let low = 0;
-  let high: number = TUNING.topSpeed;
+  let high = topSpeed;
   for (let i = 0; i < 30; i++) {
     const middle = (low + high) / 2;
     if (holds(middle)) low = middle;

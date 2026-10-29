@@ -74,4 +74,12 @@ export const TUNING = {
   crashConditionLoss: 6,
   /** ...plus this much per km/h of the impact speed. */
   crashConditionLossPerKmh: 0.15,
+  cops: {
+    /** Where the cops wait on the shoulder for the player to pass, in metres from the start line. */
+    waitingPoints: [1800, 4500],
+    /** 66 m/s is about 238 km/h: faster than any rider's bike. */
+    topSpeed: 66,
+    /** A fresh cop's stamina. */
+    fullStamina: 150,
+  },
 } as const;
