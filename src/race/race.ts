@@ -158,7 +158,7 @@ export interface CopSnapshot {
   readonly id: CopId;
   readonly name: string;
   readonly status: CopStatus;
-  /** Metres along the track's centreline. */
+  /** Where the cop is, on their bike or off it: metres along the track's centreline. */
   readonly distance: number;
   /** Metres sideways from the centreline; positive is right of the race direction. */
   readonly offset: number;
@@ -172,6 +172,8 @@ export interface CopSnapshot {
   readonly weapon: Weapon | null;
   /** Null while the cop is on their bike; "tumbling" and then "on-foot" once knocked off it. */
   readonly crash: CrashPhase | null;
+  /** Where the cop's bike is: under them while they ride it, or wherever it slid to after they were knocked off. */
+  readonly bike: BikeSnapshot;
   /** The crashed rider the cop is riding to, to bust them; null when it isn't busting anyone. */
   readonly busting: RiderId | null;
   /** The rider the cop is fighting back against, for hitting it; null when it isn't fighting anyone. */
@@ -285,6 +287,11 @@ function who(fighter: Fighter): RiderOrCop {
   return fighter.kind === "rider" ? { kind: "rider", id: fighter.id } : { kind: "cop", id: fighter.id };
 }
 
+/** Where something is in track space, and how fast it goes along the track, as plain data. */
+function placeOf({ distance, offset, speed }: { readonly distance: number; readonly offset: number; readonly speed: number }) {
+  return { distance, offset, speed };
+}
+
 /** Metres between two places in track space (straight-line). */
 function apart(a: { readonly distance: number; readonly offset: number }, b: { readonly distance: number; readonly offset: number }) {
   return Math.hypot(a.distance - b.distance, a.offset - b.offset);
@@ -396,11 +403,25 @@ export function createRace(options: RaceOptions): Race {
     const { stamina, shove } = TUNING.attacks[kind];
     // A kick shoves its target sideways, away from the attacker.
     if (shove > 0) target.motion.shove = awayFrom(attacker.motion, target.motion) * shove;
-    // A hit on a rider with no stamina left knocks them off their bike.
-    if (target.stamina <= 0 && target.kind === "rider") crash(target, "knocked-off", target.motion.speed);
+    // A hit on a rider or cop with no stamina left knocks them off their bike.
+    if (target.stamina <= 0) {
+      if (target.kind === "rider") crash(target, "knocked-off", target.motion.speed);
+      else knockOff(target);
+    }
     target.stamina = Math.max(0, target.stamina - stamina);
     target.stepsSinceHit = 0;
     if (target.kind === "cop" && attacker.kind === "rider" && target.status === "riding") fightBack(target, attacker);
+  }
+
+  /** Knocks a cop off their bike and out of the race for good, dropping their club. */
+  function knockOff(cop: Cop) {
+    events.push({ type: "cop-knocked-off", cop: cop.id, impactSpeed: cop.motion.speed });
+    cop.status = "knocked-off";
+    cop.crash = throwOff(cop.motion);
+    cop.attack = null;
+    cop.weapon = null;
+    cop.busting = null;
+    cop.fightingBack = null;
   }
 
   /** A cop hit by a rider fights back against them, until a while after it was last hit. */
@@ -646,6 +667,11 @@ export function createRace(options: RaceOptions): Race {
         cops.forEach((cop, index) => {
           const intent = copIntents[index];
           if (intent) moveCop(cop.motion, intent, edge);
+          // A knocked-off cop's bike slides to a stop while they tumble, and then they stay where they are.
+          if (cop.crash) {
+            slide(cop.motion, edge);
+            carryOn(cop.crash, cop.motion, STAND_STILL, edge);
+          }
         });
         bustTheCaught();
         joinThePlayer();
@@ -693,13 +719,12 @@ export function createRace(options: RaceOptions): Race {
           id: cop.id,
           name: cop.name,
           status: cop.status,
-          distance: cop.motion.distance,
-          offset: cop.motion.offset,
-          speed: cop.motion.speed,
+          ...placeOf(cop.crash ? cop.crash.body : cop.motion),
           stamina: cop.stamina,
           attack: cop.attack && { kind: cop.attack.kind, side: cop.attack.side, ...attackStage(cop.attack) },
           weapon: cop.weapon,
-          crash: null,
+          crash: cop.crash?.phase ?? null,
+          bike: placeOf(cop.motion),
           busting: cop.busting,
           fightingBack: cop.fightingBack,
           near: cop.near,
