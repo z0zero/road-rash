@@ -173,6 +173,88 @@ test("punches and kicks with J and K while riding", async ({ page }) => {
   expect(await hudSpeed(page)).toBeGreaterThan(0);
 });
 
+/** Buttons of the standard gamepad mapping, named as on an Xbox controller. */
+const GAMEPAD = { a: 0, b: 1, x: 2, leftTrigger: 6, rightTrigger: 7, start: 9, up: 12, down: 13, left: 14, right: 15 };
+
+/** What the fake gamepad lets a test do: hold and let go of its buttons, and push its left stick. */
+interface FakeGamepad {
+  press(button: number, value?: number): void;
+  release(button: number): void;
+  push(x: number, y: number): void;
+}
+
+declare global {
+  interface Window {
+    /** Set in the page by `plugInAGamepad`. */
+    fakeGamepad: FakeGamepad;
+  }
+}
+
+/** Runs in the page before its scripts: one gamepad with the standard mapping, which the test works through `window.fakeGamepad`. */
+function plugInAGamepad() {
+  const buttons = Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 }));
+  const axes = [0, 0, 0, 0];
+  const pad = { id: "Fake gamepad (STANDARD GAMEPAD)", index: 0, connected: true, mapping: "standard", timestamp: 0, axes, buttons };
+  Object.defineProperty(Navigator.prototype, "getGamepads", {
+    configurable: true,
+    value: () => [pad, null, null, null],
+  });
+  window.fakeGamepad = {
+    press: (button, value = 1) => {
+      buttons[button] = { pressed: true, touched: true, value };
+      pad.timestamp++;
+    },
+    release: (button) => {
+      buttons[button] = { pressed: false, touched: false, value: 0 };
+      pad.timestamp++;
+    },
+    push: (x, y) => {
+      axes[0] = x;
+      axes[1] = y;
+      pad.timestamp++;
+    },
+  };
+}
+
+/** The page's fake gamepad, from the test. */
+function gamepad(page: Page) {
+  return {
+    press: (button: number, value = 1) => page.evaluate(([b, v]) => window.fakeGamepad.press(b, v), [button, value]),
+    release: (button: number) => page.evaluate((b) => window.fakeGamepad.release(b), button),
+    push: (x: number, y: number) => page.evaluate(([px, py]) => window.fakeGamepad.push(px, py), [x, y]),
+  };
+}
+
+test.describe("with a gamepad", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(plugInAGamepad);
+    await page.reload();
+  });
+
+  test("throttles on the right trigger or A, brakes on the left trigger and pauses on Start", async ({ page }) => {
+    await startRacing(page);
+
+    await gamepad(page).press(GAMEPAD.rightTrigger);
+    await play(page, 3);
+    const fast = await hudSpeed(page);
+    expect(fast).toBeGreaterThan(40);
+    await gamepad(page).release(GAMEPAD.rightTrigger);
+    await gamepad(page).press(GAMEPAD.leftTrigger);
+    await play(page, 1);
+    const braked = await hudSpeed(page);
+    expect(braked).toBeLessThan(fast - 25);
+    await gamepad(page).release(GAMEPAD.leftTrigger);
+    await gamepad(page).press(GAMEPAD.a);
+    await play(page, 2);
+    expect(await hudSpeed(page)).toBeGreaterThan(braked + 15);
+
+    await gamepad(page).press(GAMEPAD.start);
+    await play(page, 0.2);
+    await gamepad(page).release(GAMEPAD.start);
+    await expect(page.getByRole("dialog", { name: "Paused" })).toBeVisible();
+  });
+});
+
 test("opens Settings from the title screen and goes back", async ({ page }) => {
   await page.getByRole("button", { name: "Settings" }).click();
 

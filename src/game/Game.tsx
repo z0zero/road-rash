@@ -3,7 +3,7 @@
 import { advance } from "@react-three/fiber";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { startGameAudio, type GameAudio } from "@/audio/game-audio";
-import { listenToKeyboard, type Keyboard } from "@/input/keyboard";
+import { listenToPlayer, type PlayerControls } from "@/input/player-controls";
 import { NO_INPUT } from "@/race";
 import { Scene } from "@/renderer/Scene";
 import { isMotionReduced, type SaveStorage } from "@/save-data/save-data";
@@ -18,12 +18,12 @@ import { GameSession } from "./session";
 
 /** The whole game: the 3D scene with the screens and HUD over it. Runs in the browser only. */
 export default function Game() {
-  const keyboard = useRef<Keyboard | null>(null);
+  const controls = useRef<PlayerControls | null>(null);
   const audio = useRef<GameAudio | null>(null);
   const [session] = useState(
     () =>
       new GameSession({
-        readInput: () => keyboard.current?.read() ?? NO_INPUT,
+        readInput: () => controls.current?.read() ?? NO_INPUT,
         storage: browserStorage(),
         newSeed: () => Math.floor(Math.random() * 2 ** 32),
       }),
@@ -37,11 +37,11 @@ export default function Game() {
   const reduceMotion = isMotionReduced(state.settings, systemReducesMotion);
 
   useEffect(() => {
-    const listening = listenToKeyboard(window, session.togglePause);
-    keyboard.current = listening;
+    const listening = listenToPlayer(window, session.togglePause);
+    controls.current = listening;
     return () => {
       listening.dispose();
-      if (keyboard.current === listening) keyboard.current = null;
+      if (controls.current === listening) controls.current = null;
     };
   }, [session]);
 
@@ -73,10 +73,11 @@ export default function Game() {
     return () => document.removeEventListener("visibilitychange", pauseWhenHidden);
   }, [session]);
 
-  // The game loop: step the race, then render the scene, once per animation frame.
+  // The game loop: read the gamepads, step the race, then render the scene, once per animation frame.
   useEffect(() => {
     let last: number | null = null;
     let frame = requestAnimationFrame(function tick(now) {
+      controls.current?.poll();
       session.advance(last === null ? 0 : (now - last) / 1000);
       // R3F derives useFrame's delta from this timestamp: pass seconds, as its clock expects.
       advance(now / 1000);
