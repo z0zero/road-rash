@@ -1,4 +1,4 @@
-import type { RiderId, RiderOrCop } from "./events";
+import type { CopId, RiderId, RiderOrCop } from "./events";
 import type { Temperament } from "./opponents";
 import type { Random } from "./random";
 
@@ -24,7 +24,9 @@ export interface OpponentResult {
 /** How the player's race ended, as far as a remark goes. */
 export type Ending =
   | { readonly outcome: "finished"; readonly position: number; readonly qualified: boolean }
-  | { readonly outcome: "wrecked" };
+  | { readonly outcome: "wrecked" }
+  /** `cop` busted the player. */
+  | { readonly outcome: "busted"; readonly cop: { readonly id: CopId; readonly name: string } };
 
 /** What an opponent might say: grudging respect when the player qualified, a taunt when they didn't, a dig at a wreck. */
 type Situation = "qualified" | "finished" | "wrecked";
@@ -97,13 +99,27 @@ const OPPONENT_LINES: Readonly<Record<Situation, Readonly<Record<Temperament, re
   },
 };
 
+/** What the cop who busted the player has to say about it: original lines, like the opponents'. */
+const COP_LINES: readonly string[] = [
+  "Racing on a public road? You're busted.",
+  "Nice crash. Nicer bust.",
+  "You have the right to remain slow.",
+  "Next time, crash somewhere I'm not.",
+  "Speeding, brawling and crashing. Busy day, huh?",
+  "The race is over for you. The paperwork isn't.",
+];
+
 /**
  * The remark on how the player's race ended, chosen with `random`: who says
  * it, then what they say. When the player qualified, it comes from an
  * opponent they beat; when they finished without qualifying, from one who
- * beat them; when their bike was wrecked, from one still in the race.
+ * beat them; when their bike was wrecked, from one still in the race; and
+ * when they were busted, from the cop who busted them.
  */
 export function remarkOn(ending: Ending, opponents: readonly OpponentResult[], random: Random): Remark {
+  if (ending.outcome === "busted") {
+    return { by: { kind: "cop", id: ending.cop.id }, name: ending.cop.name, line: pick(COP_LINES, random) };
+  }
   const situation: Situation = ending.outcome === "wrecked" ? "wrecked" : ending.qualified ? "qualified" : "finished";
   const likely = opponents.filter(({ position }) => {
     if (position === null) return false;
