@@ -133,6 +133,30 @@ test("remembers Reduce motion after a reload", async ({ page }) => {
   await expect(page.getByRole("switch", { name: "Reduce motion" })).toBeChecked();
 });
 
+test("remembers the master, music and effects volumes after a reload", async ({ page }) => {
+  const volumes = () => {
+    const settings = page.getByRole("dialog", { name: "Settings" });
+    return ["Master volume", "Music volume", "Effects volume"].map((name) => settings.getByRole("slider", { name }));
+  };
+  await page.getByRole("button", { name: "Settings" }).click();
+  const [master, music, effects] = volumes();
+  await expect(master).toHaveValue("100");
+  await expect(music).toHaveValue("70");
+  await expect(effects).toHaveValue("100");
+
+  await master.press("ArrowLeft");
+  await music.press("Home");
+  await effects.press("ArrowLeft");
+  await effects.press("ArrowLeft");
+  await page.reload();
+  await page.getByRole("button", { name: "Settings" }).click();
+
+  const [masterAfter, musicAfter, effectsAfter] = volumes();
+  await expect(masterAfter).toHaveValue("95");
+  await expect(musicAfter).toHaveValue("0");
+  await expect(effectsAfter).toHaveValue("90");
+});
+
 test.describe("when the operating system prefers reduced motion", () => {
   test.use({ reducedMotion: "reduce" });
 
