@@ -16,6 +16,7 @@ import {
   attackStage,
   attackSteps,
   awayFrom,
+  isMidSwing,
   nearestWithinReach,
   windUpSteps,
   type Attack,
@@ -328,6 +329,13 @@ export function createRace(options: RaceOptions): Race {
       target: { kind: "rider", id: target.id },
       kind,
     });
+    // Any hit in the middle of a club swing takes the club from its holder, and their swing never lands.
+    if (isMidSwing(target.attack)) {
+      target.weapon = null;
+      target.attack = null;
+      attacker.weapon = "club";
+      events.push({ type: "weapon-stolen", from: { kind: "rider", id: target.id }, by: { kind: "rider", id: attacker.id } });
+    }
     const { stamina, shove } = TUNING.attacks[kind];
     // A kick shoves its target sideways, away from the attacker.
     if (shove > 0) target.motion.shove = awayFrom(attacker.motion, target.motion) * shove;

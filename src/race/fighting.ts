@@ -28,6 +28,11 @@ export function windUpSteps(kind: AttackKind): number {
   return stepsIn(TUNING.attacks[kind].windUp);
 }
 
+/** Whether an attack is a club swing still winding up to its strike: when a hit can take the club from its holder. */
+export function isMidSwing(attack: Attack | null): boolean {
+  return attack !== null && attack.kind === "club-swing" && attack.steps < windUpSteps(attack.kind);
+}
+
 /** Steps from throwing an attack until its attacker can throw the next. */
 export function attackSteps(kind: AttackKind): number {
   return windUpSteps(kind) + stepsIn(TUNING.attacks[kind].recovery);
