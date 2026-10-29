@@ -3,6 +3,7 @@ import { NO_INPUT, PLAYER, STEP_SECONDS, type Race, type RaceEvent, type RiderId
 import {
   autopilot,
   eventsDuring,
+  kmh,
   player,
   rideAlongside,
   secondsUntil,
@@ -123,10 +124,15 @@ describe("attacks", () => {
   });
 });
 
-/** Throws a punch at the racer alongside and rides on until it has landed. */
+/**
+ * Keeps pressing punch while riding alongside the racer until one of the
+ * player's punches lands; returns every event on the way.
+ */
 function punchTheRacer({ race, input }: ReturnType<typeof alongsideARacer>) {
-  race.step({ ...input(), punch: true });
-  secondsUntil(race, input, () => race.drainEvents().some((event) => event.type === "attack-landed"), 1);
+  const events: RaceEvent[] = [];
+  const landed = () => events.some((event) => event.type === "attack-landed" && event.attacker.id === PLAYER);
+  secondsUntil(race, () => ({ ...input(), punch: true }), () => (events.push(...race.drainEvents()), landed()), 2);
+  return events;
 }
 
 describe("stamina", () => {
@@ -158,6 +164,81 @@ describe("stamina", () => {
     eventsDuring(race, 1.9, input);
 
     expect(race.snapshot().riders[target].stamina).toBe(64);
+  });
+});
+
+describe("knock-offs", () => {
+  it("knock a rider with no stamina left off their bike with the next hit: a crash", () => {
+    const alongside = alongsideARacer();
+    const { race, target } = alongside;
+    const them = () => race.snapshot().riders[target];
+    // 100 - 6 x 18 leaves no stamina, but they stay on their bike...
+    for (let punch = 0; punch < 6; punch++) expect(punchTheRacer(alongside)).not.toContainEqual(expect.objectContaining({ type: "crash" }));
+    expect(them()).toMatchObject({ stamina: 0, crash: null });
+
+    // ...until the next hit, which knocks them off at the speed they were riding.
+    let speed = 0;
+    const events: RaceEvent[] = [];
+    secondsUntil(
+      race,
+      () => ((speed = them().speed), { ...alongside.input(), punch: true }),
+      () => (events.push(...race.drainEvents()), events.some((event) => event.type === "crash")),
+      2,
+    );
+
+    expect(events).toContainEqual({ type: "crash", rider: target, cause: "knocked-off", impactSpeed: expect.closeTo(speed, 0) });
+    expect(them().crash).toBe("tumbling");
+  });
+});
+
+/** A started race in which the player has just knocked a racer off their bike. */
+function racerKnockedOff(seed = 1) {
+  const alongside = alongsideARacer(seed);
+  const { race } = alongside;
+  const events: RaceEvent[] = [];
+  secondsUntil(
+    race,
+    () => ({ ...alongside.input(), punch: true }),
+    () => (events.push(...race.drainEvents()), events.some((event) => event.type === "crash")),
+    10,
+  );
+  return { ...alongside, events };
+}
+
+describe("after a crash", () => {
+  it("the rider tumbles for about 1.2 s, then is on foot, running back to their bike at about 6 m/s", () => {
+    const { race, target } = racerKnockedOff();
+    const them = () => race.snapshot().riders[target];
+
+    const tumbling = secondsUntil(race, NO_INPUT, () => them().crash !== "tumbling", 3);
+
+    expect(tumbling).toBeGreaterThan(1.1);
+    expect(tumbling).toBeLessThan(1.3);
+    expect(them().crash).toBe("on-foot");
+    const gap = (rider: RiderSnapshot) => Math.hypot(rider.bike.distance - rider.distance, rider.bike.offset - rider.offset);
+    const before = them();
+    race.step(NO_INPUT);
+    const after = them();
+    const run = Math.hypot(after.distance - before.distance, after.offset - before.offset) / STEP_SECONDS;
+    expect(run).toBeGreaterThan(5.5);
+    expect(run).toBeLessThan(6.5);
+    expect(gap(after)).toBeCloseTo(gap(before) - run * STEP_SECONDS, 6);
+  });
+
+  it("the rider gets back on when they reach their bike, riding off slowly with at least 50 stamina", () => {
+    const { race, target } = racerKnockedOff();
+    const them = () => race.snapshot().riders[target];
+    expect(them().stamina).toBe(0);
+    const events: RaceEvent[] = [];
+
+    secondsUntil(race, NO_INPUT, () => (events.push(...race.drainEvents()), them().crash === null), 10);
+
+    expect(events).toContainEqual({ type: "remounted", rider: target });
+    expect(them().stamina).toBeCloseTo(50, 0);
+    expect(them().speed).toBeGreaterThan(0);
+    expect(them().speed).toBeLessThan(kmh(30));
+    expect(them().distance).toBe(them().bike.distance);
+    expect(them().offset).toBe(them().bike.offset);
   });
 });
 
