@@ -11,7 +11,7 @@ export interface OpponentRiding {
 }
 
 /** The least skilled opponent rides at this share of the fastest safe speed, the most skilled at the second. */
-const PACE_RANGE = [0.82, 0.96] as const;
+const PACE_RANGE = [0.78, 0.93] as const;
 
 /** The share of the fastest safe speed an opponent of a skill (0 to 1) rides at. */
 export function paceFor(skill: number): number {
