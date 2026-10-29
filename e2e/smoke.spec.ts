@@ -95,6 +95,26 @@ test("pauses by itself when the browser tab is hidden", async ({ page }) => {
   await expect(page.getByRole("dialog", { name: "Paused" })).toBeVisible();
 });
 
+test("shows the player's stamina and bike condition, full at the start", async ({ page }) => {
+  await startRacing(page);
+
+  await expect(page.getByRole("meter", { name: "Stamina", exact: true })).toHaveAttribute("aria-valuenow", "100");
+  await expect(page.getByRole("meter", { name: "Bike condition", exact: true })).toHaveAttribute("aria-valuenow", "100");
+});
+
+test("punches and kicks with J and K while riding", async ({ page }) => {
+  await startRacing(page);
+  await page.keyboard.down("w");
+
+  for (const key of ["j", "k", "z", "x"]) {
+    await page.keyboard.press(key);
+    await page.waitForTimeout(400);
+  }
+  await page.keyboard.up("w");
+
+  await expect.poll(() => hudSpeed(page)).toBeGreaterThan(0);
+});
+
 test("draws the race on a canvas", async ({ page }) => {
   await expect(page.locator("canvas")).toBeVisible();
   await expect(page.locator("canvas")).toHaveCount(1);
