@@ -284,8 +284,16 @@ export function createRace(options: RaceOptions): Race {
   /** The riders an attack can be aimed at. */
   const targets = onTheirBikes;
 
-  /** Starts an attack's wind-up, aimed at the nearest rider within reach (if any): towards them, or else to the right. */
-  function throwAttack(attacker: Rider, kind: AttackKind) {
+  /** A rider's punch: a club holder swings their club instead. */
+  const punchOf = (rider: Rider): AttackKind => (rider.weapon === "club" ? "club-swing" : "punch");
+
+  /**
+   * Starts an attack's wind-up, aimed at the nearest rider within reach (if
+   * any): towards them, or else to the right. A punch from a club holder is a
+   * club swing.
+   */
+  function throwAttack(attacker: Rider, thrown: AttackKind) {
+    const kind = thrown === "punch" ? punchOf(attacker) : thrown;
     const target = nearestWithinReach(attacker.motion, targets(), kind);
     attacker.attack = { kind, steps: 0, side: target ? awayFrom(attacker.motion, target.motion) : 1 };
     events.push({
@@ -450,7 +458,7 @@ export function createRace(options: RaceOptions): Race {
         }
         for (const opponent of riding) {
           if (!opponent.temperament || opponent.attack || opponent.droppingBack) continue;
-          const nearest = nearestWithinReach(opponent.motion, riding, "punch");
+          const nearest = nearestWithinReach(opponent.motion, riding, punchOf(opponent));
           const kind = nearest && opponentAttack(opponent.temperament, nearest.id === PLAYER, random);
           if (kind) throwAttack(opponent, kind);
         }
