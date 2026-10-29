@@ -1,4 +1,4 @@
-import type { Body } from "./crashing";
+import { knockDown, type Body, type Crash } from "./crashing";
 import { clamp, type Motion } from "./riding";
 import { velocityOf, type Car } from "./traffic";
 import { TUNING } from "./tuning";
@@ -7,6 +7,8 @@ import { TUNING } from "./tuning";
 const RIDER_LENGTH = 2;
 /** ...and this many across it. */
 const RIDER_WIDTH = 0.8;
+/** A rider on foot takes up about this many metres, along the track and across it. */
+const BODY_SIZE = 0.6;
 /** A rider who runs into a car is thrown sideways off it at least this fast (m/s), so they land beside it, not under it. */
 const THROWN_SIDEWAYS = 3;
 
@@ -139,6 +141,30 @@ export function throwClearOf(car: Car, bike: Motion, body: Body, edge: number) {
   const away = Math.sign(body.offset - car.offset) || 1;
   body.sideways = away * Math.max(Math.abs(body.sideways), THROWN_SIDEWAYS);
   body.speed = Math.max(body.speed, velocity);
+}
+
+/** The car running into a rider on foot at `body`, if any. */
+export function carRunningInto(body: Readonly<Body>, cars: readonly Car[]): Car | null {
+  return (
+    cars.find(
+      (car) =>
+        Math.abs(car.distance - body.distance) < (car.length + BODY_SIZE) / 2 &&
+        Math.abs(car.offset - body.offset) < (car.width + BODY_SIZE) / 2,
+    ) ?? null
+  );
+}
+
+/**
+ * A car knocks down the rider on foot whose crash is `crash`: they tumble
+ * again, thrown along the road with it and sideways off it. Returns how fast
+ * it hit them (m/s).
+ */
+export function knockDownBy(car: Car, crash: Crash): number {
+  const velocity = velocityOf(car);
+  const impactSpeed = Math.abs(velocity - crash.body.speed);
+  const away = Math.sign(crash.body.offset - car.offset) || 1;
+  knockDown(crash, velocity, away * THROWN_SIDEWAYS);
+  return impactSpeed;
 }
 
 function overlapping(a: Motion, b: Motion) {

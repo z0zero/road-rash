@@ -1,5 +1,5 @@
 import { getCoastalTrack } from "./coastal-track";
-import { settleContact, settleTraffic, throwClearOf } from "./contact";
+import { carRunningInto, knockDownBy, settleContact, settleTraffic, throwClearOf } from "./contact";
 import {
   canRemount,
   carryOn,
@@ -515,6 +515,11 @@ export function createRace(options: RaceOptions): Race {
         for (const { rider, car, speedDifference } of settleTraffic(onTheirBikes(), traffic.cars, edge)) {
           crash(rider, "traffic", speedDifference);
           if (rider.crash) throwClearOf(car, rider.motion, rider.crash.body, edge);
+        }
+        for (const rider of riders) {
+          if (rider.status !== "racing" || rider.crash?.phase !== "on-foot") continue;
+          const car = carRunningInto(rider.crash.body, traffic.cars);
+          if (car) events.push({ type: "knocked-down", rider: rider.id, impactSpeed: knockDownBy(car, rider.crash) });
         }
         advanceAttacks();
         recoverStamina();
