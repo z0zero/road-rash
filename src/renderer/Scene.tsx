@@ -11,7 +11,8 @@ import { drawnTrack } from "./drawn-track";
 import { Obstacles } from "./Obstacles";
 import { PostProcessing } from "./PostProcessing";
 import { isSoftwareRenderer, LOWEST_QUALITY, pixelRatio, QUALITY_LEVELS } from "./quality";
-import { RiderMotion } from "./rider-motion";
+import { COP_LIVERY, liveryOf } from "./liveries";
+import { CopMotion, RiderMotion } from "./rider-motion";
 import { Scenery } from "./Scenery";
 import { Sea } from "./Sea";
 import { Sky } from "./Sky";
@@ -28,8 +29,8 @@ function frameRateBounds(refreshRate: number): [number, number] {
 
 /**
  * The 3D view of the race: the sunset coast, the road with its scenery and
- * obstacles, the traffic, every rider on their bike and the chase camera
- * behind the player, finished with post-processing. It draws whatever the
+ * obstacles, the traffic, every rider and cop on their bike and the chase
+ * camera behind the player, finished with post-processing. It draws whatever the
  * session's view holds and holds no game rules. Rendering is driven by the
  * game loop (frameloop "never" plus `advance`), right after the race has been
  * stepped. A performance monitor lowers the quality when the frame rate drops.
@@ -47,6 +48,9 @@ export function Scene({ session, reduceMotion }: { session: GameSession; reduceM
   const riders = session.view.current.riders.length;
   const motions = useMemo(() => Array.from({ length: riders }, (_, id) => new RiderMotion(id)), [riders]);
   const player = motions[PLAYER];
+  // And one per cop.
+  const cops = session.view.current.cops.length;
+  const copMotions = useMemo(() => Array.from({ length: cops }, (_, id) => new CopMotion(id)), [cops]);
   const shake = useMemo(() => new CameraShake(), []);
   const [devicePixelRatio] = useState(() => window.devicePixelRatio);
   const [level, setLevel] = useState(0);
@@ -93,7 +97,10 @@ export function Scene({ session, reduceMotion }: { session: GameSession; reduceM
         <Obstacles track={drawn} />
         <Traffic session={session} />
         {motions.map((motion) => (
-          <BikeAndRider key={motion.rider} session={session} motion={motion} />
+          <BikeAndRider key={motion.rider} session={session} motion={motion} livery={liveryOf(motion.rider)} />
+        ))}
+        {copMotions.map((motion) => (
+          <BikeAndRider key={`cop-${motion.cop}`} session={session} motion={motion} livery={COP_LIVERY} police />
         ))}
         <ChaseCamera session={session} player={player} shake={shake} reduceMotion={reduceMotion} />
         <PostProcessing session={session} player={player} reduceMotion={reduceMotion} multisampling={software ? 0 : 4} />
