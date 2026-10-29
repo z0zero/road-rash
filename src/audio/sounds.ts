@@ -100,7 +100,7 @@ export function playCrash(kit: Kit, out: AudioNode, force: number) {
     .connect(out);
 }
 
-/** A car running into a rider on foot: its horn blares as it hits them with a dull thud. */
+/** A car running into a rider on foot: its horn blares as it runs into them with a dull thud. */
 export function playKnockDown(kit: Kit, out: AudioNode, loudness: number) {
   const now = kit.context.currentTime;
   // The horn: two notes a third apart, held for half a second.
