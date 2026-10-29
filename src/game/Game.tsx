@@ -25,7 +25,7 @@ export default function Game() {
       new GameSession({
         readInput: () => controls.current?.read() ?? NO_INPUT,
         storage: browserStorage(),
-        newSeed: () => Math.floor(Math.random() * 2 ** 32),
+        newSeed: () => seedInAddress() ?? Math.floor(Math.random() * 2 ** 32),
       }),
   );
   const state = useSyncExternalStore(session.subscribe, session.getState, session.getState);
@@ -138,6 +138,18 @@ function subscribeToReducedMotion(onChange: () => void) {
 /** Whether the operating system asks for reduced motion. */
 function systemPrefersReducedMotion() {
   return window.matchMedia(REDUCED_MOTION).matches;
+}
+
+/**
+ * The seed the page's address asks every race to use, as in `?seed=1234`, so
+ * that a race from a bug report can be played again; null when it asks for
+ * none, or for something that isn't a seed (a whole number below 2^32).
+ */
+function seedInAddress(): number | null {
+  const asked = new URLSearchParams(window.location.search).get("seed");
+  if (asked === null || !/^\d{1,10}$/.test(asked)) return null;
+  const seed = Number(asked);
+  return seed < 2 ** 32 ? seed : null;
 }
 
 /** localStorage, or undefined where the browser refuses it (private modes, blocked storage). */
