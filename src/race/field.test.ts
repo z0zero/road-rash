@@ -171,14 +171,13 @@ describe("the opponents", () => {
     const apexes = hairpinApexes(track);
     const fastest = new Map<number, number>();
     const atApexes = new Map<number, number[]>();
+    const offTheRoad = new Set<string>();
     let previous: readonly RiderSnapshot[] | null = null;
 
     raceWithoutThePlayer(1, 300, (riders) => {
       for (const rider of riders) {
         if (rider.id === PLAYER || rider.status !== "racing") continue;
-        expect(Math.abs(rider.offset), `${rider.name} left the road at ${rider.distance.toFixed(0)} m`).toBeLessThanOrEqual(
-          track.roadHalfWidth,
-        );
+        if (Math.abs(rider.offset) > track.roadHalfWidth) offTheRoad.add(`${rider.name} at ${rider.distance.toFixed(0)} m`);
         fastest.set(rider.id, Math.max(fastest.get(rider.id) ?? 0, rider.speed));
         const before = previous?.[rider.id].distance ?? rider.distance;
         for (const apex of apexes) {
@@ -188,6 +187,7 @@ describe("the opponents", () => {
       previous = riders;
     });
 
+    expect([...offTheRoad]).toEqual([]);
     expect(apexes.length).toBeGreaterThanOrEqual(3);
     for (const [id, speeds] of atApexes) {
       expect(speeds).toHaveLength(apexes.length);
@@ -437,6 +437,7 @@ describe("positions", () => {
     const race = startedRace(1);
     const pilot = autopilot(race);
     const positions = [player(race).position];
+    let outOfOrder = 0;
 
     secondsUntil(race, pilot, () => {
       const { riders } = race.snapshot();
@@ -445,12 +446,13 @@ describe("positions", () => {
       const racing = riders.filter((rider) => rider.status === "racing");
       for (const a of racing) {
         for (const b of racing) {
-          if (a.distance > b.distance) expect(a.position ?? Infinity).toBeLessThan(b.position ?? Infinity);
+          if (a.distance > b.distance && (a.position ?? Infinity) >= (b.position ?? Infinity)) outOfOrder++;
         }
       }
       return race.snapshot().clock >= 90;
     });
 
+    expect(outOfOrder).toBe(0);
     expect(positions[0]).toBe(15);
     expect(Math.min(...(positions as number[]))).toBeLessThanOrEqual(10);
     const passes = positions.filter((position, index) => index > 0 && position !== null && position < (positions[index - 1] ?? 0));
