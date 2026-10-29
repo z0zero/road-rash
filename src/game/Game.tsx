@@ -84,6 +84,7 @@ export default function Game() {
           results={state.results}
           personalBest={state.personalBest}
           newBestTime={state.newBestTime}
+          newBestPosition={state.newBestPosition}
           onRestart={session.restart}
           onTitle={session.quitToTitle}
         />

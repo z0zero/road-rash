@@ -1,6 +1,6 @@
 import type { PersonalBest } from "@/save-data/save-data";
 import { Button } from "./Button";
-import { formatRaceTime } from "./format";
+import { formatPosition, formatRaceTime } from "./format";
 
 export function TitleScreen({
   personalBest,
@@ -23,7 +23,10 @@ export function TitleScreen({
       </div>
       <p className="text-sm text-sand/85 drop-shadow">W/A/S/D or the arrow keys to ride &middot; Esc or P to pause</p>
       {personalBest.time !== null && (
-        <p className="text-sm text-sun drop-shadow">Personal best {formatRaceTime(personalBest.time)}</p>
+        <p className="text-sm text-sun drop-shadow">
+          Personal best {formatRaceTime(personalBest.time)}
+          {personalBest.position !== null && <> &middot; Best position {formatPosition(personalBest.position)}</>}
+        </p>
       )}
     </div>
   );

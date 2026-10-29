@@ -36,6 +36,14 @@ _Avoid_: User, hero
 A rider controlled by the game's AI.
 _Avoid_: Enemy, bot, NPC
 
+**Catch-up**:
+Opponents far behind the player riding a little faster than their usual pace, and those far ahead a little slower, so the field stays near the player.
+_Avoid_: Rubber-banding
+
+**Temperament**:
+How an opponent races and fights: a *racer* concentrates on racing and rarely attacks, a *brawler* attacks often, and a *bully* attacks often and starts the race with a weapon. "Racer" names a temperament here, never a rider.
+_Avoid_: Personality, style, AI type
+
 **Bike**:
 The motorcycle a rider races on.
 _Avoid_: Motorcycle, motorbike, vehicle
@@ -51,6 +59,10 @@ _Avoid_: Health, HP, energy, life
 **Condition**:
 How intact a bike is, from full to empty. It drops with every crash, and a bike whose condition runs out is wrecked.
 _Avoid_: Damage, durability, bike health
+
+**Bump**:
+Two riders on their bikes running into each other at a small speed difference and being pushed apart, without either of them crashing.
+_Avoid_: Nudge, collision
 
 **Crash**:
 A rider being thrown off their bike, either by a hit or by running into something. After a crash the rider is on foot and runs back to their bike.

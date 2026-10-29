@@ -1,71 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { createRace, NO_INPUT, PLAYER, STEP_SECONDS, type PlayerInput, type Race, type Track } from ".";
-
-const STEPS_PER_SECOND = 60;
-const FULL_THROTTLE: PlayerInput = { ...NO_INPUT, throttle: 1 };
-
-function kmh(value: number) {
-  return value / 3.6;
-}
-
-function stepFor(race: Race, seconds: number, input: PlayerInput = NO_INPUT) {
-  const steps = Math.round(seconds * STEPS_PER_SECOND);
-  for (let i = 0; i < steps; i++) race.step(input);
-}
-
-/** A race whose countdown has just run out. */
-function startedRace(seed = 1) {
-  const race = createRace({ seed });
-  stepFor(race, 3);
-  race.drainEvents();
-  return race;
-}
-
-function player(race: Race) {
-  return race.snapshot().riders[PLAYER];
-}
-
-/** Steps with `input` until `done` holds, and returns how many seconds that took. */
-function secondsUntil(
-  race: Race,
-  input: PlayerInput | (() => PlayerInput),
-  done: () => boolean,
-  limitSeconds = 600,
-) {
-  let steps = 0;
-  while (!done()) {
-    if (steps >= limitSeconds * STEPS_PER_SECOND) throw new Error(`not done within ${limitSeconds} s`);
-    race.step(typeof input === "function" ? input() : input);
-    steps++;
-  }
-  return steps * STEP_SECONDS;
-}
-
-/**
- * Scripted input that rides the bike along the track near `lane` (an offset
- * from the centreline) at up to `targetSpeed`, braking for the bends ahead.
- * It only reads what any caller can: the snapshot and the track.
- */
-function autopilot(race: Race, { targetSpeed = Infinity, lane = 0 } = {}) {
-  let lastOffset = player(race).offset;
-  return (): PlayerInput => {
-    const rider = player(race);
-    const sideways = (rider.offset - lastOffset) / STEP_SECONDS;
-    lastOffset = rider.offset;
-    let wanted = targetSpeed;
-    for (let ahead = 0; ahead <= 200; ahead += 5) {
-      const curvature = Math.abs(race.track.sampleAt(rider.distance + ahead).curvature);
-      const cornerSpeed = Math.sqrt(16 / Math.max(curvature, 1e-6));
-      wanted = Math.min(wanted, Math.sqrt(cornerSpeed ** 2 + 2 * 9 * ahead));
-    }
-    return {
-      ...NO_INPUT,
-      steer: Math.max(-1, Math.min(1, 0.5 * (lane - rider.offset) - 0.25 * sideways)),
-      throttle: rider.speed < wanted - 0.5 ? 1 : 0,
-      brake: rider.speed > wanted + 1 ? Math.min(1, (rider.speed - wanted) / 4) : 0,
-    };
-  };
-}
+import {
+  autopilot,
+  FULL_THROTTLE,
+  kmh,
+  player,
+  secondsUntil,
+  startedRace,
+  stepFor,
+  STEPS_PER_SECOND,
+} from "./test-helpers";
 
 describe("the countdown", () => {
   it("lasts three seconds, then the race starts", () => {
@@ -279,15 +223,17 @@ describe("the finish", () => {
 
     const clockBefore = rideToTheFinish(race);
 
-    const events = race.drainEvents();
+    const events = race
+      .drainEvents()
+      .filter((event) => event.type === "player-race-over" || (event.type === "rider-finished" && event.rider === PLAYER));
     expect(events).toEqual([
-      { type: "rider-finished", rider: PLAYER, time: expect.any(Number), position: 1 },
+      { type: "rider-finished", rider: PLAYER, time: expect.any(Number), position: expect.any(Number) },
       { type: "player-race-over", outcome: "finished" },
     ]);
-    const time = (events[0] as { time: number }).time;
+    const { time, position } = events[0] as { time: number; position: number };
     expect(time).toBeGreaterThan(clockBefore);
     expect(time).toBeLessThanOrEqual(race.snapshot().clock);
-    expect(player(race)).toMatchObject({ status: "finished", finishTime: time, position: 1 });
+    expect(player(race)).toMatchObject({ status: "finished", finishTime: time, position });
   });
 
   it("lets the finished bike coast to a stop before the road runs out, whatever the input", () => {
@@ -299,7 +245,10 @@ describe("the finish", () => {
 
     expect(player(race).speed).toBe(0);
     expect(player(race).distance).toBeLessThan(race.track.length);
-    expect(race.drainEvents()).toEqual([]);
+    const aboutThePlayer = race
+      .drainEvents()
+      .filter((event) => event.type === "player-race-over" || ("rider" in event && event.rider === PLAYER));
+    expect(aboutThePlayer).toEqual([]);
   });
 });
 
@@ -314,15 +263,14 @@ describe("fast-forwarding to the results", () => {
   it("gives the final results once the player's race is over", () => {
     const race = startedRace();
     rideToTheFinish(race);
-    const time = player(race).finishTime;
+    const { finishTime: time, position } = player(race);
 
-    expect(race.fastForward()).toEqual({
-      outcome: "finished",
-      time,
-      position: 1,
-      qualified: true,
-      standings: [{ rider: PLAYER, status: "finished", position: 1, time }],
-    });
+    const results = race.fastForward();
+
+    expect(results).toMatchObject({ outcome: "finished", time, position });
+    expect(results.standings).toContainEqual(
+      expect.objectContaining({ rider: PLAYER, status: "finished", position, time }),
+    );
   });
 });
 

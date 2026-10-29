@@ -13,17 +13,8 @@ import {
   Quaternion,
   Vector3,
 } from "three";
+import type { Livery } from "./liveries";
 import { LowPoly } from "./low-poly";
-
-/** A rider's colours: their bike's bodywork, its stripes and wheel rims, their jacket and their helmet. */
-export interface Livery {
-  readonly paint: ColorRepresentation;
-  readonly accent: ColorRepresentation;
-  readonly jacket: ColorRepresentation;
-  readonly helmet: ColorRepresentation;
-}
-
-export const PLAYER_LIVERY: Livery = { paint: "#d0372a", accent: "#f2c14e", jacket: "#2e6db3", helmet: "#f1ede4" };
 
 /** Metres. */
 export const WHEEL_RADIUS = 0.31;

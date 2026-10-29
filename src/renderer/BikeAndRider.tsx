@@ -2,8 +2,9 @@ import { useFrame } from "@react-three/fiber";
 import { useEffect, useMemo } from "react";
 import { Quaternion, Vector3 } from "three";
 import type { GameSession } from "@/game/session";
+import { liveryOf } from "./liveries";
 import type { RiderMotion } from "./rider-motion";
-import { createRiderModel, type Livery, type RiderModel, WHEEL_RADIUS } from "./rider-model";
+import { createRiderModel, type RiderModel, WHEEL_RADIUS } from "./rider-model";
 
 /** The bike's lean shifts the rider this many metres towards the inside of the corner per radian... */
 const HANG_OFF = 0.22;
@@ -17,13 +18,14 @@ const TUCK = 0.16;
 const TUCKED_SPEED = 55;
 
 /**
- * A rider on their bike: the flat-shaded model built in code, placed from the
- * interpolated snapshots, its wheels turning, leaning into corners with the
- * rider hanging off the inside and tucking in at speed. It updates `motion`
- * first each frame, so whatever follows this rider (the camera) reads it fresh.
+ * One rider on their bike, in the rider's own livery: the flat-shaded model
+ * built in code, placed from the interpolated snapshots, its wheels turning,
+ * leaning into corners with the rider hanging off the inside and tucking in
+ * at speed. It updates `motion` first each frame, so whatever follows this
+ * rider (the camera follows the player) reads it fresh.
  */
-export function BikeAndRider({ session, motion, livery }: { session: GameSession; motion: RiderMotion; livery: Livery }) {
-  const model = useMemo(() => createRiderModel(livery), [livery]);
+export function BikeAndRider({ session, motion }: { session: GameSession; motion: RiderMotion }) {
+  const model = useMemo(() => createRiderModel(liveryOf(motion.rider)), [motion]);
   useEffect(() => () => model.dispose(), [model]);
 
   useFrame((_, delta) => {

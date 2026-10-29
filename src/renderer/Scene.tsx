@@ -11,7 +11,6 @@ import { drawnTrack } from "./drawn-track";
 import { PostProcessing } from "./PostProcessing";
 import { isSoftwareRenderer, LOWEST_QUALITY, pixelRatio, QUALITY_LEVELS } from "./quality";
 import { RiderMotion } from "./rider-motion";
-import { PLAYER_LIVERY } from "./rider-model";
 import { Scenery } from "./Scenery";
 import { Sea } from "./Sea";
 import { Sky } from "./Sky";
@@ -26,12 +25,12 @@ function frameRateBounds(refreshRate: number): [number, number] {
 }
 
 /**
- * The 3D view of the race: the sunset coast, the road and its scenery, the
- * player on their bike and the chase camera, finished with post-processing.
- * It draws whatever the session's view holds and holds no game rules.
- * Rendering is driven by the game loop (frameloop "never" plus `advance`),
- * right after the race has been stepped. A performance monitor lowers the
- * quality when the frame rate drops.
+ * The 3D view of the race: the sunset coast, the road and its scenery, every
+ * rider on their bike and the chase camera behind the player, finished with
+ * post-processing. It draws whatever the session's view holds and holds no
+ * game rules. Rendering is driven by the game loop (frameloop "never" plus
+ * `advance`), right after the race has been stepped. A performance monitor
+ * lowers the quality when the frame rate drops.
  */
 export function Scene({ session, reduceMotion }: { session: GameSession; reduceMotion: boolean }) {
   const track = session.view.track;
@@ -42,7 +41,10 @@ export function Scene({ session, reduceMotion }: { session: GameSession; reduceM
     installSunsetHaze(sun);
     return { sun, sunlight: sunlightDirection(track.seaHeading) };
   }, [track.seaHeading]);
-  const player = useMemo(() => new RiderMotion(PLAYER), []);
+  // One motion per rider (riders are numbered from 0, the player); the camera and the speed effects follow the player's.
+  const riders = session.view.current.riders.length;
+  const motions = useMemo(() => Array.from({ length: riders }, (_, id) => new RiderMotion(id)), [riders]);
+  const player = motions[PLAYER];
   const shake = useMemo(() => new CameraShake(), []);
   const [devicePixelRatio] = useState(() => window.devicePixelRatio);
   const [level, setLevel] = useState(0);
@@ -85,7 +87,9 @@ export function Scene({ session, reduceMotion }: { session: GameSession; reduceM
         <TrackModel track={drawn} />
         <Terrain track={drawn} />
         <Scenery track={drawn} />
-        <BikeAndRider session={session} motion={player} livery={PLAYER_LIVERY} />
+        {motions.map((motion) => (
+          <BikeAndRider key={motion.rider} session={session} motion={motion} />
+        ))}
         <ChaseCamera session={session} player={player} shake={shake} reduceMotion={reduceMotion} />
         <PostProcessing session={session} player={player} reduceMotion={reduceMotion} multisampling={software ? 0 : 4} />
       </Canvas>
