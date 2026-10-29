@@ -52,10 +52,14 @@ test("counts down 3-2-1 after Start Race, then shows the HUD", async ({ page }) 
   await expect(page.getByTestId("progress")).toBeVisible();
 });
 
-/** Starts a race and waits for the countdown to run out. */
+/**
+ * Starts a race and waits for the countdown to run out. The countdown lasts
+ * three seconds of race time, which a busy machine drawing the race in
+ * software can stretch well beyond the usual five-second wait.
+ */
 async function startRacing(page: Page) {
   await page.getByRole("button", { name: "Start Race" }).click();
-  await expect(page.getByTestId("countdown")).toHaveText("GO!");
+  await expect(page.getByTestId("countdown")).toHaveText("GO!", { timeout: 20_000 });
 }
 
 async function hudSpeed(page: Page) {
