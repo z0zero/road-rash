@@ -47,10 +47,6 @@ const FAST_FORWARD_STEPS = 180 * STEPS_PER_SECOND;
 /** Finishing in this position or better qualifies. */
 const QUALIFYING_POSITION = 3;
 
-/** Traffic fills the road from this many metres behind the player... */
-const TRAFFIC_BEHIND = 150;
-/** ...to this many metres ahead of them. */
-const TRAFFIC_AHEAD = 600;
 /** At the start, cars in the race direction keep at least this many metres ahead of the riders lined up for it. */
 const CLEAR_OF_THE_GRID = 60;
 /** Mixed into the race's seed for the traffic's own random choices, so they never change the riders' choices. */
@@ -293,8 +289,7 @@ export function createRace(options: RaceOptions): Race {
   const traffic = createTraffic(
     track,
     createRandom(options.seed ^ TRAFFIC_SEED),
-    track.startDistance - TRAFFIC_BEHIND,
-    track.startDistance + TRAFFIC_AHEAD,
+    riders[PLAYER].motion,
     Math.max(...riders.map((rider) => rider.motion.distance)) + CLEAR_OF_THE_GRID,
   );
 
@@ -448,8 +443,9 @@ export function createRace(options: RaceOptions): Race {
   const race: Race = {
     track,
     step(input) {
-      traffic.step();
-      if (stepsTaken >= COUNTDOWN_STEPS) {
+      // The traffic drives on whatever the riders do, even while they wait for the countdown.
+      if (stepsTaken < COUNTDOWN_STEPS) traffic.step(whereIs(riders[PLAYER]));
+      else {
         const clockBefore = clock();
         // Everyone decides what to do from where things stand, then everyone moves.
         const riding = onTheirBikes();
@@ -489,6 +485,7 @@ export function createRace(options: RaceOptions): Race {
             if (rider.status === "racing" && canRemount(rider.crash, rider.motion)) getBackOn(rider);
           }
         });
+        traffic.step(whereIs(player));
         for (const { rider, speedDifference } of settleContact(riding, edge)) crash(rider, "rider", speedDifference);
         advanceAttacks();
         recoverStamina();
