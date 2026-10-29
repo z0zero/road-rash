@@ -202,6 +202,26 @@ describe("the coastal track", () => {
     }
   });
 
+  it("keeps the sea on one side of the road: guard rails stand on the sea side and houses inland", () => {
+    // Heading 0 is north (-z) and a quarter turn right is east (+x).
+    const towardsTheSea = { x: Math.sin(track.seaHeading), z: -Math.cos(track.seaHeading) };
+    /** Metres an item stands out to sea from the centreline: negative inland. */
+    const outToSea = (distance: number, offset: number) => {
+      const centre = track.sampleAt(distance);
+      const item = track.pointAt(distance, offset);
+      return (item.x - centre.x) * towardsTheSea.x + (item.z - centre.z) * towardsTheSea.z;
+    };
+    /** Whether the road runs within about 60° of parallel to the coast. */
+    const alongTheCoast = (distance: number) => Math.abs(Math.sin(track.sampleAt(distance).heading - track.seaHeading)) > 0.5;
+    const rails = track.scenery.filter((item) => item.kind === "guard-rail");
+    const houses = track.scenery.filter((item) => item.kind === "house" && alongTheCoast(item.distance));
+
+    expect(rails.length).toBeGreaterThan(100);
+    expect(houses.length).toBeGreaterThan(3);
+    for (const rail of rails) expect(outToSea(rail.distance, rail.offset)).toBeGreaterThan(0);
+    for (const house of houses) expect(outToSea(house.distance, house.offset)).toBeLessThan(0);
+  });
+
   it("lists its scenery and obstacles in order along the track", () => {
     for (const list of [track.scenery, track.obstacles]) {
       const distances = list.map((item) => item.distance);

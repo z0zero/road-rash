@@ -31,6 +31,11 @@ export interface Track {
   pointAt(distance: number, offset: number): WorldPoint;
   /** How much of the race distance lies behind a distance: 0 at or before the start line, 1 at or after the finish line. */
   progressAt(distance: number): number;
+  /**
+   * Radians: the compass heading from the coast out to sea, as `TrackSample.heading`
+   * measures it. The sea lies below the road on that side; cliffs rise on the other.
+   */
+  readonly seaHeading: number;
   /** Everything beside the road that nobody can hit, in order along the track. */
   readonly scenery: readonly SceneryPlacement[];
   /** Everything on or beside the road that crashes riders who hit it, in order along the track. */
@@ -83,6 +88,8 @@ export interface TrackLayout {
   readonly startElevation: number;
   readonly startDistance: number;
   readonly finishDistance: number;
+  /** Radians: the compass heading from the coast out to sea. */
+  readonly seaHeading: number;
 }
 
 const LANE_WIDTH = 3;
@@ -171,6 +178,7 @@ export function buildTrack(layout: TrackLayout): Track {
     progressAt(distance) {
       return Math.min(1, Math.max(0, (distance - startDistance) / (finishDistance - startDistance)));
     },
+    seaHeading: layout.seaHeading,
     scenery: [],
     obstacles: [],
   };
