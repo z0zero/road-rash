@@ -3,6 +3,9 @@ import type { Motion } from "./riding";
 import { stepsIn } from "./steps";
 import { TUNING } from "./tuning";
 
+/** A weapon a rider can hold and swing instead of punching: in this game, only the club. */
+export type Weapon = "club";
+
 /** An attack under way: it winds up, strikes, then recovers before the next. */
 export interface Attack {
   readonly kind: AttackKind;
