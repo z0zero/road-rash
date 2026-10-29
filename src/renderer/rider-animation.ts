@@ -1,5 +1,5 @@
 import { type Group, Quaternion, Vector3 } from "three";
-import type { AttackSnapshot } from "@/race";
+import type { AttackSnapshot, Weapon } from "@/race";
 import type { Limb, RiderModel } from "./rider-model";
 
 /**
@@ -109,14 +109,23 @@ function swingDirection(raised: Direction, struck: Direction, side: -1 | 1, atta
 const clubWay = new Vector3();
 const forearm = new Quaternion();
 
+/** What a rider holds, as the race last said, and the hand a club is in. */
+interface Armed {
+  readonly weapon: Weapon | null;
+  /** 1 the right hand, -1 the left. */
+  readonly clubHand: -1 | 1;
+  readonly attack: AttackSnapshot | null;
+}
+
 /**
- * Shows the club in the hand on `hand` while the rider holds one, hiding it
- * otherwise, and points it: upright beside the rider's head while they ride,
+ * Shows the club in the rider's club hand while the race says they hold one,
+ * hiding it otherwise, and points it: upright beside the rider's head while they ride,
  * cocked back over the shoulder through a swing's wind-up and swept out at
  * the target at the strike. Call it after `poseAttack`, since the club turns
  * with the arm that holds it.
  */
-export function poseClub(model: RiderModel, holding: boolean, hand: -1 | 1, attack: AttackSnapshot | null) {
+export function poseClub(model: RiderModel, { weapon, clubHand: hand, attack }: Armed) {
+  const holding = weapon === "club";
   const [left, right] = model.clubs;
   left.visible = holding && hand < 0;
   right.visible = holding && hand > 0;
