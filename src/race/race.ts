@@ -1,6 +1,6 @@
 import { getCoastalTrack } from "./coastal-track";
 import { settleContact } from "./contact";
-import { bustingIntent, lineUpCops, moveCop, patrolIntent, standingByIntent, type CopStatus } from "./cops";
+import { bustingIntent, lineUpCops, moveCop, patrolIntent, standingByIntent, type Cop, type CopStatus } from "./cops";
 import {
   canRemount,
   carryOn,
@@ -11,7 +11,7 @@ import {
   type CrashPhase,
   type OnFootControls,
 } from "./crashing";
-import type { AttackKind, CopId, CrashCause, RaceEvent, RaceOutcome, RiderId } from "./events";
+import type { AttackKind, CopId, CrashCause, RaceEvent, RaceOutcome, RiderId, RiderOrCop } from "./events";
 import { lineUpOpponents } from "./field";
 import {
   attackStage,
@@ -228,6 +228,7 @@ export interface Race {
 }
 
 interface Rider {
+  readonly kind: "rider";
   readonly id: RiderId;
   readonly name: string;
   readonly temperament: Temperament | null;
@@ -259,6 +260,14 @@ function whereIs(rider: Rider): { readonly distance: number; readonly offset: nu
   return rider.crash ? rider.crash.body : rider.motion;
 }
 
+/** Anyone who fights: a rider, or a cop. */
+type Fighter = Rider | Cop;
+
+/** How events name a fighter. */
+function who(fighter: Fighter): RiderOrCop {
+  return fighter.kind === "rider" ? { kind: "rider", id: fighter.id } : { kind: "cop", id: fighter.id };
+}
+
 /** Metres between two places in track space (straight-line). */
 function apart(a: { readonly distance: number; readonly offset: number }, b: { readonly distance: number; readonly offset: number }) {
   return Math.hypot(a.distance - b.distance, a.offset - b.offset);
@@ -283,6 +292,7 @@ export function createRace(options: RaceOptions): Race {
     offset: number,
   ): Rider => ({
     ...rider,
+    kind: "rider",
     motion: { distance, offset, speed: 0, steering: 0, shove: 0 },
     status: "racing",
     finishTime: null,
@@ -315,37 +325,39 @@ export function createRace(options: RaceOptions): Race {
   const onTheirBikes = () => riders.filter((rider) => rider.status === "racing" && !rider.crash);
   const edge = track.roadHalfWidth + track.shoulderWidth;
 
-  /** The riders an attack can be aimed at. */
-  const targets = onTheirBikes;
+  /** Cops riding in the race: the ones who patrol, bust riders and fight. */
+  const copsInTheRace = () => cops.filter((cop) => cop.status === "riding");
 
-  /** A rider's punch: a club holder swings their club instead. */
-  const punchOf = (rider: Rider): AttackKind => (rider.weapon === "club" ? "club-swing" : "punch");
+  /** Whether a fighter is in a fight: on their bike in the race. */
+  const canFight = (fighter: Fighter) => (fighter.kind === "rider" ? fighter.status === "racing" && !fighter.crash : fighter.status === "riding");
+
+  /** Whom a fighter's attacks can land on: riders on their bikes, and cops in the race too for a rider. */
+  const targetsFor = (attacker: Fighter): Fighter[] =>
+    attacker.kind === "rider" ? [...onTheirBikes(), ...copsInTheRace()] : onTheirBikes();
+
+  /** A fighter's punch: a club holder swings their club instead. */
+  const punchOf = (fighter: Fighter): AttackKind => (fighter.weapon === "club" ? "club-swing" : "punch");
 
   /**
-   * Starts an attack's wind-up, aimed at the nearest rider within reach (if
-   * any): towards them, or else to the right. A punch from a club holder is a
-   * club swing.
+   * Starts an attack's wind-up, aimed at the nearest rider or cop within reach
+   * (if any): towards them, or else to the right. A punch from a club holder
+   * is a club swing.
    */
-  function throwAttack(attacker: Rider, thrown: AttackKind) {
+  function throwAttack(attacker: Fighter, thrown: AttackKind) {
     const kind = thrown === "punch" ? punchOf(attacker) : thrown;
-    const target = nearestWithinReach(attacker.motion, targets(), kind);
+    const target = nearestWithinReach(attacker.motion, targetsFor(attacker), kind);
     attacker.attack = { kind, steps: 0, side: target ? awayFrom(attacker.motion, target.motion) : 1 };
-    events.push({
-      type: "attack-thrown",
-      attacker: { kind: "rider", id: attacker.id },
-      target: target && { kind: "rider", id: target.id },
-      kind,
-    });
+    events.push({ type: "attack-thrown", attacker: who(attacker), target: target && who(target), kind });
   }
 
   /** Moves every attack on by a step: each strikes at the end of its wind-up and is over after its recovery. */
   function advanceAttacks() {
-    for (const attacker of riders) {
+    for (const attacker of [...riders, ...cops]) {
       const attack = attacker.attack;
       if (!attack) continue;
       attack.steps++;
-      if (attack.steps === windUpSteps(attack.kind) && attacker.status === "racing" && !attacker.crash) {
-        const target = nearestWithinReach(attacker.motion, targets(), attack.kind);
+      if (attack.steps === windUpSteps(attack.kind) && canFight(attacker)) {
+        const target = nearestWithinReach(attacker.motion, targetsFor(attacker), attack.kind);
         if (target) {
           attack.side = awayFrom(attacker.motion, target.motion);
           land(attacker, target, attack.kind);
@@ -355,25 +367,20 @@ export function createRace(options: RaceOptions): Race {
     }
   }
 
-  function land(attacker: Rider, target: Rider, kind: AttackKind) {
-    events.push({
-      type: "attack-landed",
-      attacker: { kind: "rider", id: attacker.id },
-      target: { kind: "rider", id: target.id },
-      kind,
-    });
+  function land(attacker: Fighter, target: Fighter, kind: AttackKind) {
+    events.push({ type: "attack-landed", attacker: who(attacker), target: who(target), kind });
     // Any hit in the middle of a club swing takes the club from its holder, and their swing never lands.
     if (isMidSwing(target.attack)) {
       target.weapon = null;
       target.attack = null;
       attacker.weapon = "club";
-      events.push({ type: "weapon-stolen", from: { kind: "rider", id: target.id }, by: { kind: "rider", id: attacker.id } });
+      events.push({ type: "weapon-stolen", from: who(target), by: who(attacker) });
     }
     const { stamina, shove } = TUNING.attacks[kind];
     // A kick shoves its target sideways, away from the attacker.
     if (shove > 0) target.motion.shove = awayFrom(attacker.motion, target.motion) * shove;
     // A hit on a rider with no stamina left knocks them off their bike.
-    if (target.stamina <= 0) crash(target, "knocked-off", target.motion.speed);
+    if (target.stamina <= 0 && target.kind === "rider") crash(target, "knocked-off", target.motion.speed);
     target.stamina = Math.max(0, target.stamina - stamina);
     target.stepsSinceHit = 0;
   }
@@ -555,8 +562,10 @@ export function createRace(options: RaceOptions): Race {
         }
         for (const opponent of riding) {
           if (!opponent.temperament || opponent.attack || opponent.droppingBack) continue;
-          const nearest = nearestWithinReach(opponent.motion, riding, punchOf(opponent));
-          const kind = nearest && opponentAttack(opponent.temperament, nearest.id === PLAYER, random);
+          const nearest = nearestWithinReach(opponent.motion, targetsFor(opponent), punchOf(opponent));
+          // Opponents leave the cops alone.
+          if (nearest?.kind !== "rider") continue;
+          const kind = opponentAttack(opponent.temperament, nearest.id === PLAYER, random);
           // A club reaches further than a kick: a club holder swings at a rider its kick can't reach.
           if (kind) throwAttack(opponent, kind === "kick" && !withinReach(opponent.motion, nearest.motion, kind) ? "punch" : kind);
         }

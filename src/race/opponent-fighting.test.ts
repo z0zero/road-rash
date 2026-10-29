@@ -73,6 +73,11 @@ describe("opponents", () => {
     expect(thrown.filter((event) => event.target === null)).toEqual([]);
   });
 
+  it("leave the cops alone, throwing their attacks only at riders", () => {
+    expect(thrown.length).toBeGreaterThan(100);
+    expect(thrown.filter((event) => event.target?.kind !== "rider")).toEqual([]);
+  });
+
   it("attack the player often if they are brawlers or bullies", () => {
     for (const temperament of ["brawler", "bully"] as const) {
       expect(tallies.player[temperament].seconds).toBeGreaterThan(10);
