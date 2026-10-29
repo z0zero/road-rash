@@ -43,11 +43,15 @@ export function Hud({ session }: { session: GameSession }) {
   const callout = useRef<HTMLDivElement>(null);
   /** The stretch of race time the callout shows for. */
   const calloutShown = useRef({ from: 0, until: 0 });
+  /** Whether the player last went down because a car knocked them down while on foot, rather than in a crash. */
+  const knockedDown = useRef(false);
   const riders = session.view.current.riders;
 
   useEffect(
     () =>
       session.onRaceEvent((event) => {
+        if (event.type === "crash" && event.rider === PLAYER) knockedDown.current = false;
+        if (event.type === "knocked-down" && event.rider === PLAYER) knockedDown.current = true;
         const text = calloutFor(event, session.view.current.riders);
         if (!text) return;
         setText(callout.current, text);
@@ -82,7 +86,7 @@ export function Hud({ session }: { session: GameSession }) {
         }
         setShown(warnLeft.current, current.warnings.left);
         setShown(warnRight.current, current.warnings.right);
-        setText(status.current, statusOf(player));
+        setText(status.current, statusOf(player, knockedDown.current));
         setShown(weapon.current, player.weapon === "club");
         // A callout goes once its time is up, or straight away in a race that has started over.
         const { from, until } = calloutShown.current;
@@ -235,10 +239,10 @@ function calloutFor(event: RaceEvent, riders: readonly RiderSnapshot[]): string 
   return null;
 }
 
-/** What the player is doing, if they are off their bike. */
-function statusOf(player: RiderSnapshot): string {
+/** What the player is doing, if they are off their bike: tumbling after a crash, or after a car `knockedDown` them. */
+function statusOf(player: RiderSnapshot, knockedDown: boolean): string {
   if (player.status !== "racing") return "";
-  if (player.crash === "tumbling") return "Crash!";
+  if (player.crash === "tumbling") return knockedDown ? "Knocked down!" : "Crash!";
   if (player.crash === "on-foot") return "Back to your bike!";
   return "";
 }

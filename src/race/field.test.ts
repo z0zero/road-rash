@@ -1,6 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { createRace, NO_INPUT, PLAYER, type PlayerInput, type Race, type RaceEvent, type RiderSnapshot, type Track } from ".";
-import { autopilot, chase, player, secondsUntil, startedRace, STEPS_PER_SECOND } from "./test-helpers";
+import {
+  createRace,
+  NO_INPUT,
+  PLAYER,
+  type PlayerInput,
+  type Race,
+  type RaceEvent,
+  type RaceOptions,
+  type RiderSnapshot,
+  type Track,
+} from ".";
+import {
+  autopilot,
+  bendSpeed,
+  chase,
+  CLOSED_ROAD,
+  player,
+  secondsUntil,
+  startedRace,
+  steerTowards,
+  STEPS_PER_SECOND,
+} from "./test-helpers";
 
 type RiderFinished = Extract<RaceEvent, { type: "rider-finished" }>;
 
@@ -36,9 +56,17 @@ function raceWithoutThePlayer(
   return { race, finished };
 }
 
-/** Rides a started race with `makeInput`'s input until the player's race is over, then fast-forwards it; collects every event on the way. */
-function rideToTheResults(seed: number, makeInput: (race: Race) => () => PlayerInput) {
-  const race = startedRace(seed);
+/**
+ * Rides a started race (set up with `options` besides the seed) with
+ * `makeInput`'s input until the player's race is over, then fast-forwards
+ * it; collects every event on the way.
+ */
+function rideToTheResults(
+  seed: number,
+  makeInput: (race: Race) => () => PlayerInput,
+  options: Omit<RaceOptions, "seed"> = {},
+) {
+  const race = startedRace(seed, options);
   const input = makeInput(race);
   const events: RaceEvent[] = [];
   secondsUntil(race, input, () => {
@@ -272,6 +300,8 @@ describe("bumping", () => {
 
     secondsUntil(race, input, () => {
       const { riders } = race.snapshot();
+      // While they both stay on their bikes: bumped onto the shoulder, either of them may run into an obstacle there.
+      if (riders[target].crash || riders[PLAYER].crash) return true;
       const along = Math.abs(riders[target].distance - riders[PLAYER].distance);
       const across = Math.abs(riders[target].offset - riders[PLAYER].offset);
       if (along < 4 || gaps.length > 0) gaps.push({ along, across, speedDifference: riders[PLAYER].speed - riders[target].speed });
@@ -291,7 +321,9 @@ describe("bumping", () => {
 
 /**
  * Input that keeps the player about `gap` metres behind the opponent `target`,
- * a lane to the side of it, so the opponent always has the player close by.
+ * a lane to the side of it, so the opponent always has the player close by:
+ * it holds its line through the bends and slows for them, and steers round
+ * any obstacle in its way.
  */
 function shadow(race: Race, target: number, gap = 15) {
   let lastOffset = player(race).offset;
@@ -301,11 +333,19 @@ function shadow(race: Race, target: number, gap = 15) {
     const them = riders[target];
     const sideways = (me.offset - lastOffset) * STEPS_PER_SECOND;
     lastOffset = me.offset;
-    const lane = them.offset > 0 ? them.offset - 3 : them.offset + 3;
-    const wanted = Math.max(0, them.speed + 0.5 * (them.distance - me.distance - gap));
+    let lane = them.offset > 0 ? them.offset - 3 : them.offset + 3;
+    // Round any obstacle in its way.
+    for (const obstacle of race.track.obstacles) {
+      const ahead = obstacle.distance - me.distance;
+      const clearance = obstacle.radius + 1.2;
+      if (ahead > 0 && ahead < 60 && Math.abs(obstacle.offset - lane) < clearance) {
+        lane = obstacle.offset + (lane >= obstacle.offset ? clearance : -clearance);
+      }
+    }
+    const wanted = Math.min(bendSpeed(race), Math.max(0, them.speed + 0.5 * (them.distance - me.distance - gap)));
     return {
       ...NO_INPUT,
-      steer: Math.max(-1, Math.min(1, 0.6 * (lane - me.offset) - 0.25 * sideways)),
+      steer: steerTowards(race, lane, sideways),
       throttle: me.speed < wanted ? 1 : 0,
       brake: me.speed > wanted + 1 ? Math.min(1, (me.speed - wanted) / 4) : 0,
     };
@@ -314,10 +354,11 @@ function shadow(race: Race, target: number, gap = 15) {
 
 /**
  * Seconds the opponent `rider` takes to ride from `from` to `to` (distances
- * along the track), while the player rides with the input `makeInput` gives.
+ * along the track), while the player rides with the input `makeInput` gives,
+ * on a closed road.
  */
 function stretchTime(seed: number, rider: number, from: number, to: number, makeInput: (race: Race) => () => PlayerInput) {
-  const race = startedRace(seed);
+  const race = startedRace(seed, CLOSED_ROAD);
   const input = makeInput(race);
   const reached = (distance: number) => {
     secondsUntil(race, input, () => race.snapshot().riders[rider].distance >= distance);
@@ -327,7 +368,9 @@ function stretchTime(seed: number, rider: number, from: number, to: number, make
   return reached(to) - start;
 }
 
-// Catch-up is measured on racers: brawlers and bullies near the player ride up alongside them to fight instead.
+// Catch-up is measured on racers: brawlers and bullies near the player ride up alongside them to fight instead. And on a
+// closed road: traffic only fills the road around the player, so it would hold up an opponent near the player and not
+// one far from them.
 describe("catch-up", () => {
   it("slows opponents far ahead of the player by up to 8%", () => {
     const seed = 1;
@@ -347,7 +390,7 @@ describe("catch-up", () => {
   it("speeds up opponents far behind the player by up to 8%", () => {
     const seed = 1;
     // Find the longest stretch a racer rides more than 300 m behind the player, who rides well.
-    const race = startedRace(seed);
+    const race = startedRace(seed, CLOSED_ROAD);
     const pilot = autopilot(race);
     const behind = new Map<number, { from: number; to: number }>();
     secondsUntil(race, pilot, () => {
@@ -375,8 +418,9 @@ describe("catch-up", () => {
 
 describe("the results", () => {
   it("qualify a player who finishes third or better, and only them", () => {
+    // On a closed road, where how fast the player rides alone decides their position.
     const results = [Infinity, 52, 45].map(
-      (targetSpeed) => rideToTheResults(1, (race) => autopilot(race, { targetSpeed })).results,
+      (targetSpeed) => rideToTheResults(1, (race) => autopilot(race, { targetSpeed }), CLOSED_ROAD).results,
     );
 
     for (const { outcome, position, qualified } of results) {
@@ -424,7 +468,8 @@ describe("determinism with a full field", () => {
 
     expect(second).toEqual(first);
     expect(first.final.riders).toHaveLength(15);
-    expect(first.events.filter((event) => event.type === "rider-finished")).toHaveLength(15);
+    // The whole field raced to the end, though in traffic a rider may be wrecked on the way.
+    expect(first.final.riders.filter((rider) => rider.status === "racing")).toEqual([]);
   });
 
   it("races differently from a different seed", () => {
@@ -434,7 +479,8 @@ describe("determinism with a full field", () => {
 
 describe("positions", () => {
   it("change as the player passes riders, climbing from last place", () => {
-    const race = startedRace(1);
+    // On a closed road, so that the player rides through the field at their own pace.
+    const race = startedRace(1, CLOSED_ROAD);
     const pilot = autopilot(race);
     const positions = [player(race).position];
     let outOfOrder = 0;
