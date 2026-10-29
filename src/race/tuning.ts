@@ -34,4 +34,18 @@ export const TUNING = {
   bumpShove: 2.5,
   /** ...and a shove dies away at this rate (1/s). */
   shoveDecay: 6,
+  /** Attacks reach riders at most this far along the track (m); how far sideways depends on the attack. */
+  attackReachAlong: 2,
+  /**
+   * Each attack: seconds from throwing it to its strike, and from the strike
+   * until the next can be thrown; how far sideways it reaches (m); the stamina
+   * it takes when it lands; and how fast it shoves its target sideways (m/s).
+   */
+  attacks: {
+    punch: { windUp: 0.12, recovery: 0.2, reachAcross: 1.8, stamina: 18, shove: 0 },
+    kick: { windUp: 0.25, recovery: 0.3, reachAcross: 1.8, stamina: 6, shove: 6 },
+    "club-swing": { windUp: 0.3, recovery: 0.35, reachAcross: 2.4, stamina: 30, shove: 0 },
+  },
+  /** A fresh rider's stamina; it runs down to 0. */
+  fullStamina: 100,
 } as const;
