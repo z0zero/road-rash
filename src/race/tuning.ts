@@ -52,4 +52,20 @@ export const TUNING = {
   staminaRecovery: 6,
   /** ...once the rider has gone this many seconds without being hit. */
   staminaRecoveryDelay: 2,
+  /** A crashed rider is thrown along the road, tumbling to a stop over this many seconds... */
+  tumbleSeconds: 1.2,
+  /** ...while their bike drops and grinds to a halt sooner, slowing by this much (m/s²), so it ends up behind them... */
+  slideDeceleration: 80,
+  /** ...and the sideways motion of both dies away at this rate (1/s). */
+  sideSlideDecay: 3,
+  /** On foot, a rider runs back to their bike at this speed (m/s)... */
+  runSpeed: 6,
+  /** ...and full steering turns them this far (radians) from running straight at it. */
+  runTurn: Math.PI / 3,
+  /** A rider on foot this close to their bike (m) gets back on it... */
+  remountReach: 0.5,
+  /** ...riding off at this speed (m/s)... */
+  remountSpeed: 5,
+  /** ...with at least this much stamina. */
+  remountStamina: 50,
 } as const;

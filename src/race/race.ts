@@ -1,6 +1,16 @@
 import { getCoastalTrack } from "./coastal-track";
 import { bumpApart } from "./contact";
-import type { AttackKind, RaceEvent, RaceOutcome, RiderId } from "./events";
+import {
+  canRemount,
+  carryOn,
+  remount,
+  slide,
+  throwOff,
+  type Crash,
+  type CrashPhase,
+  type OnFootControls,
+} from "./crashing";
+import type { AttackKind, CrashCause, RaceEvent, RaceOutcome, RiderId } from "./events";
 import { lineUpOpponents } from "./field";
 import { attackSteps, awayFrom, nearestWithinReach, windUpSteps, type Attack } from "./fighting";
 import { catchUpFor, opponentControls, paceFor, type OpponentRiding } from "./opponent-riding";
@@ -19,6 +29,9 @@ const COUNTDOWN_STEPS = 3 * STEPS_PER_SECOND;
 
 /** Once over the finish line, a rider lets go of the throttle and brakes to a stop. */
 const FINISHED_CONTROLS: Controls = { throttle: 0, brake: 0.7, steer: 0 };
+
+/** Opponents on foot run straight back to their bikes. */
+const RUN_STRAIGHT_BACK: OnFootControls = { steer: 0, brake: 0 };
 
 /** Fast-forwarding races the rest of the field for at most three extra simulated minutes. */
 const FAST_FORWARD_STEPS = 180 * STEPS_PER_SECOND;
@@ -64,6 +77,19 @@ export interface RiderSnapshot {
   readonly finishTime: number | null;
   /** How much fight the rider has left: 100 when fresh, down to 0. */
   readonly stamina: number;
+  /** Null while the rider is on their bike; after a crash, "tumbling" and then "on-foot" until they remount. */
+  readonly crash: CrashPhase | null;
+  /** Where the rider's bike is: under them while they ride it, or wherever it slid to after a crash. */
+  readonly bike: BikeSnapshot;
+}
+
+export interface BikeSnapshot {
+  /** Metres along the track's centreline. */
+  readonly distance: number;
+  /** Metres sideways from the centreline; positive is right of the race direction. */
+  readonly offset: number;
+  /** Metres per second along the track. */
+  readonly speed: number;
 }
 
 /** Everything visible in the race at one moment. Snapshots are plain data that later steps never change. */
@@ -136,6 +162,7 @@ interface Rider {
   readonly id: RiderId;
   readonly name: string;
   readonly temperament: Temperament | null;
+  /** The bike's motion, which is the rider's too while they ride it. */
   readonly motion: Motion;
   /** How an opponent rides; null for the player, whose input comes from outside. */
   readonly riding: OpponentRiding | null;
@@ -148,6 +175,13 @@ interface Rider {
   stepsSinceHit: number;
   /** The attack the rider is making, or null. */
   attack: Attack | null;
+  /** Null while the rider is on their bike; how they are getting back to it after a crash. */
+  crash: Crash | null;
+}
+
+/** Where a rider is: on their bike, or wherever they are after being thrown off it. */
+function whereIs(rider: Rider): { readonly distance: number; readonly offset: number; readonly speed: number } {
+  return rider.crash ? rider.crash.body : rider.motion;
 }
 
 /** Stamina starts recovering once a rider has gone this many steps without being hit. */
@@ -173,6 +207,7 @@ export function createRace(options: RaceOptions): Race {
       stamina: TUNING.fullStamina,
       stepsSinceHit: Infinity,
       attack: null,
+      crash: null,
     },
   ];
   lineUpOpponents(track, OPPONENTS.length, random).forEach(({ distance, offset }, index) => {
@@ -188,13 +223,18 @@ export function createRace(options: RaceOptions): Race {
       stamina: TUNING.fullStamina,
       stepsSinceHit: Infinity,
       attack: null,
+      crash: null,
     });
   });
 
   const clock = () => Math.max(0, stepsTaken - COUNTDOWN_STEPS) / STEPS_PER_SECOND;
 
-  /** The riders an attack can be aimed at: everyone still racing. */
-  const targets = () => riders.filter((rider) => rider.status === "racing");
+  /** Riders still racing on their bikes: the ones who ride, bump and fight. */
+  const onTheirBikes = () => riders.filter((rider) => rider.status === "racing" && !rider.crash);
+  const edge = track.roadHalfWidth + track.shoulderWidth;
+
+  /** The riders an attack can be aimed at. */
+  const targets = onTheirBikes;
 
   /** Starts an attack's wind-up, aimed at the nearest rider within reach (if any). */
   function throwAttack(attacker: Rider, kind: AttackKind) {
@@ -214,7 +254,7 @@ export function createRace(options: RaceOptions): Race {
       const attack = attacker.attack;
       if (!attack) continue;
       attack.steps++;
-      if (attack.steps === windUpSteps(attack.kind) && attacker.status === "racing") {
+      if (attack.steps === windUpSteps(attack.kind) && attacker.status === "racing" && !attacker.crash) {
         const target = nearestWithinReach(attacker.motion, targets(), attack.kind);
         if (target) land(attacker, target, attack.kind);
       }
@@ -230,10 +270,27 @@ export function createRace(options: RaceOptions): Race {
       kind,
     });
     const { stamina, shove } = TUNING.attacks[kind];
-    target.stamina = Math.max(0, target.stamina - stamina);
-    target.stepsSinceHit = 0;
     // A kick shoves its target sideways, away from the attacker.
     if (shove > 0) target.motion.shove = awayFrom(attacker.motion, target.motion) * shove;
+    // A hit on a rider with no stamina left knocks them off their bike.
+    if (target.stamina <= 0) crash(target, "knocked-off", target.motion.speed);
+    target.stamina = Math.max(0, target.stamina - stamina);
+    target.stepsSinceHit = 0;
+  }
+
+  /** Throws a rider off their bike. */
+  function crash(rider: Rider, cause: CrashCause, impactSpeed: number) {
+    events.push({ type: "crash", rider: rider.id, cause, impactSpeed });
+    rider.attack = null;
+    rider.crash = throwOff(rider.motion);
+  }
+
+  /** A rider on foot who has reached their bike rides off on it again, with at least some stamina. */
+  function getBackOn(rider: Rider) {
+    rider.crash = null;
+    remount(rider.motion);
+    rider.stamina = Math.max(rider.stamina, TUNING.remountStamina);
+    events.push({ type: "remounted", rider: rider.id });
   }
 
   /** Riders who have gone long enough without being hit get their stamina back, a little every step. */
@@ -249,10 +306,10 @@ export function createRace(options: RaceOptions): Race {
   /** Finishes the riders who crossed the finish line during the step that began at `clockBefore`, in the order they crossed it. */
   function finishCrossings(distancesBefore: readonly number[], clockBefore: number) {
     const crossings = riders
-      .filter((rider) => rider.status === "racing" && rider.motion.distance >= track.finishDistance)
+      .filter((rider) => rider.status === "racing" && whereIs(rider).distance >= track.finishDistance)
       .map((rider) => {
         const before = distancesBefore[rider.id];
-        const share = (track.finishDistance - before) / (rider.motion.distance - before);
+        const share = (track.finishDistance - before) / (whereIs(rider).distance - before);
         return { rider, time: clockBefore + share * STEP_SECONDS };
       })
       .sort((a, b) => a.time - b.time || a.rider.id - b.rider.id);
@@ -276,7 +333,7 @@ export function createRace(options: RaceOptions): Race {
       .sort((a, b) => (a.finishOrder ?? 0) - (b.finishOrder ?? 0));
     const racing = riders
       .filter((rider) => rider.status === "racing")
-      .sort((a, b) => b.motion.distance - a.motion.distance);
+      .sort((a, b) => whereIs(b).distance - whereIs(a).distance);
     return [...finished, ...racing];
   }
 
@@ -313,21 +370,29 @@ export function createRace(options: RaceOptions): Race {
       if (stepsTaken >= COUNTDOWN_STEPS) {
         const clockBefore = clock();
         // Everyone decides what to do from where things stand, then everyone moves.
-        const field = riders.filter((rider) => rider.status === "racing").map((rider) => rider.motion);
+        const field = onTheirBikes().map((rider) => rider.motion);
         const player = riders[PLAYER];
         // Catch-up keeps the field near the player, so it stops once the player's race is over.
         const catchUp = (rider: Rider) =>
-          player.status === "racing" ? catchUpFor(rider.motion.distance - player.motion.distance) : 1;
+          player.status === "racing" ? catchUpFor(rider.motion.distance - whereIs(player).distance) : 1;
         const controls = riders.map((rider) => {
           if (rider.status !== "racing") return FINISHED_CONTROLS;
           return rider.riding ? opponentControls(rider.motion, rider.riding, track, field, catchUp(rider)) : input;
         });
-        if (player.status === "racing" && !player.attack && (input.punch || input.kick)) {
+        if (player.status === "racing" && !player.crash && !player.attack && (input.punch || input.kick)) {
           throwAttack(player, input.punch ? "punch" : "kick");
         }
-        const distancesBefore = riders.map((rider) => rider.motion.distance);
-        riders.forEach((rider, index) => ride(rider.motion, controls[index], track, STEP_SECONDS));
-        bumpApart(field, track.roadHalfWidth + track.shoulderWidth);
+        const distancesBefore = riders.map((rider) => whereIs(rider).distance);
+        riders.forEach((rider, index) => {
+          if (!rider.crash) {
+            ride(rider.motion, controls[index], track, STEP_SECONDS);
+          } else {
+            slide(rider.motion, edge);
+            carryOn(rider.crash, rider.motion, rider.riding ? RUN_STRAIGHT_BACK : input, edge);
+            if (canRemount(rider.crash, rider.motion)) getBackOn(rider);
+          }
+        });
+        bumpApart(field, edge);
         advanceAttacks();
         recoverStamina();
         finishCrossings(distancesBefore, clockBefore);
@@ -340,18 +405,23 @@ export function createRace(options: RaceOptions): Race {
       return {
         countdown: Math.max(0, COUNTDOWN_STEPS - stepsTaken) / STEPS_PER_SECOND,
         clock: clock(),
-        riders: riders.map((rider) => ({
-          id: rider.id,
-          name: rider.name,
-          temperament: rider.temperament,
-          distance: rider.motion.distance,
-          offset: rider.motion.offset,
-          speed: rider.motion.speed,
-          status: rider.status,
-          position: ranks.get(rider.id) ?? null,
-          finishTime: rider.finishTime,
-          stamina: rider.stamina,
-        })),
+        riders: riders.map((rider) => {
+          const { distance, offset, speed } = whereIs(rider);
+          return {
+            id: rider.id,
+            name: rider.name,
+            temperament: rider.temperament,
+            distance,
+            offset,
+            speed,
+            status: rider.status,
+            position: ranks.get(rider.id) ?? null,
+            finishTime: rider.finishTime,
+            stamina: rider.stamina,
+            crash: rider.crash?.phase ?? null,
+            bike: { distance: rider.motion.distance, offset: rider.motion.offset, speed: rider.motion.speed },
+          };
+        }),
       };
     },
     drainEvents() {
