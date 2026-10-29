@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { createRace, PLAYER, type RaceResults } from ".";
+import { createRace, PLAYER, type RaceEvent, type RaceResults } from ".";
 import {
+  alongsideTheFirstCop,
   autopilot,
   chase,
   CLOSED_ROAD,
+  eventsUntil,
   nearestOpponent,
   player,
   secondsUntil,
@@ -29,6 +31,19 @@ function rideToAWreck(seed: number): RaceResults {
   const target = nearestOpponent(race);
   secondsUntil(race, chase(race, target, 12), () => player(race).status !== "racing", 120);
   return race.fastForward();
+}
+
+/**
+ * A race in which a cop busted the player, who punched the first cop and rode
+ * on beside it as it fought back, until a hit knocked them off there: its
+ * results, the cops as it ended, and which cop busted the player.
+ */
+function rideToABust(seed: number) {
+  const { race, input } = alongsideTheFirstCop(seed);
+  const punchingTheCopOnce = () => ({ ...input(), punch: race.snapshot().cops[0].stamina === 150 });
+  const events = eventsUntil(race, punchingTheCopOnce, (event) => event.type === "player-race-over", 30);
+  const bust = events.find((event): event is Extract<RaceEvent, { type: "busted" }> => event.type === "busted" && event.rider === PLAYER);
+  return { results: race.fastForward(), cops: race.snapshot().cops, bustedBy: bust?.cop };
 }
 
 /** `make`, remembering what it made for each key: a race replays identically, so its results can be shared. */
@@ -94,6 +109,15 @@ describe("the remark on the results", () => {
       expect(name).toBe(standing?.name);
       expect(standing?.position).not.toBeNull();
     }
+  });
+
+  it("comes from the cop who busted the player", () => {
+    const { results, cops, bustedBy } = rideToABust(1);
+
+    expect(results.outcome).toBe("busted");
+    expect(bustedBy).toBeDefined();
+    expect(results.remark).toMatchObject({ by: { kind: "cop", id: bustedBy }, name: cops.find((cop) => cop.id === bustedBy)?.name });
+    expect(results.remark.line).toMatch(/\w/);
   });
 
   it("is chosen with the race's seed: the same race gives the same remark, other races others", () => {

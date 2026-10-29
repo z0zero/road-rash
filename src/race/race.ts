@@ -392,6 +392,8 @@ export function createRace(options: RaceOptions): Race {
   /** Where the obstacles stand: they never move. */
   const obstacles = track.obstacles.map(footprintOfObstacle);
   const cops = options.cops === false ? [] : lineUpCops(track);
+  /** The cop who busted the player, once one has. */
+  let playerBustedBy: Cop | null = null;
 
   const clock = () => Math.max(0, stepsTaken - COUNTDOWN_STEPS) / STEPS_PER_SECOND;
 
@@ -569,7 +571,10 @@ export function createRace(options: RaceOptions): Race {
       cop.busting = null;
       cop.standingBySteps = stepsIn(TUNING.cops.standingBySeconds);
       events.push({ type: "busted", rider: rider.id, cop: cop.id });
-      if (rider.id === PLAYER) events.push({ type: "player-race-over", outcome: "busted" });
+      if (rider.id === PLAYER) {
+        playerBustedBy = cop;
+        events.push({ type: "player-race-over", outcome: "busted" });
+      }
     }
   }
 
@@ -690,11 +695,15 @@ export function createRace(options: RaceOptions): Race {
       const { temperament } = riders[rider];
       return temperament ? [{ id: rider, name, temperament, position }] : [];
     });
-    // Until cops ride in the race, nobody is busted: a player's race that didn't finish was wrecked.
-    const ending: Ending =
-      outcome === "finished" && position !== null ? { outcome, position, qualified } : { outcome: "wrecked" };
-    const remark = remarkOn(ending, opponents, createRandom(options.seed ^ REMARK_SEED));
+    const remark = remarkOn(endingFor(outcome, position, qualified), opponents, createRandom(options.seed ^ REMARK_SEED));
     return { outcome, time: riders[PLAYER].finishTime, position, qualified, standings, remark };
+  }
+
+  /** How the player's race ended, for the remark on it: a race that neither finished nor got them busted wrecked their bike. */
+  function endingFor(outcome: RaceOutcome, position: number | null, qualified: boolean): Ending {
+    if (outcome === "busted" && playerBustedBy) return { outcome, cop: { id: playerBustedBy.id, name: playerBustedBy.name } };
+    if (outcome === "finished" && position !== null) return { outcome, position, qualified };
+    return { outcome: "wrecked" };
   }
 
   const race: Race = {
