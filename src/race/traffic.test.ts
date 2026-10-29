@@ -246,6 +246,54 @@ describe("running into a car", () => {
   });
 });
 
+/**
+ * Input for the player on foot: runs across the road to the offset `where`
+ * gives, then stands still there. Steering turns the run left or right of
+ * heading straight for the bike; it takes the turn that heads across
+ * towards the offset.
+ */
+function standIn(race: Race, where: () => number) {
+  return (): PlayerInput => {
+    const me = player(race);
+    const across = where() - me.offset;
+    if (Math.abs(across) < 0.2) return { ...NO_INPUT, brake: 1 };
+    const toTheBike = Math.atan2(me.bike.offset - me.offset, me.bike.distance - me.distance);
+    // Turning right (steering +1) heads more to the right when the bike is ahead, more to the left when it is behind.
+    return { ...NO_INPUT, steer: Math.sign(across) * (Math.cos(toTheBike) >= 0 ? 1 : -1) };
+  };
+}
+
+describe("a rider on foot", () => {
+  it("is knocked down by a car that runs into them: they tumble again, at no cost to their bike", () => {
+    const { race, car } = behindACar();
+    eventsUntil(race, chaseCar(race, car, 12), playerCrashed);
+    secondsUntil(race, { ...NO_INPUT, brake: 1 }, () => player(race).crash === "on-foot", 3);
+    const condition = player(race).condition;
+    // The player gets into the nearer oncoming lane and stands still there until a car comes along it.
+    const standing = standIn(race, () => -race.track.laneWidth / 2);
+    let standingStill = false;
+    const waiting = () => {
+      const input = standing();
+      standingStill = input.brake === 1 && player(race).speed === 0;
+      return input;
+    };
+
+    const events = eventsUntil(race, waiting, (event) => event.type === "knocked-down", 30);
+
+    const me = player(race);
+    const culprit = race.snapshot().traffic.reduce((nearest, other) =>
+      Math.abs(other.distance - me.distance) < Math.abs(nearest.distance - me.distance) ? other : nearest,
+    );
+    expect(standingStill).toBe(true);
+    expect(culprit.oncoming).toBe(true);
+    expect(events.filter((event) => event.type === "knocked-down")).toEqual([
+      { type: "knocked-down", rider: PLAYER, impactSpeed: expect.closeTo(culprit.speed, 6) },
+    ]);
+    expect(events.filter(playerCrashed)).toEqual([]);
+    expect(player(race)).toMatchObject({ crash: "tumbling", condition, status: "racing" });
+  });
+});
+
 /** A car or an obstacle, as something on the road a rider can run into: its middle, and half its length and width (metres). */
 interface Thing {
   readonly key: string;
