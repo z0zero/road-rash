@@ -119,8 +119,10 @@ const UP = new Vector3(0, 1, 0);
 const STEEPEST_FOOTING = 1;
 /** ...and boulders, sunk deeper, where it rises up to this much... */
 const STEEPEST_FOOTING_FOR_ROCKS = 1.8;
-/** ...looking up to this far further from the road for such a place (metres)... */
-const FOOTING_SEARCH = 14;
+/** ...looking up to this far either way across the road for such a place (metres)... */
+const FOOTING_SEARCH = 18;
+/** ...never closer to the road than this beyond the shoulder (metres)... */
+const FOOTING_CLEARANCE = 2.5;
 /** ...and never in the sea. */
 const SHORE = 0.5;
 
@@ -128,12 +130,9 @@ const SHORE = 0.5;
 function placeItem(track: Track, terrain: Terrain, item: SceneryPlacement, index: number): [Model, Matrix4][] {
   const { heading } = track.sampleAt(item.distance);
   const placed = track.pointAt(item.distance, item.offset);
-  // Right of the heading is (cos, sin) in (x, z): away from the road on the item's side.
-  const away = Math.sign(item.offset);
   const stands = item.kind === "palm" || item.kind === "pine" || item.kind === "rock" || item.kind === "house";
-  const steepest = item.kind === "rock" ? STEEPEST_FOOTING_FOR_ROCKS : STEEPEST_FOOTING;
   const at = stands
-    ? footing(terrain, placed.x, placed.z, away * Math.cos(heading), away * Math.sin(heading), steepest)
+    ? footing(track, terrain, item, item.kind === "rock" ? STEEPEST_FOOTING_FOR_ROCKS : STEEPEST_FOOTING)
     : { ...placed, slope: 0 };
   if (!at) return [];
   const ground = terrain.groundAt(at.x, at.z);
@@ -184,22 +183,29 @@ function placeItem(track: Track, terrain: Terrain, item: SceneryPlacement, index
 }
 
 /**
- * Somewhere firm to stand at or beyond a point, moving away from the road
- * along (`awayX`, `awayZ`): ground that rises no more than `steepest` metres
- * per metre, above the shore, so nothing floats off a cliff face or stands in
- * the sea. Also says how steep the ground there is.
+ * The nearest firm place for an item to stand, at its placement or moved
+ * across the road's line, out from it or back towards it (but no nearer than
+ * FOOTING_CLEARANCE beyond the shoulder): ground that rises no more than
+ * `steepest` metres per metre and lies above the shore, so nothing floats off
+ * a cliff face or stands in the sea. Also says how steep the ground there is;
+ * null if there is nowhere.
  */
-function footing(terrain: Terrain, x: number, z: number, awayX: number, awayZ: number, steepest: number) {
+function footing(track: Track, terrain: Terrain, item: SceneryPlacement, steepest: number) {
+  const side = Math.sign(item.offset);
+  const nearest = track.roadHalfWidth + track.shoulderWidth + FOOTING_CLEARANCE;
   for (let step = 0; step <= FOOTING_SEARCH; step += 1.5) {
-    const px = x + awayX * step;
-    const pz = z + awayZ * step;
-    const y = terrain.groundAt(px, pz);
-    if (y < SHORE) return null;
-    let slope = 0;
-    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      slope = Math.max(slope, Math.abs(terrain.groundAt(px + dx, pz + dz) - y));
+    for (const direction of step === 0 ? [1] : [1, -1]) {
+      const offset = item.offset + side * direction * step;
+      if (Math.abs(offset) < nearest || Math.sign(offset) !== side) continue;
+      const { x, z } = track.pointAt(item.distance, offset);
+      const y = terrain.groundAt(x, z);
+      if (y < SHORE) continue;
+      let slope = 0;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        slope = Math.max(slope, Math.abs(terrain.groundAt(x + dx, z + dz) - y));
+      }
+      if (slope <= steepest) return { x, y, z, slope };
     }
-    if (slope <= steepest) return { x: px, y, z: pz, slope };
   }
   return null;
 }
