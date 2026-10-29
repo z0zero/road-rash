@@ -1,6 +1,7 @@
 import type { PlayerInput } from "@/race";
 import { listenToGamepads } from "./gamepad";
 import { listenToKeyboard } from "./keyboard";
+import { moveThroughMenu, pressInMenu } from "./menus";
 
 export interface PlayerControls {
   /** Reads the gamepads: call it once every animation frame, whatever the screen, so that Start pauses and resumes. */
@@ -14,11 +15,16 @@ export interface PlayerControls {
 /**
  * The player's controls: the keyboard and any gamepads, read together, so
  * the player can ride with either, or both at once. Esc, P and a gamepad's
- * Start call `onPause`.
+ * Start call `onPause`. A gamepad also gets round the screens: its D-pad or
+ * left stick moves between their buttons and A presses them.
  */
 export function listenToPlayer(target: Window, onPause: () => void): PlayerControls {
   const keyboard = listenToKeyboard(target, onPause);
-  const gamepads = listenToGamepads(target, onPause);
+  const gamepads = listenToGamepads(target, {
+    onPause,
+    onMenuMove: (direction) => moveThroughMenu(target.document, direction),
+    onMenuPress: () => pressInMenu(target.document),
+  });
   return {
     poll: () => gamepads.poll(),
     read: () => together(keyboard.read(), gamepads.read()),

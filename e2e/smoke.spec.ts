@@ -272,6 +272,40 @@ test.describe("with a gamepad", () => {
     expect(await hudSpeed(page)).toBeGreaterThan(coasting + 10);
     await page.keyboard.up("w");
   });
+
+  /** Presses a gamepad button, waits for what it does, then lets go. */
+  async function tap(page: Page, button: number, then: () => Promise<void>) {
+    await gamepad(page).press(button);
+    await then();
+    await gamepad(page).release(button);
+  }
+
+  test("moves between menu buttons with the D-pad or the left stick, and presses them with A", async ({ page }) => {
+    await expect(page.getByRole("button", { name: "Start Race" })).toBeFocused();
+
+    await tap(page, GAMEPAD.down, () => expect(page.getByRole("button", { name: "Controls" })).toBeFocused());
+    await gamepad(page).push(0, 1);
+    await expect(page.getByRole("button", { name: "Settings" })).toBeFocused();
+    await gamepad(page).push(0, 0);
+    await tap(page, GAMEPAD.up, () => expect(page.getByRole("button", { name: "Controls" })).toBeFocused());
+    const controls = page.getByRole("dialog", { name: "Controls" });
+    await tap(page, GAMEPAD.a, () => expect(controls).toBeVisible());
+
+    // Back is in focus on the Controls screen.
+    await tap(page, GAMEPAD.a, () => expect(controls).toBeHidden());
+    await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
+  });
+
+  test("turns a volume slider in focus with the D-pad", async ({ page }) => {
+    await page.getByRole("button", { name: "Settings" }).click();
+    const master = page.getByRole("dialog", { name: "Settings" }).getByRole("slider", { name: "Master volume" });
+
+    // From Back, the last button, down comes round to the first slider.
+    await tap(page, GAMEPAD.down, () => expect(master).toBeFocused());
+    await tap(page, GAMEPAD.left, () => expect(master).toHaveValue("95"));
+    await tap(page, GAMEPAD.left, () => expect(master).toHaveValue("90"));
+    await tap(page, GAMEPAD.right, () => expect(master).toHaveValue("95"));
+  });
 });
 
 test("opens Settings from the title screen and goes back", async ({ page }) => {
