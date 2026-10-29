@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { STEP_SECONDS, type CarSnapshot } from ".";
+import { PLAYER, STEP_SECONDS, type CarSnapshot } from ".";
 import { autopilot, player, startedRace, STEPS_PER_SECOND } from "./test-helpers";
 
 describe("traffic", () => {
@@ -40,5 +40,34 @@ describe("traffic", () => {
     expect(seen.oncoming).toBeGreaterThan(1000);
     expect(seen.raceDirection).toBeGreaterThan(1000);
     expect(player(race).distance).toBeGreaterThan(race.track.startDistance + 1000);
+  });
+
+  it("fills a window around the player, from 150 m behind them to 600 m ahead, with about one car per 120 m in each direction", () => {
+    const race = startedRace();
+    const pilot = autopilot(race);
+    const counts = { oncoming: [] as number[], raceDirection: [] as number[] };
+    const gaps: number[] = [];
+
+    for (let step = 0; step < 150 * STEPS_PER_SECOND; step++) {
+      race.step(pilot());
+      const { traffic, riders } = race.snapshot();
+      for (const car of traffic) gaps.push(car.distance - riders[PLAYER].distance);
+      // Once the player is under way: their own speed brings the cars in the race direction into the window.
+      if (step % STEPS_PER_SECOND === 0 && step >= 20 * STEPS_PER_SECOND) {
+        counts.oncoming.push(traffic.filter((car) => car.oncoming).length);
+        counts.raceDirection.push(traffic.filter((car) => !car.oncoming).length);
+      }
+    }
+
+    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(-150 - 1e-6);
+    expect(Math.min(...gaps)).toBeLessThan(-140);
+    expect(Math.max(...gaps)).toBeLessThanOrEqual(600 + 1e-6);
+    expect(Math.max(...gaps)).toBeGreaterThan(590);
+    // 750 m of road at one car per 120 m: about six cars in each direction.
+    const mean = (values: readonly number[]) => values.reduce((total, value) => total + value, 0) / values.length;
+    for (const direction of [counts.oncoming, counts.raceDirection]) {
+      expect(mean(direction)).toBeGreaterThan(5);
+      expect(mean(direction)).toBeLessThan(7.5);
+    }
   });
 });
