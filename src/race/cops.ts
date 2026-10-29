@@ -1,6 +1,7 @@
 import type { Crash } from "./crashing";
 import type { CopId, RiderId } from "./events";
 import type { Attack, Weapon } from "./fighting";
+import type { Footprint } from "./footprint";
 import { lineAround, safeSpeedAt, type BendLimits } from "./opponent-riding";
 import { clamp, maxSidewaysSpeed, type Motion } from "./riding";
 import { STEP_SECONDS } from "./steps";
@@ -136,9 +137,16 @@ const PULL_UP_BRAKING = 12;
  * slowly. Further behind, it rides flat out, up to its top speed, to catch
  * them up; further ahead, it eases off to let them come up. It keeps to its
  * lane, finding its way around the riders on the road (`field`, the motions
- * of everyone on their bikes) as opponents do.
+ * of everyone on their bikes) and the cars and obstacles on it as opponents
+ * do, hurrying out of the way of one it is about to run into.
  */
-export function patrolIntent(me: Readonly<Motion>, player: Place, track: Track, field: readonly Readonly<Motion>[]): CopIntent {
+export function patrolIntent(
+  me: Readonly<Motion>,
+  player: Place,
+  track: Track,
+  field: readonly Readonly<Motion>[],
+  carsAndObstacles: readonly Footprint[],
+): CopIntent {
   const edge = track.roadHalfWidth - EDGE_MARGIN;
   const safe = safeSpeedAt(track, me.distance + me.speed * BRAKING_LEAD, COP_LIMITS);
   const ahead = me.distance - player.distance;
@@ -147,8 +155,8 @@ export function patrolIntent(me: Readonly<Motion>, player: Place, track: Track, 
   else if (ahead > PATROL_AHEAD) {
     speed = Math.min(speed, player.speed - Math.min(PATROL_MOST_EASING, PATROL_EASING * (ahead - PATROL_AHEAD)));
   }
-  const { line, holdBehind } = lineAround(me, PATROL_LINE, field, edge);
-  return { speed: clamp(Math.min(speed, holdBehind), 0, TUNING.cops.topSpeed), line };
+  const { line, holdBehind, evading } = lineAround(me, PATROL_LINE, field, carsAndObstacles, edge);
+  return { speed: clamp(Math.min(speed, holdBehind), 0, TUNING.cops.topSpeed), line, hurrying: evading };
 }
 
 /**
@@ -179,14 +187,21 @@ const MAX_CLOSING = 5;
  * `rider`: level with them, `FIGHTING_GAP` to their side (the side it is on,
  * unless that is off the road), within the reach of its club, and no faster
  * than it can safely go. It finds its way around the riders on the road
- * (`field`, the motions of everyone on their bikes) as on patrol.
+ * (`field`, the motions of everyone on their bikes) and the cars and
+ * obstacles on it as on patrol.
  */
-export function fightingBackIntent(me: Readonly<Motion>, rider: Place, track: Track, field: readonly Readonly<Motion>[]): CopIntent {
+export function fightingBackIntent(
+  me: Readonly<Motion>,
+  rider: Place,
+  track: Track,
+  field: readonly Readonly<Motion>[],
+  carsAndObstacles: readonly Footprint[],
+): CopIntent {
   const edge = track.roadHalfWidth - EDGE_MARGIN;
   const side = me.offset >= rider.offset ? 1 : -1;
   const beside = rider.offset + side * FIGHTING_GAP;
   const wanted = clamp(Math.abs(beside) <= edge ? beside : rider.offset - side * FIGHTING_GAP, -edge, edge);
-  const { line, holdBehind } = lineAround(me, wanted, field, edge);
+  const { line, holdBehind } = lineAround(me, wanted, field, carsAndObstacles, edge);
   const closing = clamp(LEVEL_GAIN * (rider.distance - me.distance), -MAX_CLOSING, MAX_CLOSING);
   const safe = safeSpeedAt(track, me.distance + me.speed * BRAKING_LEAD, COP_LIMITS);
   return { speed: clamp(Math.min(rider.speed + closing, safe, holdBehind), 0, TUNING.cops.topSpeed), line, hurrying: true };

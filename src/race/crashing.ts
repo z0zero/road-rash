@@ -20,11 +20,9 @@ export interface Body {
 /** A rider thrown off their bike: the bike slides on by itself while the rider tumbles. */
 export interface Crash {
   phase: CrashPhase;
-  /** Steps since the crash. */
+  /** Steps since the crash, or since the rider was last knocked down. */
   steps: number;
   readonly body: Body;
-  /** How fast the tumble slows the rider (m/s²), so that they come to a stop as it ends. */
-  readonly tumbleDeceleration: number;
 }
 
 /** Throws a rider off the bike whose motion is `bike`: they leave it at its speed and tumble to a stop. */
@@ -33,8 +31,15 @@ export function throwOff(bike: Readonly<Motion>): Crash {
     phase: "tumbling",
     steps: 0,
     body: { distance: bike.distance, offset: bike.offset, speed: bike.speed, sideways: bike.steering + bike.shove },
-    tumbleDeceleration: bike.speed / TUNING.tumbleSeconds,
   };
+}
+
+/** Knocks a rider on foot down: they tumble again, thrown along the track at `speed` and sideways at `sideways` (m/s). */
+export function knockDown(crash: Crash, speed: number, sideways: number): void {
+  crash.phase = "tumbling";
+  crash.steps = 0;
+  crash.body.speed = speed;
+  crash.body.sideways = sideways;
 }
 
 /** Moves a bike nobody is riding on by a step: it slides along the road and grinds to a stop. */
@@ -86,8 +91,9 @@ export function carryOn(crash: Crash, bike: Readonly<Motion>, controls: OnFootCo
   }
 }
 
-function tumble({ body, tumbleDeceleration }: Crash, edge: number) {
-  body.speed = Math.max(0, body.speed - tumbleDeceleration * STEP_SECONDS);
+/** A tumbling rider slows steadily along the track, either way, so as to come to a stop as the tumble ends. */
+function tumble({ body, steps }: Crash, edge: number) {
+  body.speed -= body.speed / Math.max(1, TUMBLE_STEPS - steps + 1);
   body.sideways *= Math.exp(-TUNING.sideSlideDecay * STEP_SECONDS);
   move(body, edge);
 }

@@ -47,6 +47,13 @@ export type RaceEvent =
       /** Metres per second. */
       readonly impactSpeed: number;
     }
+  /** A car ran into a rider on foot and knocked them down: they tumble again. It is not a crash: their bike is none the worse. */
+  | {
+      readonly type: "knocked-down";
+      readonly rider: RiderId;
+      /** Metres per second. */
+      readonly impactSpeed: number;
+    }
   | { readonly type: "remounted"; readonly rider: RiderId }
   | { readonly type: "wrecked"; readonly rider: RiderId }
   | { readonly type: "busted"; readonly rider: RiderId; readonly cop: CopId }

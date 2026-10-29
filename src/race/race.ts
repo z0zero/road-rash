@@ -1,5 +1,5 @@
 import { getCoastalTrack } from "./coastal-track";
-import { settleContact } from "./contact";
+import { carRunningInto, knockDownBy, settleContact, settleImpacts, throwClearOf } from "./contact";
 import {
   bustingIntent,
   COP_ATTACK_EVERY_SECONDS,
@@ -35,6 +35,7 @@ import {
   type Attack,
   type Weapon,
 } from "./fighting";
+import { footprintOfCar, footprintOfObstacle, type Footprint } from "./footprint";
 import { isDroppingBack, opponentAttack, opponentIntent } from "./opponent-fighting";
 import { catchUpFor, opponentControls, paceFor, type OpponentRiding } from "./opponent-riding";
 import { OPPONENTS, PLAYER_NAME, type Temperament } from "./opponents";
@@ -43,6 +44,7 @@ import { ride, type Controls, type Motion } from "./riding";
 import { STEP_SECONDS, STEPS_PER_SECOND, stepsIn } from "./steps";
 import { nearestOpponent, warningsFor, type Warnings } from "./surroundings";
 import type { Track } from "./track";
+import { CLOSED_ROAD, createTraffic, type CarKind, type Traffic } from "./traffic";
 import { TUNING } from "./tuning";
 
 /** The player is always rider 0. */
@@ -67,6 +69,11 @@ const FAST_FORWARD_STEPS = 180 * STEPS_PER_SECOND;
 
 /** Finishing in this position or better qualifies. */
 const QUALIFYING_POSITION = 3;
+
+/** At the start, cars in the race direction keep at least this many metres ahead of the riders lined up for it. */
+const CLEAR_OF_THE_GRID = 60;
+/** Mixed into the race's seed for the traffic's own random choices, so they never change the riders' choices. */
+const TRAFFIC_SEED = 0x7ea5_1c3a;
 
 /** The player's controls for one step. Values outside their ranges are clamped. */
 export interface PlayerInput {
@@ -149,8 +156,30 @@ export interface RaceSnapshot {
   readonly nearestOpponent: RiderId | null;
   /** Opponents alongside the player, or coming up from behind, on either side of them. */
   readonly warnings: Warnings;
+  /** The cars on the road around the player. */
+  readonly traffic: readonly CarSnapshot[];
   /** Every cop, indexed by `CopId`. */
   readonly cops: readonly CopSnapshot[];
+}
+
+/** A car on the road: someone driving by who isn't racing. */
+export interface CarSnapshot {
+  /** No two cars in a race share an id, so a car can be followed from one snapshot to the next. */
+  readonly id: number;
+  /** The body the car is built on. */
+  readonly kind: CarKind;
+  /** Whether the car drives towards the riders, in the left lanes; otherwise it drives in the race direction, in the right lanes. */
+  readonly oncoming: boolean;
+  /** Metres along the track's centreline: the middle of the car. */
+  readonly distance: number;
+  /** Metres sideways from the centreline; positive is right of the race direction. */
+  readonly offset: number;
+  /** Metres per second in the car's own direction of travel. */
+  readonly speed: number;
+  /** Metres from bumper to bumper. */
+  readonly length: number;
+  /** Metres from side to side. */
+  readonly width: number;
 }
 
 /** A cop on a motorcycle, as the riders see them. */
@@ -218,6 +247,8 @@ export interface RaceOptions {
    * opponent's bike starts perfect.
    */
   readonly playerCondition?: number;
+  /** Whether cars drive on the road (the default). Without them, the race runs on a closed road. */
+  readonly traffic?: boolean;
   /** Whether cops wait along the track to join the race (the default). Without them, nobody is busted. */
   readonly cops?: boolean;
 }
@@ -341,6 +372,17 @@ export function createRace(options: RaceOptions): Race {
     const riding = { pace: paceFor(skill), lane: offset };
     riders.push(lineUp({ id: PLAYER + 1 + index, name, temperament, riding }, distance, offset));
   });
+  const traffic: Traffic =
+    options.traffic === false
+      ? CLOSED_ROAD
+      : createTraffic(
+          track,
+          createRandom(options.seed ^ TRAFFIC_SEED),
+          riders[PLAYER].motion,
+          Math.max(...riders.map((rider) => rider.motion.distance)) + CLEAR_OF_THE_GRID,
+        );
+  /** Where the obstacles stand: they never move. */
+  const obstacles = track.obstacles.map(footprintOfObstacle);
   const cops = options.cops === false ? [] : lineUpCops(track);
 
   const clock = () => Math.max(0, stepsTaken - COUNTDOWN_STEPS) / STEPS_PER_SECOND;
@@ -436,11 +478,11 @@ export function createRace(options: RaceOptions): Race {
    * crashed rider who hasn't got away yet; or fights back against the rider
    * who hit it, riding alongside them and swinging at them when they are
    * within reach; or stands by a rider it has just busted; or else patrols
-   * near the player. Cops find their way around everyone on a bike: the
-   * riders (`field`), and each other. Returns each cop's intent, or null for
-   * a cop not riding in the race.
+   * near the player. Cops find their way around everyone on a bike, the
+   * riders (`field`) and each other, and the cars and obstacles on the road.
+   * Returns each cop's intent, or null for a cop not riding in the race.
    */
-  function decideCops(field: readonly Readonly<Motion>[]): (CopIntent | null)[] {
+  function decideCops(field: readonly Readonly<Motion>[], carsAndObstacles: readonly Footprint[]): (CopIntent | null)[] {
     letGo();
     for (const cop of copsInTheRace()) {
       const fighting = cop.fightingBack === null ? null : riders[cop.fightingBack];
@@ -462,9 +504,11 @@ export function createRace(options: RaceOptions): Race {
       if (cop.status !== "riding") return null;
       if (cop.busting !== null) return bustingIntent(cop.motion, whereIs(riders[cop.busting]), edge);
       const fighting = cop.fightingBack === null ? null : riders[cop.fightingBack];
-      if (fighting && !fighting.crash) return fightingBackIntent(cop.motion, fighting.motion, track, everyoneOnABike);
+      if (fighting && !fighting.crash) {
+        return fightingBackIntent(cop.motion, fighting.motion, track, everyoneOnABike, carsAndObstacles);
+      }
       if (cop.standingBySteps > 0) return standingByIntent(cop.motion);
-      return patrolIntent(cop.motion, player, track, everyoneOnABike);
+      return patrolIntent(cop.motion, player, track, everyoneOnABike, carsAndObstacles);
     });
   }
 
@@ -516,6 +560,28 @@ export function createRace(options: RaceOptions): Race {
       cop.standingBySteps = stepsIn(TUNING.cops.standingBySeconds);
       events.push({ type: "busted", rider: rider.id, cop: cop.id });
       if (rider.id === PLAYER) events.push({ type: "player-race-over", outcome: "busted" });
+    }
+  }
+
+  /**
+   * Riders on their bikes who run into the `cars` (by their footprints) or
+   * obstacles crash, or bump off them at a small speed difference; a car
+   * that runs into a rider on foot knocks them down.
+   */
+  function runIntoCarsAndObstacles(cars: readonly Footprint[]) {
+    for (const [footprints, cause] of [
+      [cars, "traffic"],
+      [obstacles, "obstacle"],
+    ] as const) {
+      for (const { rider, footprint, speedDifference } of settleImpacts(onTheirBikes(), footprints, edge)) {
+        crash(rider, cause, speedDifference);
+        if (rider.crash) throwClearOf(footprint, rider.motion, rider.crash.body, edge);
+      }
+    }
+    for (const rider of riders) {
+      if (rider.status !== "racing" || rider.crash?.phase !== "on-foot") continue;
+      const car = carRunningInto(rider.crash.body, cars);
+      if (car) events.push({ type: "knocked-down", rider: rider.id, impactSpeed: knockDownBy(car, rider.crash) });
     }
   }
 
@@ -621,7 +687,9 @@ export function createRace(options: RaceOptions): Race {
   const race: Race = {
     track,
     step(input) {
-      if (stepsTaken >= COUNTDOWN_STEPS) {
+      // The traffic drives on whatever the riders do, even while they wait for the countdown.
+      if (stepsTaken < COUNTDOWN_STEPS) traffic.step(whereIs(riders[PLAYER]));
+      else {
         const clockBefore = clock();
         // Everyone decides what to do from where things stand, then everyone moves.
         const riding = onTheirBikes();
@@ -634,12 +702,13 @@ export function createRace(options: RaceOptions): Race {
         for (const rider of riding) {
           if (rider.riding) rider.droppingBack = isDroppingBack(rider.droppingBack, rider.stamina);
         }
+        const carsAndObstacles = [...traffic.cars.map(footprintOfCar), ...obstacles];
         // Riders off their bikes need no controls: their bikes slide on by themselves.
         const controls = riders.map((rider) => {
           if (rider.status !== "racing" || rider.crash) return FINISHED_CONTROLS;
           if (!rider.riding || !rider.temperament) return input;
           const intent = opponentIntent(rider.temperament, rider.motion, playerToFight, rider.droppingBack);
-          return opponentControls(rider.motion, rider.riding, track, field, catchUp(rider), intent);
+          return opponentControls(rider.motion, rider.riding, track, field, catchUp(rider), intent, carsAndObstacles);
         });
         if (player.status === "racing" && !player.crash && !player.attack && (input.punch || input.kick)) {
           throwAttack(player, input.punch ? "punch" : "kick");
@@ -653,7 +722,7 @@ export function createRace(options: RaceOptions): Race {
           // A club reaches further than a kick: a club holder swings at a rider its kick can't reach.
           if (kind) throwAttack(opponent, kind === "kick" && !withinReach(opponent.motion, nearest.motion, kind) ? "punch" : kind);
         }
-        const copIntents = decideCops(field);
+        const copIntents = decideCops(field, carsAndObstacles);
         const distancesBefore = riders.map((rider) => whereIs(rider).distance);
         riders.forEach((rider, index) => {
           if (!rider.crash) {
@@ -674,9 +743,11 @@ export function createRace(options: RaceOptions): Race {
             carryOn(cop.crash, cop.motion, STAND_STILL, edge);
           }
         });
+        traffic.step(whereIs(player));
         bustTheCaught();
         joinThePlayer();
         for (const { rider, speedDifference } of settleContact(riding, edge)) crash(rider, "rider", speedDifference);
+        runIntoCarsAndObstacles(traffic.cars.map(footprintOfCar));
         advanceAttacks();
         recoverStamina();
         finishCrossings(distancesBefore, clockBefore);
@@ -696,6 +767,16 @@ export function createRace(options: RaceOptions): Race {
         clock: clock(),
         nearestOpponent: nearestOpponent(player, opponents),
         warnings: warningsFor(player, opponents),
+        traffic: traffic.cars.map(({ id, kind, oncoming, distance, offset, speed, length, width }) => ({
+          id,
+          kind,
+          oncoming,
+          distance,
+          offset,
+          speed,
+          length,
+          width,
+        })),
         riders: riders.map((rider) => {
           const { distance, offset, speed } = whereIs(rider);
           return {
