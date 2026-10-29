@@ -2,7 +2,8 @@ import { useFrame } from "@react-three/fiber";
 import { useRef } from "react";
 import type { Group } from "three";
 import type { GameSession } from "@/game/session";
-import { PLAYER } from "@/race";
+import type { RiderId } from "@/race";
+import { riderColours } from "./rider-colours";
 import { createPose, poseOf } from "./rider-pose";
 
 const GRAVITY = 9.81;
@@ -12,10 +13,11 @@ const MAX_LEAN = 0.75;
 const LEAN_RESPONSE = 9;
 
 /**
- * The player's bike and rider: simple shapes built in code, placed from the
- * interpolated snapshots and leaning into corners.
+ * One rider on their bike, in the rider's own colours: simple shapes built in
+ * code, placed from the interpolated snapshots and leaning into corners.
  */
-export function BikeAndRider({ session }: { session: GameSession }) {
+export function BikeAndRider({ session, rider }: { session: GameSession; rider: RiderId }) {
+  const colours = riderColours(rider);
   const group = useRef<Group>(null);
   const lean = useRef(0);
   const pose = useRef(createPose());
@@ -24,7 +26,7 @@ export function BikeAndRider({ session }: { session: GameSession }) {
     const bike = group.current;
     if (!bike) return;
     const view = session.view;
-    const { distance, offset, speed, sideways } = poseOf(view, PLAYER, pose.current);
+    const { distance, offset, speed, sideways } = poseOf(view, rider, pose.current);
     const road = view.track.sampleAt(distance);
     const at = view.track.pointAt(distance, offset);
     // Lean as a motorcycle does: into the sideways acceleration of the bend and of steering.
@@ -49,11 +51,11 @@ export function BikeAndRider({ session }: { session: GameSession }) {
       {/* Frame and tank */}
       <mesh position={[0, 0.62, 0.05]}>
         <boxGeometry args={[0.32, 0.36, 1.35]} />
-        <meshStandardMaterial color="#d6332a" roughness={0.45} metalness={0.2} flatShading />
+        <meshStandardMaterial color={colours.bike} roughness={0.45} metalness={0.2} flatShading />
       </mesh>
       <mesh position={[0, 0.86, -0.35]}>
         <boxGeometry args={[0.28, 0.2, 0.5]} />
-        <meshStandardMaterial color="#f2c14e" roughness={0.5} flatShading />
+        <meshStandardMaterial color={colours.trim} roughness={0.5} flatShading />
       </mesh>
       {/* Handlebars */}
       <mesh position={[0, 0.98, -0.62]}>
@@ -67,11 +69,11 @@ export function BikeAndRider({ session }: { session: GameSession }) {
       </mesh>
       <mesh position={[0, 1.28, 0.02]} rotation={[-0.6, 0, 0]}>
         <boxGeometry args={[0.44, 0.62, 0.28]} />
-        <meshStandardMaterial color="#2f7fc1" roughness={0.8} flatShading />
+        <meshStandardMaterial color={colours.jacket} roughness={0.8} flatShading />
       </mesh>
       <mesh position={[0, 1.62, -0.24]}>
         <icosahedronGeometry args={[0.17, 1]} />
-        <meshStandardMaterial color="#f4f1ea" roughness={0.3} flatShading />
+        <meshStandardMaterial color={colours.helmet} roughness={0.3} flatShading />
       </mesh>
     </group>
   );

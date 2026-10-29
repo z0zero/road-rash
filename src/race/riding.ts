@@ -11,6 +11,8 @@ export interface Motion {
   speed: number;
   /** Metres per second sideways that steering currently adds; positive is right. */
   steering: number;
+  /** Metres per second sideways from being bumped (positive is right); it dies away by itself. */
+  shove: number;
 }
 
 export interface Controls {
@@ -45,7 +47,8 @@ export function ride(motion: Motion, controls: Controls, track: Track, dt: numbe
 
   motion.distance += motion.speed * dt;
   const edge = track.roadHalfWidth + track.shoulderWidth;
-  motion.offset = clamp(motion.offset + (motion.steering + push) * dt, -edge, edge);
+  motion.offset = clamp(motion.offset + (motion.steering + push + motion.shove) * dt, -edge, edge);
+  motion.shove *= Math.exp(-TUNING.shoveDecay * dt);
 }
 
 function driveAcceleration(speed: number) {
@@ -58,7 +61,7 @@ function coastingDeceleration(speed: number) {
 }
 
 /** Steering moves the bike sideways at up to about 8 m/s at low speed and less at high speed. */
-function maxSidewaysSpeed(speed: number) {
+export function maxSidewaysSpeed(speed: number) {
   const share = speed / TUNING.topSpeed;
   return Math.min(
     TUNING.steeringPerSpeed * speed,

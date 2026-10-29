@@ -1,5 +1,10 @@
 import { getCoastalTrack } from "./coastal-track";
+import { bumpApart } from "./contact";
 import type { RaceEvent, RaceOutcome, RiderId } from "./events";
+import { lineUpOpponents } from "./field";
+import { catchUpFor, opponentControls, paceFor, type OpponentRiding } from "./opponent-riding";
+import { OPPONENTS, PLAYER_NAME, type Temperament } from "./opponents";
+import { createRandom } from "./random";
 import { ride, type Controls, type Motion } from "./riding";
 import type { Track } from "./track";
 
@@ -44,6 +49,10 @@ export type RiderStatus = "racing" | RaceOutcome;
 
 export interface RiderSnapshot {
   readonly id: RiderId;
+  /** The opponent's nickname, or "You" for the player. */
+  readonly name: string;
+  /** How the opponent races and fights; null for the player. */
+  readonly temperament: Temperament | null;
   /** Metres along the track's centreline. */
   readonly distance: number;
   /** Metres sideways from the centreline; positive is right of the race direction. */
@@ -86,6 +95,8 @@ export interface RaceResults {
 
 export interface Standing {
   readonly rider: RiderId;
+  /** The opponent's nickname, or "You" for the player. */
+  readonly name: string;
   readonly status: RiderStatus;
   readonly position: number | null;
   /** Finishing time in seconds; null unless the rider finished. */
@@ -123,7 +134,11 @@ export interface Race {
 
 interface Rider {
   readonly id: RiderId;
+  readonly name: string;
+  readonly temperament: Temperament | null;
   readonly motion: Motion;
+  /** How an opponent rides; null for the player, whose input comes from outside. */
+  readonly riding: OpponentRiding | null;
   status: RiderStatus;
   finishTime: number | null;
   /** 1 for the first rider over the finish line, 2 for the next, and so on. */
@@ -131,8 +146,7 @@ interface Rider {
 }
 
 export function createRace(options: RaceOptions): Race {
-  // A lone player makes no random choices yet; opponents, traffic and cops will draw on the seed.
-  void options.seed;
+  const random = createRandom(options.seed);
   const track = getCoastalTrack();
   let stepsTaken = 0;
   let events: RaceEvent[] = [];
@@ -140,23 +154,48 @@ export function createRace(options: RaceOptions): Race {
   const riders: Rider[] = [
     {
       id: PLAYER,
+      name: PLAYER_NAME,
+      temperament: null,
       // On the start line, between the two lanes that run in the race direction.
-      motion: { distance: track.startDistance, offset: track.laneWidth, speed: 0, steering: 0 },
+      motion: { distance: track.startDistance, offset: track.laneWidth, speed: 0, steering: 0, shove: 0 },
+      riding: null,
       status: "racing",
       finishTime: null,
       finishOrder: null,
     },
   ];
+  lineUpOpponents(track, OPPONENTS.length, random).forEach(({ distance, offset }, index) => {
+    riders.push({
+      id: PLAYER + 1 + index,
+      name: OPPONENTS[index].name,
+      temperament: OPPONENTS[index].temperament,
+      motion: { distance, offset, speed: 0, steering: 0, shove: 0 },
+      riding: { pace: paceFor(OPPONENTS[index].skill), lane: offset },
+      status: "racing",
+      finishTime: null,
+      finishOrder: null,
+    });
+  });
 
   const clock = () => Math.max(0, stepsTaken - COUNTDOWN_STEPS) / STEPS_PER_SECOND;
 
-  function finish(rider: Rider, distanceBefore: number, clockBefore: number) {
-    const crossing = (track.finishDistance - distanceBefore) / (rider.motion.distance - distanceBefore);
-    rider.finishTime = clockBefore + crossing * STEP_SECONDS;
-    rider.status = "finished";
-    rider.finishOrder = ++finishers;
-    events.push({ type: "rider-finished", rider: rider.id, time: rider.finishTime, position: rider.finishOrder });
-    if (rider.id === PLAYER) events.push({ type: "player-race-over", outcome: "finished" });
+  /** Finishes the riders who crossed the finish line during the step that began at `clockBefore`, in the order they crossed it. */
+  function finishCrossings(distancesBefore: readonly number[], clockBefore: number) {
+    const crossings = riders
+      .filter((rider) => rider.status === "racing" && rider.motion.distance >= track.finishDistance)
+      .map((rider) => {
+        const before = distancesBefore[rider.id];
+        const share = (track.finishDistance - before) / (rider.motion.distance - before);
+        return { rider, time: clockBefore + share * STEP_SECONDS };
+      })
+      .sort((a, b) => a.time - b.time || a.rider.id - b.rider.id);
+    for (const { rider, time } of crossings) {
+      rider.finishTime = time;
+      rider.status = "finished";
+      rider.finishOrder = ++finishers;
+      events.push({ type: "rider-finished", rider: rider.id, time, position: rider.finishOrder });
+      if (rider.id === PLAYER) events.push({ type: "player-race-over", outcome: "finished" });
+    }
   }
 
   /**
@@ -181,6 +220,7 @@ export function createRace(options: RaceOptions): Race {
   function results(outcome: RaceOutcome): RaceResults {
     const standing = (rider: Rider, position: number | null): Standing => ({
       rider: rider.id,
+      name: rider.name,
       status: rider.status,
       position,
       time: rider.finishTime,
@@ -205,13 +245,20 @@ export function createRace(options: RaceOptions): Race {
     step(input) {
       if (stepsTaken >= COUNTDOWN_STEPS) {
         const clockBefore = clock();
-        for (const rider of riders) {
-          const distanceBefore = rider.motion.distance;
-          ride(rider.motion, rider.status === "racing" ? input : FINISHED_CONTROLS, track, STEP_SECONDS);
-          if (rider.status === "racing" && rider.motion.distance >= track.finishDistance) {
-            finish(rider, distanceBefore, clockBefore);
-          }
-        }
+        // Everyone decides what to do from where things stand, then everyone moves.
+        const field = riders.filter((rider) => rider.status === "racing").map((rider) => rider.motion);
+        const player = riders[PLAYER];
+        // Catch-up keeps the field near the player, so it stops once the player's race is over.
+        const catchUp = (rider: Rider) =>
+          player.status === "racing" ? catchUpFor(rider.motion.distance - player.motion.distance) : 1;
+        const controls = riders.map((rider) => {
+          if (rider.status !== "racing") return FINISHED_CONTROLS;
+          return rider.riding ? opponentControls(rider.motion, rider.riding, track, field, catchUp(rider)) : input;
+        });
+        const distancesBefore = riders.map((rider) => rider.motion.distance);
+        riders.forEach((rider, index) => ride(rider.motion, controls[index], track, STEP_SECONDS));
+        bumpApart(field, track.roadHalfWidth + track.shoulderWidth);
+        finishCrossings(distancesBefore, clockBefore);
       }
       stepsTaken++;
       if (stepsTaken === COUNTDOWN_STEPS) events.push({ type: "race-started" });
@@ -223,6 +270,8 @@ export function createRace(options: RaceOptions): Race {
         clock: clock(),
         riders: riders.map((rider) => ({
           id: rider.id,
+          name: rider.name,
+          temperament: rider.temperament,
           distance: rider.motion.distance,
           offset: rider.motion.offset,
           speed: rider.motion.speed,
