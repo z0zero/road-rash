@@ -39,22 +39,38 @@ const APEX_SHIFT_PER_CURVATURE = 120;
 const MAX_APEX_SHIFT = 2;
 /** Opponents keep their line at least this far inside the road's edges (metres). */
 const EDGE_MARGIN = 0.8;
+/** Opponents pass other riders with this many metres between their offsets... */
+const PASSING_CLEARANCE = 1.6;
+/** ...looking this many seconds ahead for riders they are catching. */
+const PASSING_LOOK_AHEAD = 1.5;
+/** Riders less than this many metres apart along the track are alongside each other. */
+const ALONGSIDE = 3;
+/** A rider ahead closer than this sideways (metres) is in the way: an opponent holds back behind them... */
+const IN_THE_WAY = 1.1;
+/** ...if it would reach them within this many seconds. */
+const HOLD_BACK_TIME = 0.8;
 
 /**
  * An opponent's controls for one step: the throttle and brake to ride at its
  * pace, slowing in time for the bends ahead, and the steering to follow its
- * racing line, cutting towards the inside of bends.
+ * racing line, cutting towards the inside of bends, and to get around the
+ * other riders on the road (`field`, the motions of every rider still racing).
  */
-export function opponentControls(motion: Readonly<Motion>, riding: OpponentRiding, track: Track): Controls {
-  const safe = safeSpeedAt(track, motion.distance + motion.speed * BRAKING_LEAD);
-  const wanted = riding.pace * Math.min(TUNING.topSpeed, safe);
-  const throttle = clamp((wanted - motion.speed) * THROTTLE_PER_SPEED, 0, 1);
-  const brake = clamp((motion.speed - wanted) * BRAKE_PER_SPEED, 0, 1);
-
+export function opponentControls(
+  motion: Readonly<Motion>,
+  riding: OpponentRiding,
+  track: Track,
+  field: readonly Readonly<Motion>[],
+): Controls {
+  const edge = track.roadHalfWidth - EDGE_MARGIN;
   const bendAhead = track.sampleAt(motion.distance + motion.speed * APEX_LOOK_AHEAD).curvature;
   const apexShift = clamp(bendAhead * APEX_SHIFT_PER_CURVATURE, -MAX_APEX_SHIFT, MAX_APEX_SHIFT);
-  const edge = track.roadHalfWidth - EDGE_MARGIN;
-  const line = clamp(riding.lane + apexShift, -edge, edge);
+  const { line, holdBehind } = lineAround(motion, clamp(riding.lane + apexShift, -edge, edge), field, edge);
+
+  const safe = safeSpeedAt(track, motion.distance + motion.speed * BRAKING_LEAD);
+  const wanted = Math.min(riding.pace * Math.min(TUNING.topSpeed, safe), holdBehind);
+  const throttle = clamp((wanted - motion.speed) * THROTTLE_PER_SPEED, 0, 1);
+  const brake = clamp((motion.speed - wanted) * BRAKE_PER_SPEED, 0, 1);
 
   // Steer towards the line, and against the curve's outward push (the same law riding follows).
   const push = -TUNING.curvePush * motion.speed * motion.speed * track.sampleAt(motion.distance).curvature;
@@ -62,6 +78,53 @@ export function opponentControls(motion: Readonly<Motion>, riding: OpponentRidin
   const reach = maxSidewaysSpeed(motion.speed);
   const steer = reach > 0 ? clamp((sideways - push) / reach, -1, 1) : 0;
   return { throttle, brake, steer };
+}
+
+/**
+ * Where to ride to get around the riders nearby: the racing line if it is
+ * clear, otherwise the clear line nearest to where the opponent is now. Riders
+ * it is catching block the lines close to theirs, and a rider alongside blocks
+ * everything beyond them, so an opponent never steers across one. When a rider
+ * it is about to reach is in the way, it holds back to their speed.
+ */
+function lineAround(me: Readonly<Motion>, racingLine: number, field: readonly Readonly<Motion>[], edge: number) {
+  const blocked: [number, number][] = [];
+  let holdBehind = Infinity;
+  for (const other of field) {
+    if (other === me) continue;
+    const ahead = other.distance - me.distance;
+    const closing = Math.max(0, me.speed - other.speed);
+    if (Math.abs(ahead) < ALONGSIDE) {
+      const onTheRight = other.offset > me.offset || (other.offset === me.offset && ahead > 0);
+      blocked.push(onTheRight ? [other.offset - PASSING_CLEARANCE, Infinity] : [-Infinity, other.offset + PASSING_CLEARANCE]);
+    } else if (ahead > 0 && ahead < ALONGSIDE + 2 + closing * PASSING_LOOK_AHEAD) {
+      blocked.push([other.offset - PASSING_CLEARANCE, other.offset + PASSING_CLEARANCE]);
+    }
+    if (ahead > 0 && ahead < ALONGSIDE + closing * HOLD_BACK_TIME && Math.abs(other.offset - me.offset) < IN_THE_WAY) {
+      holdBehind = Math.min(holdBehind, other.speed - 0.5);
+    }
+  }
+  return { line: nearestClearLine(racingLine, me.offset, blocked, edge), holdBehind };
+}
+
+/**
+ * The racing line if no blocked stretch of offsets covers it, otherwise the
+ * nearer (to `current`) end of the blocked stretch that does, within the road's
+ * `edge`. If neither end is on the road, the opponent stays where it is.
+ */
+function nearestClearLine(racingLine: number, current: number, blocked: [number, number][], edge: number) {
+  blocked.sort((a, b) => a[0] - b[0]);
+  const merged: [number, number][] = [];
+  for (const [from, to] of blocked) {
+    const last = merged[merged.length - 1];
+    if (last && from <= last[1]) last[1] = Math.max(last[1], to);
+    else merged.push([from, to]);
+  }
+  const covering = merged.find(([from, to]) => racingLine > from && racingLine < to);
+  if (!covering) return racingLine;
+  const ends = covering.filter((end) => Math.abs(end) <= edge);
+  if (ends.length === 0) return current;
+  return ends.reduce((best, end) => (Math.abs(end - current) < Math.abs(best - current) ? end : best));
 }
 
 const safeSpeeds = new WeakMap<Track, Float64Array>();
