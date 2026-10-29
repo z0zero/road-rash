@@ -3,11 +3,13 @@ export function toKmh(metresPerSecond: number): number {
   return Math.round(metresPerSecond * 3.6);
 }
 
+/** The ordinal suffixes that aren't "th", by a number's last digit. */
+const ORDINAL_SUFFIXES: Readonly<Record<number, string>> = { 1: "st", 2: "nd", 3: "rd" };
+
 /** A position as an English ordinal: "1st", "2nd", "3rd", "4th", ..., "11th", "12th", "13th". */
 export function formatPosition(position: number): string {
   const lastTwo = position % 100;
-  const suffix =
-    lastTwo >= 11 && lastTwo <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[position % 10] ?? "th";
+  const suffix = lastTwo >= 11 && lastTwo <= 13 ? "th" : (ORDINAL_SUFFIXES[position % 10] ?? "th");
   return `${position}${suffix}`;
 }
 
