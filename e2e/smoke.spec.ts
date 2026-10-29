@@ -569,6 +569,19 @@ test.describe("on a touch-only phone or tablet", () => {
   });
 });
 
+test.describe("in a browser that can't run the game's scripts", () => {
+  test.use({ javaScriptEnabled: false });
+
+  test("asks for a recent browser once the game has been loading for a while", async ({ page }) => {
+    const hint = page.getByText(/Still loading\? Rev & Wreck needs/);
+    await expect(page.getByText("Loading…")).toBeVisible();
+    await expect(hint).toBeHidden();
+
+    await expect(hint).toBeVisible({ timeout: 15_000 });
+    await expect(hint).toContainText(/WebGL\s2/);
+  });
+});
+
 test("downloads less than 10 MB to get racing", async ({ browser, baseURL }) => {
   // A fresh browser context, so nothing comes from the cache.
   const context = await browser.newContext({ baseURL });

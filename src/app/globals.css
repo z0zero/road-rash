@@ -17,3 +17,22 @@ body {
   overscroll-behavior: none;
   user-select: none;
 }
+
+/*
+ * The loading screen's hint for a browser that never gets past it, such as one
+ * too old to run the game's scripts: hidden for the first few seconds, by when
+ * any browser that can run the game has moved on. It is outside Tailwind's
+ * layers, so that a browser too old for those still hides it.
+ */
+.still-loading {
+  animation: still-loading 0s linear 8s both;
+}
+
+@keyframes still-loading {
+  from {
+    visibility: hidden;
+  }
+  to {
+    visibility: visible;
+  }
+}
