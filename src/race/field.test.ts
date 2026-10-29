@@ -192,6 +192,22 @@ describe("the opponents", () => {
     expect(passes.length).toBeGreaterThanOrEqual(10);
   });
 
+  it("steer around each other: no two opponents ever ride into each other", () => {
+    for (const seed of [1, 2, 3]) {
+      let overlaps = 0;
+      raceWithoutThePlayer(seed, 300, (riders) => {
+        const racing = riders.filter((rider) => rider.id !== PLAYER && rider.status === "racing");
+        for (const a of racing) {
+          for (const b of racing) {
+            if (a.id < b.id && Math.abs(a.distance - b.distance) < 2 && Math.abs(a.offset - b.offset) < 0.8) overlaps++;
+          }
+        }
+      });
+
+      expect(overlaps, `seed ${seed}`).toBe(0);
+    }
+  });
+
   it("have a pace of their own: the same riders are the fastest and the slowest whatever their start order", () => {
     const { track } = createRace({ seed: 1 });
     /** Each opponent's average speed from their place on the grid to the finish line, fastest first. */

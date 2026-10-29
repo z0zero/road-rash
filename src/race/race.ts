@@ -242,9 +242,10 @@ export function createRace(options: RaceOptions): Race {
       if (stepsTaken >= COUNTDOWN_STEPS) {
         const clockBefore = clock();
         // Everyone decides what to do from where things stand, then everyone moves.
+        const field = riders.filter((rider) => rider.status === "racing").map((rider) => rider.motion);
         const controls = riders.map((rider) => {
           if (rider.status !== "racing") return FINISHED_CONTROLS;
-          return rider.riding ? opponentControls(rider.motion, rider.riding, track) : input;
+          return rider.riding ? opponentControls(rider.motion, rider.riding, track, field) : input;
         });
         const distancesBefore = riders.map((rider) => rider.motion.distance);
         riders.forEach((rider, index) => ride(rider.motion, controls[index], track, STEP_SECONDS));
