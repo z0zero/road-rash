@@ -419,9 +419,12 @@ export function createRace(options: RaceOptions): Race {
         const catchUp = (rider: Rider) =>
           player.status === "racing" ? catchUpFor(rider.motion.distance - whereIs(player).distance) : 1;
         const playerToFight = player.status === "racing" && !player.crash ? player.motion : null;
-        for (const rider of riders) rider.droppingBack = isDroppingBack(rider.droppingBack, rider.stamina);
+        for (const rider of riding) {
+          if (rider.riding) rider.droppingBack = isDroppingBack(rider.droppingBack, rider.stamina);
+        }
+        // Riders off their bikes need no controls: their bikes slide on by themselves.
         const controls = riders.map((rider) => {
-          if (rider.status !== "racing") return FINISHED_CONTROLS;
+          if (rider.status !== "racing" || rider.crash) return FINISHED_CONTROLS;
           if (!rider.riding || !rider.temperament) return input;
           const intent = opponentIntent(rider.temperament, rider.motion, playerToFight, rider.droppingBack);
           return opponentControls(rider.motion, rider.riding, track, field, catchUp(rider), intent);
