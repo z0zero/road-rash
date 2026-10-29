@@ -223,15 +223,17 @@ describe("the finish", () => {
 
     const clockBefore = rideToTheFinish(race);
 
-    const events = race.drainEvents();
+    const events = race
+      .drainEvents()
+      .filter((event) => event.type === "player-race-over" || (event.type === "rider-finished" && event.rider === PLAYER));
     expect(events).toEqual([
-      { type: "rider-finished", rider: PLAYER, time: expect.any(Number), position: 1 },
+      { type: "rider-finished", rider: PLAYER, time: expect.any(Number), position: expect.any(Number) },
       { type: "player-race-over", outcome: "finished" },
     ]);
-    const time = (events[0] as { time: number }).time;
+    const { time, position } = events[0] as { time: number; position: number };
     expect(time).toBeGreaterThan(clockBefore);
     expect(time).toBeLessThanOrEqual(race.snapshot().clock);
-    expect(player(race)).toMatchObject({ status: "finished", finishTime: time, position: 1 });
+    expect(player(race)).toMatchObject({ status: "finished", finishTime: time, position });
   });
 
   it("lets the finished bike coast to a stop before the road runs out, whatever the input", () => {

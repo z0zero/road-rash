@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createRace, NO_INPUT, PLAYER, type RaceEvent, type RiderSnapshot, type Track } from ".";
-import { startedRace, STEPS_PER_SECOND } from "./test-helpers";
+import { autopilot, player, secondsUntil, startedRace, STEPS_PER_SECOND } from "./test-helpers";
 
 type RiderFinished = Extract<RaceEvent, { type: "rider-finished" }>;
 
@@ -182,11 +182,64 @@ describe("the opponents", () => {
     expect(atApexes.size).toBe(14);
   });
 
+  it("ride at their own pace, so faster riders pass slower ones", () => {
+    const start = startOrder(1).filter((id) => id !== PLAYER);
+
+    const { finished } = raceWithoutThePlayer(1, 300);
+
+    const finish = finished.map((event) => event.rider);
+    const passes = start.flatMap((id, front) => start.slice(front + 1).filter((behind) => finish.indexOf(behind) < finish.indexOf(id)));
+    expect(passes.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it("have a pace of their own: the same riders are the fastest and the slowest whatever their start order", () => {
+    const { track } = createRace({ seed: 1 });
+    /** Each opponent's average speed from their place on the grid to the finish line, fastest first. */
+    const fastestFirst = (seed: number) => {
+      const grid = createRace({ seed }).snapshot().riders;
+      return raceWithoutThePlayer(seed, 300)
+        .finished.map(({ rider, time }) => ({ rider, speed: (track.finishDistance - grid[rider].distance) / time }))
+        .sort((a, b) => b.speed - a.speed)
+        .map(({ rider }) => rider);
+    };
+
+    const orders = [1, 2, 3].map(fastestFirst);
+
+    expect(new Set(orders.map((order) => order[0])).size).toBe(1);
+    expect(new Set(orders.map((order) => order[13])).size).toBe(1);
+  });
+
   it("are the same fourteen riders in every race, whatever their start order", () => {
     const other = createRace({ seed: 99 }).snapshot().riders;
 
     expect(other.map(({ id, name, temperament }) => ({ id, name, temperament }))).toEqual(
       riders.map(({ id, name, temperament }) => ({ id, name, temperament })),
     );
+  });
+});
+
+describe("positions", () => {
+  it("change as the player passes riders, climbing from last place", () => {
+    const race = startedRace(1);
+    const pilot = autopilot(race);
+    const positions = [player(race).position];
+
+    secondsUntil(race, pilot, () => {
+      const { riders } = race.snapshot();
+      positions.push(riders[PLAYER].position);
+      // Riders further along the track are ahead of riders behind them.
+      const racing = riders.filter((rider) => rider.status === "racing");
+      for (const a of racing) {
+        for (const b of racing) {
+          if (a.distance > b.distance) expect(a.position ?? Infinity).toBeLessThan(b.position ?? Infinity);
+        }
+      }
+      return race.snapshot().clock >= 90;
+    });
+
+    expect(positions[0]).toBe(15);
+    expect(Math.min(...(positions as number[]))).toBeLessThanOrEqual(10);
+    const passes = positions.filter((position, index) => index > 0 && position !== null && position < (positions[index - 1] ?? 0));
+    expect(passes.length).toBeGreaterThanOrEqual(5);
   });
 });

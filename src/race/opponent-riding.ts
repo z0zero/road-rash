@@ -10,6 +10,14 @@ export interface OpponentRiding {
   readonly lane: number;
 }
 
+/** The least skilled opponent rides at this share of the fastest safe speed, the most skilled at the second. */
+const PACE_RANGE = [0.82, 0.96] as const;
+
+/** The share of the fastest safe speed an opponent of a skill (0 to 1) rides at. */
+export function paceFor(skill: number): number {
+  return PACE_RANGE[0] + (PACE_RANGE[1] - PACE_RANGE[0]) * clamp(skill, 0, 1);
+}
+
 /** Opponents hold their line through a bend using at most this share of the sideways speed steering gives... */
 const CORNER_GRIP = 0.78;
 /** ...and plan to brake for the bends ahead at this rate (m/s²), short of the bike's full braking. */
