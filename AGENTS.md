@@ -23,8 +23,8 @@ CI (`.github/workflows/ci.yml`) runs lint, typecheck, unit tests, the build and 
 - `src/save-data`: settings and the personal best in localStorage.
 - `src/game`: `GameSession` steps the race from the frame clock and turns its events into screens; `Game.tsx` wires it to React, the keyboard and the renderer.
 - `src/input`: keyboard to player input.
-- `src/renderer`: the React Three Fiber scene, built from the track's data and the session's snapshots.
-- `src/ui`: the title screen, HUD, pause menu and results screen.
+- `src/renderer`: the React Three Fiber scene, built from the track's data and the session's snapshots. `Scene.tsx` puts it together: the sunset sky, haze and sea (`sunset.ts`, `Sky.tsx`, `Sea.tsx`), the road and the land either side (`track-geometry.ts`, `terrain.ts`), the instanced scenery (`Scenery.tsx`), every rider's bike and rider built in code in their own livery (`rider-model.ts`, `liveries.ts`, posed from `RiderMotion`), the chase camera, post-processing and speed effects, and the performance monitor's quality levels (`quality.ts`). No models or textures are loaded: everything is built in code.
+- `src/ui`: the title screen, settings, HUD, pause menu and results screen.
 - `e2e`: the Playwright smoke test.
 
 ## Agent skills
