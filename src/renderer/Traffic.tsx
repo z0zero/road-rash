@@ -1,0 +1,154 @@
+import { useFrame } from "@react-three/fiber";
+import { useEffect, useMemo } from "react";
+import {
+  type BufferGeometry,
+  Color,
+  Euler,
+  InstancedMesh,
+  type Material,
+  Matrix4,
+  MeshBasicMaterial,
+  MeshPhongMaterial,
+  Quaternion,
+  Vector3,
+} from "three";
+import type { GameSession, RaceView } from "@/game/session";
+import { STEP_SECONDS, type CarKind, type CarSnapshot } from "@/race";
+import { carModel, paintOf } from "./car-models";
+
+const KINDS: readonly CarKind[] = ["hatchback", "saloon", "van", "pickup"];
+
+/** At most this many cars of one kind are drawn at a time: more than the road around the player ever holds. */
+const MOST_OF_A_KIND = 32;
+
+/** One kind of car, drawn with instancing: one instance per car of that kind on the road. */
+interface Kind {
+  /** Painted each car's own colour. */
+  readonly body: InstancedMesh;
+  readonly trim: InstancedMesh;
+  readonly lamps: InstancedMesh;
+  /** All three. */
+  readonly meshes: readonly InstancedMesh[];
+  /** The model's size (metres), to stretch it to each car's own. */
+  readonly length: number;
+  readonly width: number;
+  /** Cars of this kind placed so far this frame. */
+  drawn: number;
+}
+
+/**
+ * The cars on the road around the player, from the race's traffic: hatchbacks,
+ * saloons, vans and pickups in a few colours, each drawn between the last two
+ * snapshots, facing the way it drives, nosing over as it changes lanes, and
+ * pitched and tilted with the road. Their lamps glow, so the oncoming cars'
+ * headlamps bloom in the dusk.
+ */
+export function Traffic({ session }: { session: GameSession }) {
+  const fleet = useMemo(() => buildFleet(), []);
+  useEffect(
+    () => () => {
+      for (const kind of fleet.kinds.values()) {
+        for (const mesh of kind.meshes) {
+          mesh.geometry.dispose();
+          mesh.dispose();
+        }
+      }
+      for (const material of fleet.materials) material.dispose();
+    },
+    [fleet],
+  );
+  useFrame(() => placeCars(fleet.kinds, session.view));
+
+  return (
+    <group>
+      {[...fleet.kinds.values()].flatMap(({ meshes }) =>
+        meshes.map((mesh) => <primitive key={mesh.uuid} object={mesh} />),
+      )}
+    </group>
+  );
+}
+
+function buildFleet() {
+  const paint = new MeshPhongMaterial({ vertexColors: true, shininess: 70, specular: "#4d4d4d" });
+  const trim = new MeshPhongMaterial({ vertexColors: true, shininess: 45, specular: "#3a3a3a" });
+  // Unlit: the lamps glow, as bright as their colours, which are brighter than white.
+  const lamps = new MeshBasicMaterial({ vertexColors: true });
+  const instanced = (geometry: BufferGeometry, material: Material, shadows: boolean) => {
+    const mesh = new InstancedMesh(geometry, material, MOST_OF_A_KIND);
+    mesh.count = 0;
+    mesh.visible = false;
+    // The cars move every frame, so their instances are never where a bounding sphere last put them.
+    mesh.frustumCulled = false;
+    mesh.castShadow = shadows;
+    mesh.receiveShadow = shadows;
+    return mesh;
+  };
+  const kinds = new Map<CarKind, Kind>();
+  for (const kind of KINDS) {
+    const model = carModel(kind);
+    const body = instanced(model.body, paint, true);
+    // Every car's paint, given before the first frame so the material is built to take it.
+    for (let i = 0; i < MOST_OF_A_KIND; i++) body.setColorAt(i, WHITE);
+    const parts = { body, trim: instanced(model.trim, trim, true), lamps: instanced(model.lamps, lamps, false) };
+    kinds.set(kind, {
+      ...parts,
+      meshes: [parts.body, parts.trim, parts.lamps],
+      length: model.length,
+      width: model.width,
+      drawn: 0,
+    });
+  }
+  return { kinds, materials: [paint, trim, lamps] };
+}
+
+const WHITE = new Color("#ffffff");
+const matrix = new Matrix4();
+const position = new Vector3();
+const turn = new Quaternion();
+const angles = new Euler();
+const stretch = new Vector3();
+
+/** Puts every car on the road where the view says it is this frame. */
+function placeCars(kinds: ReadonlyMap<CarKind, Kind>, { track, previous, current, alpha }: RaceView) {
+  for (const kind of kinds.values()) kind.drawn = 0;
+  for (const car of current.traffic) {
+    const kind = kinds.get(car.kind);
+    if (!kind || kind.drawn >= MOST_OF_A_KIND) continue;
+    // A car that has only just come onto the road is drawn where it came on.
+    const before = sameCar(previous.traffic, car.id) ?? car;
+    const distance = before.distance + (car.distance - before.distance) * alpha;
+    const offset = before.offset + (car.offset - before.offset) * alpha;
+    // Which way it heads, from the race direction, turning right: along the road its own way, nosing across as it changes lanes.
+    const sideways = (car.offset - before.offset) / STEP_SECONDS;
+    const facing = Math.atan2(sideways, car.oncoming ? -car.speed : car.speed);
+    const road = track.sampleAt(distance);
+    const at = track.pointAt(distance, offset);
+    // An oncoming car meets the road's climb and tilt the other way round.
+    const ahead = Math.cos(facing);
+    angles.set(Math.atan(road.grade * ahead), -(road.heading + facing), -road.bank * ahead, "YXZ");
+    matrix.compose(
+      position.set(at.x, at.y, at.z),
+      turn.setFromEuler(angles),
+      stretch.set(car.width / kind.width, 1, car.length / kind.length),
+    );
+    const instance = kind.drawn++;
+    kind.body.setMatrixAt(instance, matrix);
+    kind.trim.setMatrixAt(instance, matrix);
+    kind.lamps.setMatrixAt(instance, matrix);
+    kind.body.setColorAt(instance, paintOf(car.id));
+  }
+  for (const kind of kinds.values()) {
+    for (const mesh of kind.meshes) {
+      mesh.count = kind.drawn;
+      mesh.visible = kind.drawn > 0;
+      mesh.instanceMatrix.needsUpdate = true;
+    }
+    if (kind.body.instanceColor) kind.body.instanceColor.needsUpdate = true;
+  }
+}
+
+/** The car with this id among `cars`, if it is there. */
+function sameCar(cars: readonly CarSnapshot[], id: number): CarSnapshot | undefined {
+  for (const car of cars) if (car.id === id) return car;
+  return undefined;
+}
