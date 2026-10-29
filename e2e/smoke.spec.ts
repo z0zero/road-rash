@@ -179,6 +179,69 @@ test("fetches a music track of at most 3 MB once the title screen is up", async 
   expect((await response.body()).byteLength).toBeLessThanOrEqual(3_000_000);
 });
 
+/** What the sound spy saw: every audio context the page made, and an analyser on everything sent to the speakers. */
+interface SoundSpy {
+  contexts: AudioContext[];
+  outputs: AnalyserNode[];
+}
+
+/** Runs in the page before its scripts: spies on Web Audio without changing what it does. */
+function spyOnSound() {
+  const spy: SoundSpy = { contexts: [], outputs: [] };
+  (window as unknown as { soundSpy: SoundSpy }).soundSpy = spy;
+  const Original = window.AudioContext;
+  window.AudioContext = class extends Original {
+    constructor(options?: AudioContextOptions) {
+      super(options);
+      spy.contexts.push(this);
+    }
+  };
+  const connect = AudioNode.prototype.connect as (this: AudioNode, ...args: unknown[]) => unknown;
+  AudioNode.prototype.connect = function (this: AudioNode, ...args: unknown[]) {
+    if (args[0] instanceof AudioDestinationNode) {
+      const output = this.context.createAnalyser();
+      connect.call(this, output);
+      spy.outputs.push(output);
+    }
+    return connect.apply(this, args);
+  } as typeof AudioNode.prototype.connect;
+}
+
+/** The state of every audio context the page made, oldest first. */
+function audioStates(page: Page) {
+  return page.evaluate(() => (window as unknown as { soundSpy: SoundSpy }).soundSpy.contexts.map((c) => c.state));
+}
+
+/** The loudest sample going to the speakers right now, from 0 (silence) up. */
+function loudness(page: Page) {
+  return page.evaluate(() => {
+    let peak = 0;
+    for (const output of (window as unknown as { soundSpy: SoundSpy }).soundSpy.outputs) {
+      const samples = new Float32Array(output.fftSize);
+      output.getFloatTimeDomainData(samples);
+      for (const sample of samples) peak = Math.max(peak, Math.abs(sample));
+    }
+    return peak;
+  });
+}
+
+test.describe("sound", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(spyOnSound);
+    await page.reload();
+  });
+
+  test("starts with the Start Race click", async ({ page }) => {
+    await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
+    expect(await audioStates(page)).not.toContain("running");
+
+    await page.getByRole("button", { name: "Start Race" }).click();
+
+    await expect.poll(() => audioStates(page)).toEqual(["running"]);
+    await expect.poll(() => loudness(page), { timeout: 10_000 }).toBeGreaterThan(0.01);
+  });
+});
+
 test("downloads less than 10 MB to get racing", async ({ browser, baseURL }) => {
   // A fresh browser context, so nothing comes from the cache.
   const context = await browser.newContext({ baseURL });
