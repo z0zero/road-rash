@@ -71,21 +71,12 @@ const HOLD_BACK_TIME = 0.8;
 export interface Intent {
   /** A rider the opponent is riding up alongside, to fight them; null when it is just racing. */
   readonly alongside: Readonly<Motion> | null;
-  /** A rider the opponent is dropping back behind, to get away from them; null when it is just racing. */
-  readonly behind: Readonly<Motion> | null;
   /** Its pace as a share of its usual pace: above 1 to keep up with a fight, below 1 while it drops back. */
   readonly paceShare: number;
 }
 
 /** Just racing. */
-export const RACING: Intent = { alongside: null, behind: null, paceShare: 1 };
-
-/** An opponent dropping back behind a rider lets them get ahead while they are less than this many metres behind it... */
-const DROP_BACK_ROOM = 30;
-/** ...or this many ahead of it... */
-const DROP_BACK_GAP = 20;
-/** ...riding at least this much slower than them (m/s). */
-const DROP_BACK_SPEED = 5;
+export const RACING: Intent = { alongside: null, paceShare: 1 };
 
 /** An opponent riding alongside a rider to fight them keeps this many metres to their side, within reach... */
 const FIGHTING_GAP = 1.4;
@@ -101,9 +92,7 @@ const MAX_CLOSING = 5;
  * inside of bends, and to get around the other riders on the road (`field`,
  * the motions of every rider still racing). With an `intent` to ride
  * alongside someone, it rides level with them, to their side, instead of
- * following its racing line, though never faster than its pace allows; to
- * drop back behind someone close by, it rides slower than them until it is
- * well behind.
+ * following its racing line, though never faster than its pace allows.
  */
 export function opponentControls(
   motion: Readonly<Motion>,
@@ -125,10 +114,6 @@ export function opponentControls(
   if (alongside) {
     const closing = clamp(LEVEL_GAIN * (alongside.distance - motion.distance), -MAX_CLOSING, MAX_CLOSING);
     wanted = Math.min(wanted, Math.max(0, alongside.speed + closing));
-  }
-  const { behind } = intent;
-  if (behind && behind.distance - motion.distance > -DROP_BACK_ROOM && behind.distance - motion.distance < DROP_BACK_GAP) {
-    wanted = Math.min(wanted, Math.max(0, behind.speed - DROP_BACK_SPEED));
   }
   const throttle = clamp((wanted - motion.speed) * THROTTLE_PER_SPEED, 0, 1);
   const brake = clamp((motion.speed - wanted) * BRAKE_PER_SPEED, 0, 1);

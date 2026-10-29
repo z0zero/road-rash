@@ -26,10 +26,10 @@ export function isDroppingBack(wasDroppingBack: boolean, stamina: number): boole
 
 /**
  * What an opponent of a temperament is up to: a badly beaten one drops back,
- * away from the player, until it has recovered; otherwise brawlers and bullies
- * pick a fight with the player nearby, riding up alongside them, and racers
- * just race. `player` is the player's motion while they race on their bike,
- * else null.
+ * easing off, until it has recovered; otherwise brawlers and bullies pick a
+ * fight with the player nearby, riding up alongside them, and racers just
+ * race. `player` is the player's motion while they race on their bike, else
+ * null.
  */
 export function opponentIntent(
   temperament: Temperament,
@@ -37,10 +37,10 @@ export function opponentIntent(
   player: Readonly<Motion> | null,
   droppingBack: boolean,
 ): Intent {
-  if (droppingBack) return { alongside: null, behind: player, paceShare: DROP_BACK_PACE };
+  if (droppingBack) return { alongside: null, paceShare: DROP_BACK_PACE };
   if (temperament === "racer" || !player) return RACING;
   if (Math.abs(player.distance - me.distance) > PICK_A_FIGHT_RANGE || player.speed < PICK_A_FIGHT_SPEED) return RACING;
-  return { alongside: player, behind: null, paceShare: FIGHTING_PACE };
+  return { alongside: player, paceShare: FIGHTING_PACE };
 }
 
 /** How many times a second an opponent of each temperament attacks the player when the player is within its reach... */
