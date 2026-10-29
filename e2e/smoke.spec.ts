@@ -242,6 +242,47 @@ test.describe("sound", () => {
   });
 });
 
+/** Runs in the page before its scripts: a browser that refuses to make audio contexts. */
+function refuseAudio() {
+  window.AudioContext = class {
+    constructor() {
+      throw new DOMException("Audio is blocked here.", "NotAllowedError");
+    }
+  } as unknown as typeof AudioContext;
+}
+
+/** Runs in the page before its scripts: a browser that makes audio contexts but never lets them play. */
+function neverPlayAudio() {
+  const Original = window.AudioContext;
+  window.AudioContext = class extends Original {
+    constructor(options?: AudioContextOptions) {
+      super(options);
+      void super.suspend();
+    }
+    resume() {
+      return Promise.reject(new DOMException("Audio is blocked here.", "NotAllowedError"));
+    }
+  };
+}
+
+for (const [behaviour, blockAudio] of [
+  ["refuses to make audio", refuseAudio],
+  ["never lets audio play", neverPlayAudio],
+] as const) {
+  test(`races without errors when the browser ${behaviour}`, async ({ page }) => {
+    await page.addInitScript(blockAudio);
+    await page.reload();
+
+    await startRacing(page);
+    await page.keyboard.down("w");
+    await expect.poll(() => hudSpeed(page), { timeout: 10_000 }).toBeGreaterThan(40);
+    await page.keyboard.up("w");
+    await page.keyboard.press("Escape");
+    await page.getByRole("dialog", { name: "Paused" }).getByRole("button", { name: "Restart" }).click();
+    await expect(page.getByTestId("countdown")).not.toBeEmpty();
+  });
+}
+
 test("downloads less than 10 MB to get racing", async ({ browser, baseURL }) => {
   // A fresh browser context, so nothing comes from the cache.
   const context = await browser.newContext({ baseURL });
