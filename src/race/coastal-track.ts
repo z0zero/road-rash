@@ -1,5 +1,6 @@
+import { placeObstacles, placeScenery } from "./placements";
 import { createRandom, type Random } from "./random";
-import { buildTrack, type Bend, type Track, type TrackLayout } from "./track";
+import { buildTrack, type Bend, type Slope, type Track, type TrackLayout } from "./track";
 
 /** The coastal road's own seed: the same road in every race. */
 const COASTAL_TRACK_SEED = 0x5ea5_1de;
@@ -17,6 +18,11 @@ const RUN_OUT = 300;
 const MAX_HEADING = (70 * Math.PI) / 180;
 /** Race distances (metres from the start line) around which the hairpin sections come. */
 const HAIRPIN_SECTIONS = [1500, 3300, 5100];
+/** Metres above sea level where the centreline begins. */
+const START_ELEVATION = 70;
+/** The road stays between these elevations (metres above sea level)... */
+const LOWEST = 30;
+const HIGHEST = 150;
 /** Two stretches of road further apart along the track than this... */
 const CLEARANCE_ARC = 150;
 /** ...are at least this far apart on the ground (metres). */
@@ -39,8 +45,13 @@ export function getCoastalTrack(): Track {
 function generateCoastalTrack(seed: number): Track {
   const random = createRandom(seed);
   for (let attempt = 0; attempt < 200; attempt++) {
-    const track = buildTrack(planLayout(random));
-    if (keepsClearOfItself(track)) return track;
+    const road = buildTrack(planLayout(random));
+    if (!keepsClearOfItself(road)) continue;
+    return {
+      ...road,
+      scenery: placeScenery(road, createRandom(seed + 1)),
+      obstacles: placeObstacles(road, createRandom(seed + 2)),
+    };
   }
   throw new Error("Could not lay out a coastal road that keeps clear of itself");
 }
@@ -97,7 +108,45 @@ function planLayout(random: Random): TrackLayout {
   }
 
   road.straight(finishDistance - road.length + RUN_OUT);
-  return { bends: road.bends, startDistance: RUN_UP, finishDistance };
+  return {
+    bends: road.bends,
+    slopes: planSlopes(road.length, random),
+    startElevation: START_ELEVATION,
+    startDistance: RUN_UP,
+    finishDistance,
+  };
+}
+
+/**
+ * Hills one after another: climbs that tip over short, blind crests into
+ * descents, and valleys between them, staying between LOWEST and HIGHEST.
+ */
+function planSlopes(length: number, random: Random): Slope[] {
+  const slopes: Slope[] = [];
+  let covered = 0;
+  let grade = 0;
+  let elevation = START_ELEVATION;
+  const slope = (slopeLength: number, endGrade: number) => {
+    slopes.push({ length: slopeLength, startGrade: grade, endGrade });
+    elevation += (slopeLength * (grade + endGrade)) / 2;
+    covered += slopeLength;
+    grade = endGrade;
+  };
+
+  slope(RUN_UP + 200, 0);
+  let climb = true;
+  while (covered < length) {
+    let target = random.between(0.045, 0.09);
+    if (!climb) target = -target;
+    if (elevation > HIGHEST - 30) target = -Math.abs(target);
+    if (elevation < LOWEST + 20) target = Math.abs(target);
+    const crest = grade > 0 && target < 0;
+    slope(crest ? random.between(40, 75) : random.between(70, 140), target);
+    const room = target > 0 ? (HIGHEST - elevation) / target : (elevation - LOWEST) / -target;
+    slope(Math.max(30, Math.min(random.between(120, 380), room)), target);
+    climb = target < 0;
+  }
+  return slopes;
 }
 
 /** A sweeper, a bend, a pair of S-bends or a straight, keeping the road heading roughly north. */
