@@ -5,10 +5,11 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { listenToKeyboard, type Keyboard } from "@/input/keyboard";
 import { NO_INPUT } from "@/race";
 import { Scene } from "@/renderer/Scene";
-import type { SaveStorage } from "@/save-data/save-data";
+import { isMotionReduced, type SaveStorage } from "@/save-data/save-data";
 import { Hud } from "@/ui/Hud";
 import { PauseMenu } from "@/ui/PauseMenu";
 import { ResultsScreen } from "@/ui/ResultsScreen";
+import { SettingsScreen } from "@/ui/SettingsScreen";
 import { TitleScreen } from "@/ui/TitleScreen";
 import { GameSession } from "./session";
 
@@ -24,6 +25,12 @@ export default function Game() {
       }),
   );
   const state = useSyncExternalStore(session.subscribe, session.getState, session.getState);
+  const systemReducesMotion = useSyncExternalStore(
+    subscribeToReducedMotion,
+    systemPrefersReducedMotion,
+    () => false,
+  );
+  const reduceMotion = isMotionReduced(state.settings, systemReducesMotion);
 
   useEffect(() => {
     const listening = listenToKeyboard(window, session.togglePause);
@@ -58,7 +65,16 @@ export default function Game() {
   return (
     <div className="relative h-full w-full overflow-hidden">
       <Scene session={session} />
-      {state.screen === "title" && <TitleScreen personalBest={state.personalBest} onStart={session.startRace} />}
+      {state.screen === "title" && (
+        <TitleScreen personalBest={state.personalBest} onStart={session.startRace} onSettings={session.openSettings} />
+      )}
+      {state.screen === "settings" && (
+        <SettingsScreen
+          reduceMotion={reduceMotion}
+          onReduceMotionChange={(on) => session.changeSettings({ reduceMotion: on })}
+          onBack={session.closeSettings}
+        />
+      )}
       {(state.screen === "racing" || state.screen === "paused") && <Hud session={session} />}
       {state.screen === "paused" && (
         <PauseMenu onResume={session.resume} onRestart={session.restart} onQuit={session.quitToTitle} />
@@ -74,6 +90,19 @@ export default function Game() {
       )}
     </div>
   );
+}
+
+const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
+
+function subscribeToReducedMotion(onChange: () => void) {
+  const query = window.matchMedia(REDUCED_MOTION);
+  query.addEventListener("change", onChange);
+  return () => query.removeEventListener("change", onChange);
+}
+
+/** Whether the operating system asks for reduced motion. */
+function systemPrefersReducedMotion() {
+  return window.matchMedia(REDUCED_MOTION).matches;
 }
 
 /** localStorage, or undefined where the browser refuses it (private modes, blocked storage). */
