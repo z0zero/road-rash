@@ -1,4 +1,5 @@
 import type { CopId, RiderId } from "./events";
+import type { Attack, Weapon } from "./fighting";
 import { lineAround, safeSpeedAt, type BendLimits } from "./opponent-riding";
 import { clamp, maxSidewaysSpeed, type Motion } from "./riding";
 import { STEP_SECONDS } from "./steps";
@@ -13,12 +14,19 @@ const COP_NAMES = ["Sergeant Pike", "Deputy Gale"];
 
 /** A cop on a motorcycle, in track space like the riders. */
 export interface Cop {
+  readonly kind: "cop";
   readonly id: CopId;
   readonly name: string;
   /** The bike's motion, which is the cop's too while they ride it. */
   readonly motion: Motion;
   status: CopStatus;
   stamina: number;
+  /** Steps since the cop was last hit (Infinity if never). */
+  stepsSinceHit: number;
+  /** The attack the cop is making, or null. */
+  attack: Attack | null;
+  /** The weapon the cop holds, or null: every cop carries a club. */
+  weapon: Weapon | null;
   /** The crashed rider the cop is riding to, to bust them; null when it isn't busting anyone. */
   busting: RiderId | null;
   /** Steps the cop has still to stand by a rider it has busted, before riding on. */
@@ -31,11 +39,15 @@ export interface Cop {
 export function lineUpCops(track: Track): Cop[] {
   const shoulder = track.roadHalfWidth + track.shoulderWidth / 2;
   return TUNING.cops.waitingPoints.map((along, id) => ({
+    kind: "cop",
     id,
     name: COP_NAMES[id],
     motion: { distance: track.startDistance + along, offset: shoulder, speed: 0, steering: 0, shove: 0 },
     status: "waiting",
     stamina: TUNING.cops.fullStamina,
+    stepsSinceHit: Infinity,
+    attack: null,
+    weapon: "club",
     busting: null,
     standingBySteps: 0,
     near: false,

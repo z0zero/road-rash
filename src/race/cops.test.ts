@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createRace, PLAYER, type PlayerInput, type Race, type RaceEvent, type RiderId } from ".";
+import { createRace, NO_INPUT, PLAYER, STEP_SECONDS, type PlayerInput, type Race, type RaceEvent, type RiderId } from ".";
 import { alongsideARacer, autopilot, eventsDuring, eventsUntil, kmh, player, secondsUntil, startedRace } from "./test-helpers";
+
+const ME = { kind: "rider", id: PLAYER } as const;
+const FIRST_COP = { kind: "cop", id: 0 } as const;
 
 /** Metres between two things in track space: along the track and across it. */
 const apart = (a: { distance: number; offset: number }, b: { distance: number; offset: number }) =>
@@ -65,6 +68,67 @@ function rideWatchingTheCops(
   );
   return alerts;
 }
+
+/**
+ * Scripted input that rides the player up alongside the first cop, 1.4 m to
+ * its side (towards the middle of the road) and level with it, and holds them
+ * there. It closes in on the cop at no more than 5 m/s.
+ */
+function rideAlongsideTheFirstCop(race: Race) {
+  let lastOffset = player(race).offset;
+  return (): PlayerInput => {
+    const me = player(race);
+    const cop = race.snapshot().cops[0];
+    const sideways = (me.offset - lastOffset) / STEP_SECONDS;
+    lastOffset = me.offset;
+    const lane = cop.offset + (cop.offset > 0 ? -1.4 : 1.4);
+    const closing = Math.max(-5, Math.min(5, 0.8 * (cop.distance - me.distance)));
+    const wanted = Math.max(0, cop.speed + closing);
+    return {
+      ...NO_INPUT,
+      steer: Math.max(-1, Math.min(1, 0.8 * (lane - me.offset) - 0.25 * sideways)),
+      throttle: me.speed < wanted ? 1 : 0,
+      brake: me.speed > wanted + 0.5 ? Math.min(1, (me.speed - wanted) / 3) : 0,
+    };
+  };
+}
+
+/**
+ * A started race in which the player has passed the first cop, so that it has
+ * joined the race, and ridden up alongside it: the cop is within the reach of
+ * a punch, and nearer the player than any rider.
+ */
+function alongsideTheFirstCop(seed = 1) {
+  const race = startedRace(seed);
+  const waitingAt = race.snapshot().cops[0].distance;
+  secondsUntil(race, autopilot(race), () => player(race).distance >= waitingAt, 120);
+  const input = rideAlongsideTheFirstCop(race);
+  const withinReach = () => {
+    const { riders, cops } = race.snapshot();
+    const me = riders[PLAYER];
+    const cop = cops[0];
+    const reached = Math.abs(cop.offset - me.offset) <= 1.8 && Math.abs(cop.distance - me.distance) <= 2;
+    const nearer = riders.some((rider) => rider.id !== PLAYER && rider.status === "racing" && !rider.crash && apart(rider, me) <= apart(cop, me));
+    return reached && !nearer;
+  };
+  secondsUntil(race, input, withinReach, 30);
+  race.drainEvents();
+  return { race, input };
+}
+
+describe("fighting a cop", () => {
+  it("is punching and kicking it like a rider: a cop starts with 150 stamina, and a punch lowers it by 18", () => {
+    const { race, input } = alongsideTheFirstCop();
+    expect(race.snapshot().cops[0].stamina).toBe(150);
+
+    race.step({ ...input(), punch: true });
+    const events = [...race.drainEvents(), ...eventsDuring(race, 0.5, input)];
+
+    expect(events).toContainEqual({ type: "attack-thrown", attacker: ME, target: FIRST_COP, kind: "punch" });
+    expect(events).toContainEqual({ type: "attack-landed", attacker: ME, target: FIRST_COP, kind: "punch" });
+    expect(race.snapshot().cops[0].stamina).toBe(132);
+  });
+});
 
 describe("the cop alert", () => {
   it("is on while a cop in the race is within 150 m of the player: cop-near as one comes that close, cop-gone as it leaves", () => {
