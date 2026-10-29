@@ -1,7 +1,10 @@
 import type { RaceView } from "@/game/session";
-import { STEP_SECONDS, type RiderId } from "@/race";
+import { STEP_SECONDS, type RaceSnapshot, type RiderSnapshot } from "@/race";
 
-/** Where a rider is drawn this frame, between the last two snapshots. */
+/** Someone on the road as a snapshot shows them, a rider or a cop: where they are, on their bike or off it, and their bike. */
+export type OnTheRoad = Pick<RiderSnapshot, "distance" | "offset" | "speed" | "bike">;
+
+/** Where a rider or cop is drawn this frame, between the last two snapshots. */
 export interface RiderPose {
   distance: number;
   offset: number;
@@ -16,17 +19,17 @@ export function createPose(): RiderPose {
 }
 
 /**
- * Fills `pose` with a rider's interpolated pose for this frame: where the
- * rider is, on their bike or off it after a crash. Reuses `pose` to spare the
- * garbage collector.
+ * Fills `pose` with the interpolated pose for this frame of the rider or cop
+ * that `whom` picks out of a snapshot: where they are, on their bike or off
+ * it after a crash. Reuses `pose` to spare the garbage collector.
  */
-export function poseOf(view: RaceView, rider: RiderId, pose: RiderPose): RiderPose {
-  return between(view.previous.riders[rider], view.current.riders[rider], view.alpha, pose);
+export function poseOf(view: RaceView, whom: (snapshot: RaceSnapshot) => OnTheRoad, pose: RiderPose): RiderPose {
+  return between(whom(view.previous), whom(view.current), view.alpha, pose);
 }
 
-/** Fills `pose` with where a rider's bike is drawn this frame: under the rider, or wherever it slid to after a crash. */
-export function bikePoseOf(view: RaceView, rider: RiderId, pose: RiderPose): RiderPose {
-  return between(view.previous.riders[rider].bike, view.current.riders[rider].bike, view.alpha, pose);
+/** Fills `pose` with where the bike of the rider or cop `whom` picks out is drawn this frame: under them, or wherever it slid to. */
+export function bikePoseOf(view: RaceView, whom: (snapshot: RaceSnapshot) => OnTheRoad, pose: RiderPose): RiderPose {
+  return between(whom(view.previous).bike, whom(view.current).bike, view.alpha, pose);
 }
 
 type Place = Pick<RiderPose, "distance" | "offset" | "speed">;

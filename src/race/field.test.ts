@@ -15,6 +15,7 @@ import {
   bendSpeed,
   chase,
   CLOSED_ROAD,
+  NO_COPS,
   player,
   secondsUntil,
   startedRace,
@@ -432,7 +433,8 @@ describe("the results", () => {
   });
 
   it("list every rider by name, position and time once the rest of the field is raced to the finish", () => {
-    const { results, events } = rideToTheResults(1, (race) => autopilot(race));
+    // With no cops, who would bust the riders who crash near the player.
+    const { results, events } = rideToTheResults(1, (race) => autopilot(race), NO_COPS);
     const names = createRace({ seed: 1 }).snapshot().riders.map((rider) => rider.name);
 
     expect(results.standings.map((standing) => standing.position)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);

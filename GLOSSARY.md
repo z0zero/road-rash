@@ -73,7 +73,7 @@ A rider being thrown off their bike, either by a hit or by running into somethin
 _Avoid_: Wipeout, bail, fall, spill
 
 **Knock-off**:
-A crash caused by a hit landing on a rider who has no stamina left.
+A crash caused by a hit landing on a rider who has no stamina left. A cop with no stamina left is knocked off by the next hit too, and is out of the race.
 _Avoid_: KO, knockdown
 
 **On foot**:
@@ -141,8 +141,16 @@ Everything beside the road that nobody can hit: palms, pines, rocks, houses, sig
 _Avoid_: Props, decoration
 
 **Cop**:
-A police officer on a motorcycle who rides among the riders and busts anyone who crashes nearby.
+A police officer on a motorcycle who rides among the riders and busts anyone who crashes nearby. Two cops wait on the shoulder and join the race as the player passes them, then stay near the player.
 _Avoid_: Police, officer
+
+**Cop alert**:
+The warning on the HUD, with the siren, that a cop in the race is near the player: within 150 m.
+_Avoid_: Wanted level, police alert
+
+**Fighting back**:
+A cop hit by a rider coming after them and swinging its club at them, until a while after it was last hit.
+_Avoid_: Revenge, aggro
 
 **Busted**:
 The end of a rider's race because a cop caught them after a crash.
