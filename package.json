@@ -11,7 +11,7 @@
     "dev": "next dev",
     "build": "next build",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.race.json",
+    "typecheck": "next typegen && tsc --noEmit && tsc --noEmit -p tsconfig.race.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:smoke": "playwright test"

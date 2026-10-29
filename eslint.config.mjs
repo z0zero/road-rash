@@ -29,6 +29,24 @@ const eslintConfig = defineConfig([
     "playwright-report/**",
   ]),
   {
+    // The rest of the game reaches the Race module only through its interface.
+    files: ["src/**/*.ts", "src/**/*.tsx"],
+    ignores: RACE_FILES,
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/race/*", "**/race/*"],
+              message: "Import the Race module through its interface, '@/race'.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: RACE_FILES,
     rules: {
       "no-restricted-imports": [

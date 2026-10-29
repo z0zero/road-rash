@@ -218,9 +218,12 @@ describe("the coastal track", () => {
     }
   });
 
-  it("starts the player on the start line", () => {
+  it("starts the player on the start line, in the lanes that run in the race direction", () => {
     const race = createRace({ seed: 1 });
+    const { distance, offset } = race.snapshot().riders[PLAYER];
 
-    expect(race.snapshot().riders[PLAYER].distance).toBe(race.track.startDistance);
+    expect(distance).toBe(race.track.startDistance);
+    expect(offset).toBeGreaterThan(0);
+    expect(offset).toBeLessThan(race.track.roadHalfWidth);
   });
 });
