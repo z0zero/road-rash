@@ -1,4 +1,5 @@
 import { BufferGeometry, Color, Float32BufferAttribute } from "three";
+import { smoothstep } from "@/math";
 import type { Track } from "@/race";
 import { groundDirection, seaward } from "./geography";
 import { hash, smoothNoise } from "./noise";
@@ -385,9 +386,4 @@ function pushQuad(positions: number[], colors: number[], [a, b, c, d]: Quad, see
       colors.push(scratch.r, scratch.g, scratch.b);
     }
   });
-}
-
-function smoothstep(from: number, to: number, value: number) {
-  const t = Math.min(1, Math.max(0, (value - from) / (to - from)));
-  return t * t * (3 - 2 * t);
 }

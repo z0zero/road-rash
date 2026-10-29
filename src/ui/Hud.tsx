@@ -1,5 +1,6 @@
 import { useEffect, useRef, type RefObject } from "react";
 import type { GameSession } from "@/game/session";
+import { clamp } from "@/math";
 import { COP_FULL_STAMINA, PLAYER, type RaceEvent, type RaceSnapshot, type RiderSnapshot } from "@/race";
 import { liveryOf } from "@/renderer/liveries";
 import { ClubIcon } from "./ClubIcon";
@@ -312,7 +313,7 @@ function conditionColour(share: number): string {
 /** Fills a meter to `value` out of `full`, coloured by how full it is. */
 function setBar(fill: HTMLDivElement | null, value: number, colour: (share: number) => string, full = FULL) {
   if (!fill) return;
-  const share = Math.max(0, Math.min(1, value / full));
+  const share = clamp(value / full, 0, 1);
   const width = `${(share * 100).toFixed(1)}%`;
   if (fill.style.width !== width) fill.style.width = width;
   const background = colour(share);
