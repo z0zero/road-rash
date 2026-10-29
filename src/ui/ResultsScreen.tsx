@@ -78,18 +78,26 @@ export function ResultsScreen({
   );
 }
 
-/** The remark on the player's race, as a quote, with who said it: an opponent beside their colours, or a cop. */
+/**
+ * The remark on the player's race, as a quote, with who said it: an opponent
+ * beside their colours, or a cop beside the red and blue of a light bar.
+ */
 function SaidAfterTheRace({ remark }: { remark: Remark }) {
   return (
     <figure data-testid="remark" className="w-full border-l-4 border-sunset/80 py-0.5 pl-4 text-left">
       <blockquote className="text-lg italic leading-snug text-sand">&ldquo;{remark.line}&rdquo;</blockquote>
       <figcaption className="mt-1.5 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-sunset">
-        {remark.by.kind === "rider" && (
+        {remark.by.kind === "rider" ? (
           <span
             aria-hidden="true"
             className="h-2.5 w-2.5 shrink-0 rounded-full border border-sand/70"
             style={{ backgroundColor: liveryOf(remark.by.id).paint }}
           />
+        ) : (
+          <span aria-hidden="true" className="flex shrink-0 gap-0.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-[#ff2a3d]" />
+            <span className="h-2.5 w-2.5 rounded-full bg-[#2a7dff]" />
+          </span>
         )}
         {remark.name}
       </figcaption>
