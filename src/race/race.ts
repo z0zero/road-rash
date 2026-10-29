@@ -19,6 +19,7 @@ import {
   isMidSwing,
   nearestWithinReach,
   windUpSteps,
+  withinReach,
   type Attack,
   type Weapon,
 } from "./fighting";
@@ -473,7 +474,8 @@ export function createRace(options: RaceOptions): Race {
           if (!opponent.temperament || opponent.attack || opponent.droppingBack) continue;
           const nearest = nearestWithinReach(opponent.motion, riding, punchOf(opponent));
           const kind = nearest && opponentAttack(opponent.temperament, nearest.id === PLAYER, random);
-          if (kind) throwAttack(opponent, kind);
+          // A club reaches further than a kick: a club holder swings at a rider its kick can't reach.
+          if (kind) throwAttack(opponent, kind === "kick" && !withinReach(opponent.motion, nearest.motion, kind) ? "punch" : kind);
         }
         const distancesBefore = riders.map((rider) => whereIs(rider).distance);
         riders.forEach((rider, index) => {
