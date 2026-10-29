@@ -1,10 +1,10 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { GameTitle } from "@/ui/TitleScreen";
-import { NewerBrowserScreen } from "@/ui/UnsupportedScreens";
-import { supportsWebGL2 } from "./browser-support";
+import { MadeForDesktopScreen, NewerBrowserScreen } from "@/ui/UnsupportedScreens";
+import { isTouchOnly, subscribeToPointers, supportsWebGL2 } from "./browser-support";
 
 /** The game renders only in the browser; the static page shows the title while it loads. */
 const Game = dynamic(() => import("./Game"), { ssr: false, loading: () => <Loading /> });
@@ -13,14 +13,19 @@ const Game = dynamic(() => import("./Game"), { ssr: false, loading: () => <Loadi
 const subscribeToNothing = () => () => {};
 
 /**
- * The game, in a browser that can run it. A browser without WebGL 2 is told
- * it needs a newer one instead, and never loads the game. Nothing is known
- * of the browser while the page is prerendered and hydrated, so until then
- * the loading screen shows.
+ * The game, where it can be played. A phone or tablet that can only be touched
+ * is told the game is made for desktop, though someone with a keyboard or
+ * gamepad connected there can play anyway; a browser without WebGL 2 is told
+ * it needs a newer one. Either way the game isn't loaded. Nothing is known of
+ * the browser while the page is prerendered and hydrated, so until then the
+ * loading screen shows.
  */
 export function GameLoader() {
+  const touchOnly = useSyncExternalStore(subscribeToPointers, isTouchOnly, () => null);
   const webGL2 = useSyncExternalStore(subscribeToNothing, supportsWebGL2, () => null);
-  if (webGL2 === null) return <Loading />;
+  const [playAnyway, setPlayAnyway] = useState(false);
+  if (touchOnly === null || webGL2 === null) return <Loading />;
+  if (touchOnly && !playAnyway) return <MadeForDesktopScreen onPlayAnyway={() => setPlayAnyway(true)} />;
   if (!webGL2) return <NewerBrowserScreen />;
   return <Game />;
 }

@@ -552,6 +552,23 @@ test("explains that the game needs a newer browser where there is no WebGL 2", a
   await expect(page.locator("canvas")).toHaveCount(0);
 });
 
+test.describe("on a touch-only phone or tablet", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+
+  test("explains that the game is made for desktop, with a keyboard or gamepad", async ({ page }) => {
+    await expect(page.getByRole("heading", { name: "Rev & Wreck is made for desktop" })).toBeVisible();
+    await expect(page.getByText(/keyboard or a gamepad/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Start Race" })).toHaveCount(0);
+    await expect(page.locator("canvas")).toHaveCount(0);
+  });
+
+  test("lets a player who has a keyboard or gamepad there play anyway", async ({ page }) => {
+    await page.getByRole("button", { name: /Play anyway/ }).click();
+
+    await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
+  });
+});
+
 test("downloads less than 10 MB to get racing", async ({ browser, baseURL }) => {
   // A fresh browser context, so nothing comes from the cache.
   const context = await browser.newContext({ baseURL });
