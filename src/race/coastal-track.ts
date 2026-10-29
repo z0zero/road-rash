@@ -18,6 +18,8 @@ const RUN_OUT = 300;
 const MAX_HEADING = (70 * Math.PI) / 180;
 /** Race distances (metres from the start line) around which the hairpin sections come. */
 const HAIRPIN_SECTIONS = [1500, 3300, 5100];
+/** The road runs north along the coast, with the sea to the west, where the sun sets. */
+const SEA_HEADING = -Math.PI / 2;
 /** Metres above sea level where the centreline begins. */
 const START_ELEVATION = 70;
 /** The road stays between these elevations (metres above sea level)... */
@@ -114,6 +116,7 @@ function planLayout(random: Random): TrackLayout {
     startElevation: START_ELEVATION,
     startDistance: RUN_UP,
     finishDistance,
+    seaHeading: SEA_HEADING,
   };
 }
 

@@ -2,14 +2,25 @@ import type { PersonalBest } from "@/save-data/save-data";
 import { Button } from "./Button";
 import { formatPosition, formatRaceTime } from "./format";
 
-export function TitleScreen({ personalBest, onStart }: { personalBest: PersonalBest; onStart: () => void }) {
+export function TitleScreen({
+  personalBest,
+  onStart,
+  onSettings,
+}: {
+  personalBest: PersonalBest;
+  onStart: () => void;
+  onSettings: () => void;
+}) {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 bg-gradient-to-b from-night/75 via-dusk/35 to-transparent px-6 text-center">
       <GameTitle />
       <p className="text-lg text-sand/90 drop-shadow">Race the coastal cliff road at sunset. Don&apos;t wreck it.</p>
-      <Button autoFocus onClick={onStart}>
-        Start Race
-      </Button>
+      <div className="flex flex-col gap-3">
+        <Button autoFocus onClick={onStart}>
+          Start Race
+        </Button>
+        <Button onClick={onSettings}>Settings</Button>
+      </div>
       <p className="text-sm text-sand/85 drop-shadow">W/A/S/D or the arrow keys to ride &middot; Esc or P to pause</p>
       {personalBest.time !== null && (
         <p className="text-sm text-sun drop-shadow">
