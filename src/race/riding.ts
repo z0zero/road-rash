@@ -58,7 +58,7 @@ function coastingDeceleration(speed: number) {
 }
 
 /** Steering moves the bike sideways at up to about 8 m/s at low speed and less at high speed. */
-function maxSidewaysSpeed(speed: number) {
+export function maxSidewaysSpeed(speed: number) {
   const share = speed / TUNING.topSpeed;
   return Math.min(
     TUNING.steeringPerSpeed * speed,
