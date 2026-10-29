@@ -1,6 +1,8 @@
 import { useFrame } from "@react-three/fiber";
+import { useEffect } from "react";
 import { type Camera, PerspectiveCamera } from "three";
 import type { GameSession } from "@/game/session";
+import { PLAYER, type AttackKind, type RaceEvent, type RiderOrCop } from "@/race";
 import type { CameraShake } from "./camera-shake";
 import type { RiderMotion } from "./rider-motion";
 
@@ -32,6 +34,12 @@ const RUMBLE_SPEED = 45;
 const RUMBLE = 0.32;
 /** Riding off the road at speed rattles the camera this hard. */
 const OFF_ROAD_RUMBLE = 0.55;
+/** The player's crash jolts the camera this hard... */
+const CRASH_JOLT = 0.85;
+/** ...a hit they take this hard, by the attack that hit them... */
+const HIT_JOLTS: Record<AttackKind, number> = { punch: 0.45, kick: 0.35, "club-swing": 0.6 };
+/** ...and a hit they land this hard. */
+const LANDED_JOLT = 0.15;
 
 /**
  * Follows the player from behind and slightly above, looking up the road. The
@@ -51,7 +59,17 @@ export function ChaseCamera({
   reduceMotion: boolean;
 }) {
   useFrame(({ camera }, delta) => aim(camera, session, player, shake, reduceMotion, delta), -1);
+  useEffect(() => session.onRaceEvent((event) => shake.kick(jolt(event))), [session, shake]);
   return null;
+}
+
+/** How hard a race event jolts the camera (0 to 1): the player's crashes and the hits they take, hardest; the hits they land, a little. */
+function jolt(event: RaceEvent): number {
+  const isPlayer = (who: RiderOrCop) => who.kind === "rider" && who.id === PLAYER;
+  if (event.type === "crash") return event.rider === PLAYER ? CRASH_JOLT : 0;
+  if (event.type !== "attack-landed") return 0;
+  if (isPlayer(event.target)) return HIT_JOLTS[event.kind];
+  return isPlayer(event.attacker) ? LANDED_JOLT : 0;
 }
 
 function aim(

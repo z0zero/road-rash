@@ -5,11 +5,13 @@ const THROTTLE = ["KeyW", "ArrowUp"];
 const BRAKE = ["KeyS", "ArrowDown"];
 const LEFT = ["KeyA", "ArrowLeft"];
 const RIGHT = ["KeyD", "ArrowRight"];
+const PUNCH = ["KeyJ", "KeyZ"];
+const KICK = ["KeyK", "KeyX"];
 const PAUSE = ["Escape", "KeyP"];
 const RIDING = new Set([...THROTTLE, ...BRAKE, ...LEFT, ...RIGHT]);
 
 export interface Keyboard {
-  /** The player's input for one step, from the keys held now. */
+  /** The player's input for one step, from the keys held now and the attack keys pressed since the last read. */
   read(): PlayerInput;
   /** Stops listening. */
   dispose(): void;
@@ -17,12 +19,16 @@ export interface Keyboard {
 
 /**
  * Turns the keyboard into the player's input: W or Up throttles, S or Down
- * brakes, A/D or Left/Right steer, and Esc or P calls `onPause`. Losing window
- * focus releases every held key.
+ * brakes, A/D or Left/Right steer, J or Z punches, K or X kicks, and Esc or P
+ * calls `onPause`. A punch or kick press counts once, in the next step read,
+ * however briefly the key was held. Losing window focus releases every held
+ * key.
  */
 export function listenToKeyboard(target: Window, onPause: () => void): Keyboard {
   const held = new Set<string>();
   const isHeld = (codes: readonly string[]) => codes.some((code) => held.has(code));
+  let punched = false;
+  let kicked = false;
 
   const keyDown = (event: KeyboardEvent) => {
     // Sliders and other form controls keep their own keys, such as the arrows.
@@ -30,6 +36,11 @@ export function listenToKeyboard(target: Window, onPause: () => void): Keyboard 
     if (PAUSE.includes(event.code)) {
       event.preventDefault();
       if (!event.repeat) onPause();
+    } else if (PUNCH.includes(event.code) || KICK.includes(event.code)) {
+      event.preventDefault();
+      if (event.repeat) return;
+      if (PUNCH.includes(event.code)) punched = true;
+      else kicked = true;
     } else if (RIDING.has(event.code)) {
       event.preventDefault();
       held.add(event.code);
@@ -38,7 +49,11 @@ export function listenToKeyboard(target: Window, onPause: () => void): Keyboard 
   const keyUp = (event: KeyboardEvent) => {
     held.delete(event.code);
   };
-  const releaseAll = () => held.clear();
+  const releaseAll = () => {
+    held.clear();
+    punched = false;
+    kicked = false;
+  };
 
   target.addEventListener("keydown", keyDown);
   target.addEventListener("keyup", keyUp);
@@ -46,12 +61,17 @@ export function listenToKeyboard(target: Window, onPause: () => void): Keyboard 
 
   return {
     read() {
-      return {
+      const input = {
         ...NO_INPUT,
         throttle: isHeld(THROTTLE) ? 1 : 0,
         brake: isHeld(BRAKE) ? 1 : 0,
         steer: (isHeld(RIGHT) ? 1 : 0) - (isHeld(LEFT) ? 1 : 0),
+        punch: punched,
+        kick: kicked,
       };
+      punched = false;
+      kicked = false;
+      return input;
     },
     dispose() {
       target.removeEventListener("keydown", keyDown);

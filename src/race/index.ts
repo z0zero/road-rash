@@ -9,8 +9,11 @@
  *   race.fastForward();        // once the player's race is over: final results
  *   race.track;                // the road's geometry and placements
  */
-export { createRace, NO_INPUT, PLAYER, STEP_SECONDS } from "./race";
+export { createRace, NO_INPUT, PLAYER } from "./race";
+export { STEP_SECONDS } from "./steps";
 export type {
+  AttackSnapshot,
+  BikeSnapshot,
   PlayerInput,
   Race,
   RaceOptions,
@@ -21,6 +24,8 @@ export type {
   Standing,
 } from "./race";
 export type { Track, TrackSample, WorldPoint } from "./track";
+export type { CrashPhase } from "./crashing";
+export type { Warnings } from "./surroundings";
 export type { Temperament } from "./opponents";
 export type { ObstacleKind, ObstaclePlacement, SceneryKind, SceneryPlacement } from "./placements";
 export type {
