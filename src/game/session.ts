@@ -30,6 +30,8 @@ export interface SessionState {
   readonly personalBest: PersonalBest;
   /** Whether the last race set a new best time. */
   readonly newBestTime: boolean;
+  /** Whether the last race set a new best position. */
+  readonly newBestPosition: boolean;
   /** The player's settings, as saved. */
   readonly settings: Settings;
 }
@@ -84,6 +86,7 @@ export class GameSession {
       results: null,
       personalBest: this.saveData.personalBest,
       newBestTime: false,
+      newBestPosition: false,
       settings: this.saveData.settings,
     };
   }
@@ -116,7 +119,7 @@ export class GameSession {
   /** Starts a new race with its countdown, from any screen. */
   startRace = () => {
     this.loadRace();
-    this.setState({ screen: "racing", results: null, newBestTime: false });
+    this.setState({ screen: "racing", results: null, newBestTime: false, newBestPosition: false });
   };
 
   restart = () => this.startRace();
@@ -136,7 +139,7 @@ export class GameSession {
 
   quitToTitle = () => {
     this.loadRace();
-    this.setState({ screen: "title", results: null, newBestTime: false });
+    this.setState({ screen: "title", results: null, newBestTime: false, newBestPosition: false });
   };
 
   /** Shows the Settings screen; only from the title screen. */
@@ -197,6 +200,7 @@ export class GameSession {
       results,
       personalBest: this.saveData.personalBest,
       newBestTime: this.saveData.personalBest.time !== bestBefore.time,
+      newBestPosition: this.saveData.personalBest.position !== bestBefore.position,
     });
   }
 

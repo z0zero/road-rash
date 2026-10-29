@@ -21,6 +21,7 @@ export type {
   Standing,
 } from "./race";
 export type { Track, TrackSample, WorldPoint } from "./track";
+export type { Temperament } from "./opponents";
 export type { ObstacleKind, ObstaclePlacement, SceneryKind, SceneryPlacement } from "./placements";
 export type {
   AttackKind,
