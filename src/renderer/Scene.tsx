@@ -8,6 +8,7 @@ import { BikeAndRider } from "./BikeAndRider";
 import { CameraShake } from "./camera-shake";
 import { ChaseCamera } from "./ChaseCamera";
 import { drawnTrack } from "./drawn-track";
+import { Obstacles } from "./Obstacles";
 import { PostProcessing } from "./PostProcessing";
 import { isSoftwareRenderer, LOWEST_QUALITY, pixelRatio, QUALITY_LEVELS } from "./quality";
 import { RiderMotion } from "./rider-motion";
@@ -25,12 +26,12 @@ function frameRateBounds(refreshRate: number): [number, number] {
 }
 
 /**
- * The 3D view of the race: the sunset coast, the road and its scenery, every
- * rider on their bike and the chase camera behind the player, finished with
- * post-processing. It draws whatever the session's view holds and holds no
- * game rules. Rendering is driven by the game loop (frameloop "never" plus
- * `advance`), right after the race has been stepped. A performance monitor
- * lowers the quality when the frame rate drops.
+ * The 3D view of the race: the sunset coast, the road with its scenery and
+ * obstacles, every rider on their bike and the chase camera behind the
+ * player, finished with post-processing. It draws whatever the session's view
+ * holds and holds no game rules. Rendering is driven by the game loop
+ * (frameloop "never" plus `advance`), right after the race has been stepped. A
+ * performance monitor lowers the quality when the frame rate drops.
  */
 export function Scene({ session, reduceMotion }: { session: GameSession; reduceMotion: boolean }) {
   const track = session.view.track;
@@ -88,6 +89,7 @@ export function Scene({ session, reduceMotion }: { session: GameSession; reduceM
         <TrackModel track={drawn} />
         <Terrain track={drawn} />
         <Scenery track={drawn} />
+        <Obstacles track={drawn} />
         {motions.map((motion) => (
           <BikeAndRider key={motion.rider} session={session} motion={motion} />
         ))}
