@@ -67,8 +67,8 @@ interface PadState {
  * the window has lost focus, the gamepads count for nothing, as if let go.
  */
 export function listenToGamepads(target: Window, handlers: GamepadHandlers): Gamepads {
-  /** What every gamepad was doing at the last poll, by the gamepad's index. */
-  const lastSeen = new Map<number, PadState>();
+  /** What every gamepad was doing at the last poll, by the gamepad's index; one missing then is new. */
+  let lastSeen = new Map<number, PadState>();
   let held: Pick<PlayerInput, "throttle" | "brake" | "steer"> = NO_INPUT;
   let punched = false;
   let kicked = false;
@@ -91,10 +91,11 @@ export function listenToGamepads(target: Window, handlers: GamepadHandlers): Gam
       let throttle = 0;
       let brake = 0;
       let steer = 0;
+      const seen = new Map<number, PadState>();
       for (const pad of standardGamepads(target.navigator)) {
         const before = lastSeen.get(pad.index);
         const now: PadState = { pressed: pad.buttons.map((button) => button.pressed), stick: stickPointing(pad, before) };
-        lastSeen.set(pad.index, now);
+        seen.set(pad.index, now);
         // Without focus, only what the gamepad is doing is kept, so that a button held all along isn't taken for a new press.
         if (!focused) continue;
         throttle = Math.max(throttle, triggerPull(pad, RIGHT_TRIGGER), now.pressed[A] ? 1 : 0);
@@ -111,6 +112,7 @@ export function listenToGamepads(target: Window, handlers: GamepadHandlers): Gam
           if (points(now, direction) && !points(before, direction)) handlers.onMenuMove(direction);
         }
       }
+      lastSeen = seen;
       held = { throttle, brake, steer: Math.max(-1, Math.min(1, steer)) };
     },
     read() {
