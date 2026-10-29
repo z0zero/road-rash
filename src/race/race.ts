@@ -1,6 +1,7 @@
 import { getCoastalTrack } from "./coastal-track";
 import type { RaceEvent, RaceOutcome, RiderId } from "./events";
 import { lineUpOpponents } from "./field";
+import { OPPONENTS, PLAYER_NAME, type Temperament } from "./opponents";
 import { createRandom } from "./random";
 import { ride, type Controls, type Motion } from "./riding";
 import type { Track } from "./track";
@@ -18,9 +19,6 @@ const COUNTDOWN_STEPS = 3 * STEPS_PER_SECOND;
 
 /** Once over the finish line, a rider lets go of the throttle and brakes to a stop. */
 const FINISHED_CONTROLS: Controls = { throttle: 0, brake: 0.7, steer: 0 };
-
-/** The player races fourteen opponents. */
-const OPPONENTS = 14;
 
 const IDLE: Controls = { throttle: 0, brake: 0, steer: 0 };
 
@@ -51,6 +49,10 @@ export type RiderStatus = "racing" | RaceOutcome;
 
 export interface RiderSnapshot {
   readonly id: RiderId;
+  /** The opponent's nickname, or "You" for the player. */
+  readonly name: string;
+  /** How the opponent races and fights; null for the player. */
+  readonly temperament: Temperament | null;
   /** Metres along the track's centreline. */
   readonly distance: number;
   /** Metres sideways from the centreline; positive is right of the race direction. */
@@ -130,6 +132,8 @@ export interface Race {
 
 interface Rider {
   readonly id: RiderId;
+  readonly name: string;
+  readonly temperament: Temperament | null;
   readonly motion: Motion;
   status: RiderStatus;
   finishTime: number | null;
@@ -146,6 +150,8 @@ export function createRace(options: RaceOptions): Race {
   const riders: Rider[] = [
     {
       id: PLAYER,
+      name: PLAYER_NAME,
+      temperament: null,
       // On the start line, between the two lanes that run in the race direction.
       motion: { distance: track.startDistance, offset: track.laneWidth, speed: 0, steering: 0 },
       status: "racing",
@@ -153,9 +159,11 @@ export function createRace(options: RaceOptions): Race {
       finishOrder: null,
     },
   ];
-  lineUpOpponents(track, OPPONENTS, random).forEach(({ distance, offset }, index) => {
+  lineUpOpponents(track, OPPONENTS.length, random).forEach(({ distance, offset }, index) => {
     riders.push({
       id: PLAYER + 1 + index,
+      name: OPPONENTS[index].name,
+      temperament: OPPONENTS[index].temperament,
       motion: { distance, offset, speed: 0, steering: 0 },
       status: "racing",
       finishTime: null,
@@ -239,6 +247,8 @@ export function createRace(options: RaceOptions): Race {
         clock: clock(),
         riders: riders.map((rider) => ({
           id: rider.id,
+          name: rider.name,
+          temperament: rider.temperament,
           distance: rider.motion.distance,
           offset: rider.motion.offset,
           speed: rider.motion.speed,
