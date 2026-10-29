@@ -13,6 +13,16 @@ const D_PAD: Readonly<Record<Direction, number>> = { up: 12, down: 13, left: 14,
 const LEFT_STICK_X = 0;
 const LEFT_STICK_Y = 1;
 
+/** How the screens name the controls above for each thing they do. */
+export const GAMEPAD_NAMES = {
+  throttle: ["Right trigger", "A"],
+  brake: ["Left trigger"],
+  steer: ["Left stick", "D-pad"],
+  punch: ["X"],
+  kick: ["B"],
+  pause: ["Start"],
+} as const satisfies Record<string, readonly string[]>;
+
 /** The left stick steers only once pushed this far from the middle, so a stick that doesn't quite centre doesn't drift. */
 const STICK_DEAD_ZONE = 0.15;
 /** A trigger counts only once pulled this far, so one resting a touch off zero doesn't hold the throttle open. */
