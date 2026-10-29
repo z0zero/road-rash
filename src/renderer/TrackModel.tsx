@@ -18,14 +18,14 @@ export function TrackModel({ track }: { track: Track }) {
   return (
     <group>
       <mesh geometry={geometries.road} receiveShadow>
-        <meshStandardMaterial vertexColors roughness={0.95} flatShading />
+        <meshLambertMaterial vertexColors />
       </mesh>
-      <mesh geometry={geometries.markings}>
-        <meshStandardMaterial vertexColors roughness={0.7} />
+      <mesh geometry={geometries.markings} receiveShadow>
+        <meshLambertMaterial vertexColors />
       </mesh>
       {[geometries.start, geometries.finish].map((geometry, index) => (
-        <mesh key={index} geometry={geometry}>
-          <meshStandardMaterial vertexColors roughness={0.6} />
+        <mesh key={index} geometry={geometry} receiveShadow>
+          <meshLambertMaterial vertexColors />
         </mesh>
       ))}
       <Gantry track={track} distance={track.startDistance} color="#f2c14e" />

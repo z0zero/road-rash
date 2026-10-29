@@ -3,14 +3,15 @@ import type { Track, WorldPoint } from "@/race";
 
 /** Metres between the road mesh's cross-sections. */
 const SECTION = 2;
-/** Metres of embankment beyond each shoulder, sloping down towards the sea. */
-const EMBANKMENT = 45;
+/** Metres of rumble strip along each edge of the road, on the shoulder. */
+const RUMBLE_WIDTH = 0.7;
 
-const ASPHALT = new Color("#4b4a55");
-const ASPHALT_LIGHT = new Color("#55535f");
-const SHOULDER = new Color("#c9a873");
-const SHOULDER_DARK = new Color("#a98a5c");
-const EMBANKMENT_COLOR = new Color("#7d6b43");
+const ASPHALT = new Color("#5d5b66");
+const ASPHALT_LIGHT = new Color("#676570");
+const SHOULDER = new Color("#b99a6c");
+const SHOULDER_DARK = new Color("#a6875c");
+const RUMBLE_RED = new Color("#b5352b");
+const RUMBLE_WHITE = new Color("#ece5d8");
 const WHITE = new Color("#f2eee4");
 const YELLOW = new Color("#f2c14e");
 const BLACK = new Color("#1d1b22");
@@ -46,41 +47,28 @@ function lifted(point: WorldPoint, metres: number): WorldPoint {
 }
 
 /**
- * The road, its shoulders and an embankment either side, from the track's
- * own centreline samples. Road and shoulders alternate shade every 10 m so
- * speed reads at a glance.
+ * The road and its shoulders, from the track's own centreline samples, with
+ * red and white rumble strips along both edges. Road and shoulders alternate
+ * shade every 10 m and the rumble strips every 2 m, so speed reads at a glance.
+ * The land beyond the shoulders is the terrain's.
  */
 export function buildRoadGeometry(track: Track): BufferGeometry {
   const { roadHalfWidth: road, shoulderWidth } = track;
   const edge = road + shoulderWidth;
+  const rumble = road + RUMBLE_WIDTH;
   const triangles = new Triangles();
 
-  /** The cross-section at a distance, left to right: embankment foot, shoulder edge, road edge, road edge, shoulder edge, embankment foot. */
-  const sectionAt = (distance: number) => {
-    const { curvature } = track.sampleAt(distance);
-    // On the inside of a tight bend the embankment stops short of the bend's centre.
-    const inside = Math.max(3, Math.min(EMBANKMENT, 0.85 / Math.max(Math.abs(curvature), 1e-6) - edge));
-    const foot = (side: -1 | 1) => {
-      const width = Math.sign(curvature) === side ? inside : EMBANKMENT;
-      const top = track.pointAt(distance, side * (edge + width));
-      return { x: top.x, y: Math.max(1, top.y - width * 1.4), z: top.z };
-    };
-    return [
-      foot(-1),
-      track.pointAt(distance, -edge),
-      track.pointAt(distance, -road),
-      track.pointAt(distance, road),
-      track.pointAt(distance, edge),
-      foot(1),
-    ];
-  };
+  /** The cross-section at a distance, left to right: shoulder edge, rumble strip, road edge, road edge, rumble strip, shoulder edge. */
+  const sectionAt = (distance: number) =>
+    [-edge, -rumble, -road, road, rumble, edge].map((offset) => track.pointAt(distance, offset));
 
   let previous = sectionAt(0);
   for (let distance = SECTION; distance <= track.length; distance += SECTION) {
     const next = sectionAt(distance);
     const light = Math.floor(distance / 10) % 2 === 0;
     const shoulder = light ? SHOULDER : SHOULDER_DARK;
-    const strips = [EMBANKMENT_COLOR, shoulder, light ? ASPHALT : ASPHALT_LIGHT, shoulder, EMBANKMENT_COLOR];
+    const kerb = Math.round(distance / SECTION) % 2 === 0 ? RUMBLE_RED : RUMBLE_WHITE;
+    const strips = [shoulder, kerb, light ? ASPHALT : ASPHALT_LIGHT, kerb, shoulder];
     strips.forEach((color, strip) => {
       triangles.surface(previous[strip], previous[strip + 1], next[strip + 1], next[strip], color);
     });
