@@ -61,7 +61,8 @@ describe("riding", () => {
   });
 
   it("reaches a top speed of 225 km/h and never goes faster", () => {
-    const race = startedRace();
+    // On a closed road, so that no car holds the bike up on the straights.
+    const race = startedRace(1, { traffic: false });
     const pilot = autopilot(race);
     let fastest = 0;
 

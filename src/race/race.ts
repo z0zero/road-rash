@@ -14,14 +14,14 @@ import type { AttackKind, CrashCause, RaceEvent, RaceOutcome, RiderId } from "./
 import { lineUpOpponents } from "./field";
 import { attackStage, attackSteps, awayFrom, nearestWithinReach, windUpSteps, type Attack } from "./fighting";
 import { isDroppingBack, opponentAttack, opponentIntent } from "./opponent-fighting";
-import { catchUpFor, opponentControls, paceFor, type OpponentRiding } from "./opponent-riding";
+import { catchUpFor, opponentControls, paceFor, type Hazard, type OpponentRiding } from "./opponent-riding";
 import { OPPONENTS, PLAYER_NAME, type Temperament } from "./opponents";
 import { createRandom } from "./random";
 import { ride, type Controls, type Motion } from "./riding";
 import { STEP_SECONDS, STEPS_PER_SECOND, stepsIn } from "./steps";
 import { nearestOpponent, warningsFor, type Warnings } from "./surroundings";
 import type { Track } from "./track";
-import { createTraffic, type CarKind } from "./traffic";
+import { CLOSED_ROAD, createTraffic, velocityOf, type CarKind, type Traffic } from "./traffic";
 import { TUNING } from "./tuning";
 
 /** The player is always rider 0. */
@@ -191,6 +191,8 @@ export interface RaceOptions {
    * opponent's bike starts perfect.
    */
   readonly playerCondition?: number;
+  /** Whether cars drive on the road (the default). Without them, the race runs on a closed road. */
+  readonly traffic?: boolean;
 }
 
 /**
@@ -286,12 +288,34 @@ export function createRace(options: RaceOptions): Race {
     const riding = { pace: paceFor(skill), lane: offset };
     riders.push(lineUp({ id: PLAYER + 1 + index, name, temperament, riding }, distance, offset));
   });
-  const traffic = createTraffic(
-    track,
-    createRandom(options.seed ^ TRAFFIC_SEED),
-    riders[PLAYER].motion,
-    Math.max(...riders.map((rider) => rider.motion.distance)) + CLEAR_OF_THE_GRID,
-  );
+  const traffic: Traffic =
+    options.traffic === false
+      ? CLOSED_ROAD
+      : createTraffic(
+          track,
+          createRandom(options.seed ^ TRAFFIC_SEED),
+          riders[PLAYER].motion,
+          Math.max(...riders.map((rider) => rider.motion.distance)) + CLEAR_OF_THE_GRID,
+        );
+  /** The obstacles, as the hazards they are to riders: they never move. */
+  const obstacles: Hazard[] = track.obstacles.map(({ distance, offset, radius }) => ({
+    distance,
+    offset,
+    velocity: 0,
+    halfLength: radius,
+    halfWidth: radius,
+  }));
+  /** The cars and obstacles on the road, which opponents steer around. */
+  const hazards = (): Hazard[] => [
+    ...traffic.cars.map((car) => ({
+      distance: car.distance,
+      offset: car.offset,
+      velocity: velocityOf(car),
+      halfLength: car.length / 2,
+      halfWidth: car.width / 2,
+    })),
+    ...obstacles,
+  ];
 
   const clock = () => Math.max(0, stepsTaken - COUNTDOWN_STEPS) / STEPS_PER_SECOND;
 
@@ -458,12 +482,13 @@ export function createRace(options: RaceOptions): Race {
         for (const rider of riding) {
           if (rider.riding) rider.droppingBack = isDroppingBack(rider.droppingBack, rider.stamina);
         }
+        const onTheRoad = hazards();
         // Riders off their bikes need no controls: their bikes slide on by themselves.
         const controls = riders.map((rider) => {
           if (rider.status !== "racing" || rider.crash) return FINISHED_CONTROLS;
           if (!rider.riding || !rider.temperament) return input;
           const intent = opponentIntent(rider.temperament, rider.motion, playerToFight, rider.droppingBack);
-          return opponentControls(rider.motion, rider.riding, track, field, catchUp(rider), intent);
+          return opponentControls(rider.motion, rider.riding, track, field, catchUp(rider), intent, onTheRoad);
         });
         if (player.status === "racing" && !player.crash && !player.attack && (input.punch || input.kick)) {
           throwAttack(player, input.punch ? "punch" : "kick");

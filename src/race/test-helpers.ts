@@ -8,9 +8,11 @@ import {
   NO_INPUT,
   PLAYER,
   STEP_SECONDS,
+  type CarSnapshot,
   type PlayerInput,
   type Race,
   type RaceEvent,
+  type RaceOptions,
   type RiderId,
   type RiderSnapshot,
   type Temperament,
@@ -29,9 +31,9 @@ export function stepFor(race: Race, seconds: number, input: PlayerInput = NO_INP
   for (let i = 0; i < steps; i++) race.step(input);
 }
 
-/** A race whose countdown has just run out. */
-export function startedRace(seed = 1) {
-  const race = createRace({ seed });
+/** A race whose countdown has just run out, set up with `options` besides the seed. */
+export function startedRace(seed = 1, options: Omit<RaceOptions, "seed"> = {}) {
+  const race = createRace({ ...options, seed });
   stepFor(race, 3);
   race.drainEvents();
   return race;
@@ -60,39 +62,141 @@ export function secondsUntil(
 /**
  * Scripted input that rides the bike along the track near `lane` (an offset
  * from the centreline) at up to `targetSpeed`, braking for the bends ahead
- * and, like any careful rider, keeping clear of the riders ahead: it steers
- * around one in its way, and never closes on one still in its way faster
- * than a bump.
+ * and, like any careful rider, keeping clear of the riders, cars and
+ * obstacles on the road: it never steers across anything it is about to
+ * reach or is alongside, gets out of the way of what comes at it, and
+ * follows a slower rider or car in its path until it has a clear way past.
+ * It holds its line against the push of the bends.
  */
 export function autopilot(race: Race, { targetSpeed = Infinity, lane = 0 } = {}) {
   let lastOffset = player(race).offset;
   return (): PlayerInput => {
-    const { riders } = race.snapshot();
-    const rider = riders[PLAYER];
-    const sideways = (rider.offset - lastOffset) / STEP_SECONDS;
-    lastOffset = rider.offset;
+    const { riders, traffic } = race.snapshot();
+    const me = riders[PLAYER];
+    const sideways = (me.offset - lastOffset) / STEP_SECONDS;
+    lastOffset = me.offset;
     let wanted = targetSpeed;
     for (let ahead = 0; ahead <= 200; ahead += 5) {
-      const curvature = Math.abs(race.track.sampleAt(rider.distance + ahead).curvature);
+      const curvature = Math.abs(race.track.sampleAt(me.distance + ahead).curvature);
       const cornerSpeed = Math.sqrt(16 / Math.max(curvature, 1e-6));
       wanted = Math.min(wanted, Math.sqrt(cornerSpeed ** 2 + 2 * 9 * ahead));
     }
-    let line = lane;
-    for (const other of riders) {
-      const ahead = other.distance - rider.distance;
-      if (other.id === PLAYER || other.status !== "racing" || other.crash !== null || ahead <= 0 || ahead > 30) continue;
-      if (Math.abs(other.offset - line) < 1.6) line = other.offset + (line >= other.offset ? 1.6 : -1.6);
-      if (Math.abs(other.offset - rider.offset) < 1.2 && ahead < 12) wanted = Math.min(wanted, other.speed + 5);
+    // What it must not steer across, what it can follow until it gets past, and what ahead it may have to slow down for.
+    const keepOut: KeepOut[] = [];
+    const following: Stretch[] = [];
+    const ahead: { readonly offset: number; readonly halfWidth: number; readonly velocity: number; readonly room: number }[] = [];
+    for (const thing of thingsOnTheRoad(race, riders, traffic)) {
+      const gap = thing.distance - me.distance;
+      const reach = thing.halfLength + 1;
+      const closing = me.speed - thing.velocity;
+      const alongside = Math.abs(gap) < reach;
+      if (!alongside && (gap < 0 || gap - reach > 10 + Math.max(0, closing) * 2)) continue;
+      // A little room to spare around what comes at it or stands in its way, a little less beside what it follows and passes.
+      const follows = !alongside && thing.velocity > 0;
+      const clearance = thing.halfWidth + 0.4 + (follows ? 0.15 : 0.25);
+      const stretch: Stretch = [thing.offset - clearance, thing.offset + clearance];
+      if (!alongside && thing.velocity >= 0) ahead.push({ ...thing, room: gap - reach });
+      if (follows) following.push(stretch);
+      else keepOut.push({ stretch, urgency: alongside ? 0 : (gap - reach) / Math.max(1, closing), side: me.offset >= thing.offset ? 1 : -1 });
     }
     const edge = race.track.roadHalfWidth - 0.5;
-    line = Math.max(-edge, Math.min(edge, line));
+    const line = clearLine(lane, me.offset, keepOut, following, edge);
+    // Something ahead in its path, or in the path of the line it is taking: no faster than lets it brake to that speed in the room there is.
+    for (const { offset, halfWidth, velocity, room } of ahead) {
+      const inThePath = (at: number) => Math.abs(at - offset) < halfWidth + 0.4 + 0.3;
+      if (inThePath(me.offset) || inThePath(line)) wanted = Math.min(wanted, velocity + Math.sqrt(2 * 6 * Math.max(0, room - 1.5)));
+    }
+    // Steer to move towards the line, allowing for how hard the bend pushes the bike outwards and how far steering reaches.
+    const share = me.speed / 62.5;
+    const reach = Math.max(1, Math.min(1.6 * me.speed, 8 - 3.5 * share * share));
+    const push = -0.3 * me.speed * me.speed * race.track.sampleAt(me.distance).curvature;
+    const towards = Math.max(-5, Math.min(5, 2.5 * (line - me.offset)));
     return {
       ...NO_INPUT,
-      steer: Math.max(-1, Math.min(1, 0.5 * (line - rider.offset) - 0.25 * sideways)),
-      throttle: rider.speed < wanted - 0.5 ? 1 : 0,
-      brake: rider.speed > wanted + 1 ? Math.min(1, (rider.speed - wanted) / 4) : 0,
+      steer: Math.max(-1, Math.min(1, (towards - push) / reach + 0.1 * (towards - sideways))),
+      throttle: me.speed < wanted - 0.5 ? 1 : 0,
+      brake: me.speed > wanted + 1 ? Math.min(1, (me.speed - wanted) / 4) : 0,
     };
   };
+}
+
+/** A stretch of offsets, from left to right. */
+type Stretch = [number, number];
+
+/** Offsets to keep out of, around something on the road: how soon it will be reached, and which side of it the rider is. */
+interface KeepOut {
+  readonly stretch: Stretch;
+  /** Seconds until it is reached; 0 when alongside. */
+  readonly urgency: number;
+  readonly side: -1 | 1;
+}
+
+/**
+ * The other riders' bikes (ridden, or lying where they slid to, to be got back
+ * on any moment), the cars and the obstacles: where they are, how fast they
+ * go along the track (m/s), and half their size.
+ */
+function thingsOnTheRoad(race: Race, riders: readonly RiderSnapshot[], traffic: readonly CarSnapshot[]) {
+  return [
+    ...riders
+      .filter((rider) => rider.id !== PLAYER && rider.status === "racing")
+      .map(({ bike: { distance, offset, speed } }) => ({ distance, offset, velocity: speed, halfLength: 1, halfWidth: 0.4 })),
+    ...traffic.map((car) => ({
+      distance: car.distance,
+      offset: car.offset,
+      velocity: car.oncoming ? -car.speed : car.speed,
+      halfLength: car.length / 2,
+      halfWidth: car.width / 2,
+    })),
+    ...race.track.obstacles.map(({ distance, offset, radius }) => ({
+      distance,
+      offset,
+      velocity: 0,
+      halfLength: radius,
+      halfWidth: radius,
+    })),
+  ];
+}
+
+/** How far past the edge of a stretch it keeps when it steers out of one (metres). */
+const STEER_CLEAR = 0.25;
+
+/**
+ * Where a careful rider at `current` steers for, within `edge` of the
+ * centreline. If it is in a `keepOut` stretch, out of it on its side of the
+ * most urgent thing there, unless that would take it into another, when it
+ * holds its line. Otherwise as near `wanted` as it can get without crossing a
+ * `keepOut` stretch, and out from behind what it is `following`, on the side
+ * it is on, where that leaves it room.
+ */
+function clearLine(wanted: number, current: number, keepOut: readonly KeepOut[], following: Stretch[], edge: number) {
+  const inside = (at: number, [from, to]: Stretch) => at > from && at < to;
+  const escaping = keepOut.filter(({ stretch }) => inside(current, stretch));
+  if (escaping.length > 0) {
+    const { stretch, side } = escaping.reduce((most, next) => (next.urgency < most.urgency ? next : most));
+    const way = side > 0 ? stretch[1] + STEER_CLEAR : stretch[0] - STEER_CLEAR;
+    const blocked = Math.abs(way) > edge || keepOut.some((other) => inside(way, other.stretch));
+    return blocked ? current : way;
+  }
+  const out = merge(keepOut.map(({ stretch }) => stretch));
+  const left = Math.max(-edge, ...out.filter(([, to]) => to <= current).map(([, to]) => to));
+  const right = Math.min(edge, ...out.filter(([from]) => from >= current).map(([from]) => from));
+  const line = Math.max(left, Math.min(right, wanted));
+  const stuck = merge(following).find((stretch) => inside(line, stretch));
+  if (!stuck) return line;
+  const ways = [stuck[0] - STEER_CLEAR, stuck[1] + STEER_CLEAR].filter((way) => way >= left && way <= right);
+  return ways.length === 0 ? line : ways.reduce((best, way) => (Math.abs(way - current) < Math.abs(best - current) ? way : best));
+}
+
+/** Stretches joined where they overlap, from left to right. */
+function merge(stretches: readonly Stretch[]): Stretch[] {
+  const merged: Stretch[] = [];
+  for (const [from, to] of [...stretches].sort((a, b) => a[0] - b[0])) {
+    const last = merged.at(-1);
+    if (last && from <= last[1]) last[1] = Math.max(last[1], to);
+    else merged.push([from, to]);
+  }
+  return merged;
 }
 
 /** Whether `target` is within reach of `attacker`'s punches and kicks: at most 1.8 m sideways and 2 m along the track. */
