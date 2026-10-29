@@ -64,7 +64,7 @@ export default function Game() {
 
   return (
     <div className="relative h-full w-full overflow-hidden">
-      <Scene session={session} />
+      <Scene session={session} reduceMotion={reduceMotion} />
       {state.screen === "title" && (
         <TitleScreen personalBest={state.personalBest} onStart={session.startRace} onSettings={session.openSettings} />
       )}

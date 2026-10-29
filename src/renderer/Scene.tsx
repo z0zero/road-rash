@@ -3,8 +3,10 @@ import { useMemo } from "react";
 import type { GameSession } from "@/game/session";
 import { PLAYER } from "@/race";
 import { BikeAndRider } from "./BikeAndRider";
+import { CameraShake } from "./camera-shake";
 import { ChaseCamera } from "./ChaseCamera";
 import { drawnTrack } from "./drawn-track";
+import { PostProcessing } from "./PostProcessing";
 import { RiderMotion } from "./rider-motion";
 import { PLAYER_LIVERY } from "./rider-model";
 import { Scenery } from "./Scenery";
@@ -15,11 +17,13 @@ import { Terrain } from "./Terrain";
 import { TrackModel } from "./TrackModel";
 
 /**
- * The 3D view of the race. It draws whatever the session's view holds and
- * holds no game rules. Rendering is driven by the game loop (frameloop
- * "never" plus `advance`), right after the race has been stepped.
+ * The 3D view of the race: the sunset coast, the road and its scenery, the
+ * player on their bike and the chase camera, finished with post-processing.
+ * It draws whatever the session's view holds and holds no game rules.
+ * Rendering is driven by the game loop (frameloop "never" plus `advance`),
+ * right after the race has been stepped.
  */
-export function Scene({ session }: { session: GameSession }) {
+export function Scene({ session, reduceMotion }: { session: GameSession; reduceMotion: boolean }) {
   const track = session.view.track;
   const drawn = useMemo(() => drawnTrack(track), [track]);
   const { sun, sunlight } = useMemo(() => {
@@ -29,10 +33,16 @@ export function Scene({ session }: { session: GameSession }) {
     return { sun, sunlight: sunlightDirection(track.seaHeading).multiplyScalar(400) };
   }, [track.seaHeading]);
   const player = useMemo(() => new RiderMotion(PLAYER), []);
+  const shake = useMemo(() => new CameraShake(), []);
 
   return (
     <div className="absolute inset-0">
-      <Canvas frameloop="never" dpr={[1, 1.5]} gl={{ antialias: true }} camera={{ fov: 66, near: 1, far: 1400 }}>
+      <Canvas
+        frameloop="never"
+        dpr={[1, 1.5]}
+        gl={{ antialias: false, powerPreference: "high-performance" }}
+        camera={{ fov: 64, near: 1, far: 1400 }}
+      >
         <fog attach="fog" args={[SUNSET.haze, 140, 1300]} />
         <hemisphereLight args={[SUNSET.skylight, SUNSET.groundLight, 1.1]} />
         <directionalLight position={sunlight} intensity={2.4} color={SUNSET.sunlight} />
@@ -42,7 +52,8 @@ export function Scene({ session }: { session: GameSession }) {
         <Terrain track={drawn} />
         <Scenery track={drawn} />
         <BikeAndRider session={session} motion={player} livery={PLAYER_LIVERY} />
-        <ChaseCamera session={session} />
+        <ChaseCamera session={session} player={player} shake={shake} reduceMotion={reduceMotion} />
+        <PostProcessing session={session} player={player} reduceMotion={reduceMotion} multisampling={4} />
       </Canvas>
     </div>
   );
