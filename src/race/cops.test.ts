@@ -30,6 +30,68 @@ function knockOffWhen(race: Race, target: RiderId, input: () => PlayerInput, whe
   return eventsUntil(race, punching, (event) => event.type === "crash" && event.rider === target, 30);
 }
 
+/**
+ * Rides `race` with `input` until `done` holds, for at most `seconds`,
+ * checking after every step that the cops the race has called near the
+ * player (with cop-near, and no cop-gone since) are the cops in the race
+ * within 150 m of them, as their snapshots say too. `near` holds those cops
+ * from one ride to the next. Adds the cop-near and cop-gone events to
+ * `alerts`, and returns them.
+ */
+function rideWatchingTheCops(
+  race: Race,
+  input: () => PlayerInput,
+  done: () => boolean,
+  seconds: number,
+  near: Set<number>,
+  alerts: RaceEvent[] = [],
+) {
+  secondsUntil(
+    race,
+    () => {
+      for (const event of race.drainEvents()) {
+        if (event.type === "cop-near") near.add(event.cop);
+        if (event.type === "cop-gone") near.delete(event.cop);
+        if (event.type === "cop-near" || event.type === "cop-gone") alerts.push(event);
+      }
+      const { riders, cops } = race.snapshot();
+      const within = cops.filter((cop) => cop.status === "riding" && apart(cop, riders[PLAYER]) <= 150).map((cop) => cop.id);
+      expect([...near].sort()).toEqual(within);
+      expect(cops.filter((cop) => cop.near).map((cop) => cop.id)).toEqual(within);
+      return input();
+    },
+    done,
+    seconds,
+  );
+  return alerts;
+}
+
+describe("the cop alert", () => {
+  it("is on while a cop in the race is within 150 m of the player: cop-near as one comes that close, cop-gone as it leaves", () => {
+    const { race, target, input } = alongsideARacer();
+    const them = () => race.snapshot().riders[target];
+    const cop = () => race.snapshot().cops[0];
+    const near = new Set<number>();
+    const waitingAt = cop().distance;
+
+    // Passing the first cop, which joins the race.
+    const passing = rideWatchingTheCops(race, input, () => player(race).distance >= waitingAt + 20, 120, near);
+    // Knocking the racer off with the cop close behind, so that it busts the racer and stays with it a while, as the
+    // player rides on flat out; then the cop comes back up to the player.
+    const punching = () => ({ ...input(), punch: them().stamina > 0 || them().distance - cop().distance > 5 });
+    rideWatchingTheCops(race, punching, () => them().crash !== null, 30, near);
+    const ridingOn: RaceEvent[] = [];
+    rideWatchingTheCops(race, autopilot(race), () => ridingOn.length >= 2, 90, near, ridingOn);
+
+    expect(passing).toEqual([{ type: "cop-near", cop: 0 }]);
+    expect(them().status).toBe("busted");
+    expect(ridingOn).toEqual([
+      { type: "cop-gone", cop: 0 },
+      { type: "cop-near", cop: 0 },
+    ]);
+  });
+});
+
 describe("busting", () => {
   it("is what a cop does to a rider who crashes within 80 m of it, riding to them before they get back on their bike", () => {
     const { race, target, input } = alongsideARacerPastTheFirstCop();

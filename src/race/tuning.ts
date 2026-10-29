@@ -81,9 +81,13 @@ export const TUNING = {
     topSpeed: 66,
     /** A fresh cop's stamina. */
     fullStamina: 150,
+    /** A cop in the race this many metres from the player or closer is near them: the cop alert is on and the siren sounds. */
+    alertRange: 150,
     /** A cop rides to a rider who crashes this many metres from it or closer... */
     bustingRange: 80,
-    /** ...and busts them on getting this close to them (m) before they are back on their bike. */
+    /** ...and busts them on getting this close to them (m) before they are back on their bike... */
     bustingReach: 2.5,
+    /** ...then stands by them for this many seconds before riding on. */
+    standingBySeconds: 4,
   },
 } as const;
