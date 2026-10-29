@@ -126,6 +126,20 @@ test("opens Settings from the title screen and goes back", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
 });
 
+test("credits the music and disclaims any tie to Road Rash, from the title screen", async ({ page }) => {
+  await page.getByRole("button", { name: "Credits" }).click();
+
+  const credits = page.getByRole("dialog", { name: "Credits" });
+  await expect(credits).toBeVisible();
+  await expect(credits.getByText("Joth")).toBeVisible();
+  await expect(credits.getByText("CC0")).toBeVisible();
+  await expect(credits).toContainText("inspired by Road Rash");
+  await expect(credits).toContainText("not affiliated with Road Rash or Electronic Arts");
+
+  await credits.getByRole("button", { name: "Back" }).click();
+  await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
+});
+
 test("remembers Reduce motion after a reload", async ({ page }) => {
   await page.getByRole("button", { name: "Settings" }).click();
   const reduceMotion = page.getByRole("switch", { name: "Reduce motion" });
@@ -139,6 +153,30 @@ test("remembers Reduce motion after a reload", async ({ page }) => {
   await expect(page.getByRole("switch", { name: "Reduce motion" })).toBeChecked();
 });
 
+test("remembers the master, music and effects volumes after a reload", async ({ page }) => {
+  const volumes = () => {
+    const settings = page.getByRole("dialog", { name: "Settings" });
+    return ["Master volume", "Music volume", "Effects volume"].map((name) => settings.getByRole("slider", { name }));
+  };
+  await page.getByRole("button", { name: "Settings" }).click();
+  const [master, music, effects] = volumes();
+  await expect(master).toHaveValue("100");
+  await expect(music).toHaveValue("70");
+  await expect(effects).toHaveValue("100");
+
+  await master.press("ArrowLeft");
+  await music.press("Home");
+  await effects.press("ArrowLeft");
+  await effects.press("ArrowLeft");
+  await page.reload();
+  await page.getByRole("button", { name: "Settings" }).click();
+
+  const [masterAfter, musicAfter, effectsAfter] = volumes();
+  await expect(masterAfter).toHaveValue("95");
+  await expect(musicAfter).toHaveValue("0");
+  await expect(effectsAfter).toHaveValue("90");
+});
+
 test.describe("when the operating system prefers reduced motion", () => {
   test.use({ reducedMotion: "reduce" });
 
@@ -148,6 +186,129 @@ test.describe("when the operating system prefers reduced motion", () => {
     await expect(page.getByRole("switch", { name: "Reduce motion" })).toBeChecked();
   });
 });
+
+test("fetches a music track of at most 3 MB once the title screen is up", async ({ page }) => {
+  const music = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith(".mp3"));
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
+
+  const response = await music;
+  expect(response.ok()).toBe(true);
+  // Fetched by the game once it runs, not preloaded by the page.
+  expect(response.request().resourceType()).toBe("fetch");
+  expect((await response.body()).byteLength).toBeLessThanOrEqual(3_000_000);
+});
+
+/** What the sound spy saw: every audio context the page made, and an analyser on everything sent to the speakers. */
+interface SoundSpy {
+  contexts: AudioContext[];
+  outputs: AnalyserNode[];
+}
+
+declare global {
+  interface Window {
+    /** Set in the page by `spyOnSound`. */
+    soundSpy: SoundSpy;
+  }
+}
+
+/** Runs in the page before its scripts: spies on Web Audio without changing what it does. */
+function spyOnSound() {
+  const spy: SoundSpy = { contexts: [], outputs: [] };
+  window.soundSpy = spy;
+  const Original = window.AudioContext;
+  window.AudioContext = class extends Original {
+    constructor(options?: AudioContextOptions) {
+      super(options);
+      spy.contexts.push(this);
+    }
+  };
+  const connect = AudioNode.prototype.connect as (this: AudioNode, ...args: unknown[]) => unknown;
+  AudioNode.prototype.connect = function (this: AudioNode, ...args: unknown[]) {
+    if (args[0] instanceof AudioDestinationNode) {
+      const output = this.context.createAnalyser();
+      connect.call(this, output);
+      spy.outputs.push(output);
+    }
+    return connect.apply(this, args);
+  } as typeof AudioNode.prototype.connect;
+}
+
+/** The state of every audio context the page made, oldest first. */
+function audioStates(page: Page) {
+  return page.evaluate(() => window.soundSpy.contexts.map((context) => context.state));
+}
+
+/** The loudest sample going to the speakers right now, from 0 (silence) up. */
+function loudness(page: Page) {
+  return page.evaluate(() => {
+    let peak = 0;
+    for (const output of window.soundSpy.outputs) {
+      const samples = new Float32Array(output.fftSize);
+      output.getFloatTimeDomainData(samples);
+      for (const sample of samples) peak = Math.max(peak, Math.abs(sample));
+    }
+    return peak;
+  });
+}
+
+test.describe("sound", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(spyOnSound);
+    await page.reload();
+  });
+
+  test("starts with the Start Race click", async ({ page }) => {
+    await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
+    expect(await audioStates(page)).not.toContain("running");
+
+    await page.getByRole("button", { name: "Start Race" }).click();
+
+    await expect.poll(() => audioStates(page)).toEqual(["running"]);
+    await expect.poll(() => loudness(page), { timeout: 10_000 }).toBeGreaterThan(0.01);
+  });
+});
+
+/** Runs in the page before its scripts: a browser that refuses to make audio contexts. */
+function refuseAudio() {
+  window.AudioContext = class {
+    constructor() {
+      throw new DOMException("Audio is blocked here.", "NotAllowedError");
+    }
+  } as unknown as typeof AudioContext;
+}
+
+/** Runs in the page before its scripts: a browser that makes audio contexts but never lets them play. */
+function neverPlayAudio() {
+  const Original = window.AudioContext;
+  window.AudioContext = class extends Original {
+    constructor(options?: AudioContextOptions) {
+      super(options);
+      void super.suspend();
+    }
+    resume() {
+      return Promise.reject(new DOMException("Audio is blocked here.", "NotAllowedError"));
+    }
+  };
+}
+
+for (const [behaviour, blockAudio] of [
+  ["refuses to make audio", refuseAudio],
+  ["never lets audio play", neverPlayAudio],
+] as const) {
+  test(`races without errors when the browser ${behaviour}`, async ({ page }) => {
+    await page.addInitScript(blockAudio);
+    await page.reload();
+
+    await startRacing(page);
+    await page.keyboard.down("w");
+    await expect.poll(() => hudSpeed(page), { timeout: 10_000 }).toBeGreaterThan(40);
+    await page.keyboard.up("w");
+    await page.keyboard.press("Escape");
+    await page.getByRole("dialog", { name: "Paused" }).getByRole("button", { name: "Restart" }).click();
+    await expect(page.getByTestId("countdown")).not.toBeEmpty();
+  });
+}
 
 test("downloads less than 10 MB to get racing", async ({ browser, baseURL }) => {
   // A fresh browser context, so nothing comes from the cache.

@@ -31,6 +31,8 @@ export function listenToKeyboard(target: Window, onPause: () => void): Keyboard 
   let kicked = false;
 
   const keyDown = (event: KeyboardEvent) => {
+    // Sliders and other form controls keep their own keys, such as the arrows.
+    if (event.target instanceof HTMLInputElement) return;
     if (PAUSE.includes(event.code)) {
       event.preventDefault();
       if (!event.repeat) onPause();
