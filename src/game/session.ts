@@ -29,6 +29,8 @@ export interface SessionState {
   readonly personalBest: PersonalBest;
   /** Whether the last race set a new best time. */
   readonly newBestTime: boolean;
+  /** Whether the last race set a new best position. */
+  readonly newBestPosition: boolean;
 }
 
 /**
@@ -76,7 +78,13 @@ export class GameSession {
     this.race = createRace({ seed: options.newSeed() });
     const snapshot = this.race.snapshot();
     this.frame = { track: this.race.track, previous: snapshot, current: snapshot, alpha: 1 };
-    this.state = { screen: "title", results: null, personalBest: this.saveData.personalBest, newBestTime: false };
+    this.state = {
+      screen: "title",
+      results: null,
+      personalBest: this.saveData.personalBest,
+      newBestTime: false,
+      newBestPosition: false,
+    };
   }
 
   /** The current state, for React's useSyncExternalStore. */
@@ -107,7 +115,7 @@ export class GameSession {
   /** Starts a new race with its countdown, from any screen. */
   startRace = () => {
     this.loadRace();
-    this.setState({ screen: "racing", results: null, newBestTime: false });
+    this.setState({ screen: "racing", results: null, newBestTime: false, newBestPosition: false });
   };
 
   restart = () => this.startRace();
@@ -127,7 +135,7 @@ export class GameSession {
 
   quitToTitle = () => {
     this.loadRace();
-    this.setState({ screen: "title", results: null, newBestTime: false });
+    this.setState({ screen: "title", results: null, newBestTime: false, newBestPosition: false });
   };
 
   /** Moves the game on by `seconds` of real time; call it once per animation frame. */
@@ -171,6 +179,7 @@ export class GameSession {
       results,
       personalBest: this.saveData.personalBest,
       newBestTime: this.saveData.personalBest.time !== bestBefore.time,
+      newBestPosition: this.saveData.personalBest.position !== bestBefore.position,
     });
   }
 
