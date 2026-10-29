@@ -2,6 +2,7 @@ import { Fragment } from "react";
 import { KEYS, type Key } from "@/input/bindings";
 import { GAMEPAD_NAMES } from "@/input/gamepad";
 import { Button } from "./Button";
+import { Dialog } from "./Dialog";
 
 /** One way to do something: keys, or gamepad controls, used together, such as A and D for steering. */
 type Way = readonly string[];
@@ -36,58 +37,45 @@ const BINDINGS: readonly Binding[] = [
 /** Every binding on the keyboard and on a gamepad, reached from the title screen. Esc goes back. */
 export function ControlsScreen({ onBack }: { onBack: () => void }) {
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="controls-title"
-      className="absolute inset-0 flex items-center justify-center overflow-y-auto bg-night/60 p-4 backdrop-blur-sm"
-      onKeyDown={(event) => {
-        if (event.key === "Escape") onBack();
-      }}
-    >
-      <div className="flex w-[min(42rem,94vw)] flex-col items-center gap-6 rounded-xl border border-sun/40 bg-night/85 px-6 py-8 shadow-2xl sm:px-10">
-        <h2 id="controls-title" className="font-display text-5xl uppercase italic tracking-wide text-sun">
-          Controls
-        </h2>
-        <table className="w-full border-separate border-spacing-y-2 text-left">
-          <thead>
-            <tr className="font-display text-xl uppercase tracking-wider text-sunset">
-              <th scope="col" className="font-normal">
-                <span className="sr-only">Action</span>
+    <Dialog title="Controls" onBack={onBack} panelClassName="w-[min(42rem,94vw)] gap-6 px-6 sm:px-10">
+      <table className="w-full border-separate border-spacing-y-2 text-left">
+        <thead>
+          <tr className="font-display text-xl uppercase tracking-wider text-sunset">
+            <th scope="col" className="font-normal">
+              <span className="sr-only">Action</span>
+            </th>
+            <th scope="col" className="px-3 font-normal">
+              Keyboard
+            </th>
+            <th scope="col" className="font-normal">
+              Gamepad
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {BINDINGS.map(({ action, keyboard, gamepad }) => (
+            <tr key={action}>
+              <th scope="row" className="pr-3 text-lg font-semibold text-sand">
+                {action}
               </th>
-              <th scope="col" className="px-3 font-normal">
-                Keyboard
-              </th>
-              <th scope="col" className="font-normal">
-                Gamepad
-              </th>
+              <td className="px-3">
+                <Ways ways={keyboard} />
+              </td>
+              <td>
+                <Ways ways={gamepad} />
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {BINDINGS.map(({ action, keyboard, gamepad }) => (
-              <tr key={action}>
-                <th scope="row" className="pr-3 text-lg font-semibold text-sand">
-                  {action}
-                </th>
-                <td className="px-3">
-                  <Ways ways={keyboard} />
-                </td>
-                <td>
-                  <Ways ways={gamepad} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <div className="flex flex-col gap-1 text-center text-sm text-sand/80">
-          <p>Gamepad buttons are named as on an Xbox controller: A is the bottom one, B the right one and X the left one.</p>
-          <p>In menus, the D-pad or the left stick moves between buttons and A presses them.</p>
-        </div>
-        <Button autoFocus onClick={onBack}>
-          Back
-        </Button>
+          ))}
+        </tbody>
+      </table>
+      <div className="flex flex-col gap-1 text-center text-sm text-sand/80">
+        <p>Gamepad buttons are named as on an Xbox controller: A is the bottom one, B the right one and X the left one.</p>
+        <p>In menus, the D-pad or the left stick moves between buttons and A presses them.</p>
       </div>
-    </div>
+      <Button autoFocus onClick={onBack}>
+        Back
+      </Button>
+    </Dialog>
   );
 }
 
