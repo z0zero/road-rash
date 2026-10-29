@@ -106,6 +106,20 @@ test("opens Settings from the title screen and goes back", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
 });
 
+test("credits the music and disclaims any tie to Road Rash, from the title screen", async ({ page }) => {
+  await page.getByRole("button", { name: "Credits" }).click();
+
+  const credits = page.getByRole("dialog", { name: "Credits" });
+  await expect(credits).toBeVisible();
+  await expect(credits.getByText("Joth")).toBeVisible();
+  await expect(credits.getByText("CC0")).toBeVisible();
+  await expect(credits).toContainText("inspired by Road Rash");
+  await expect(credits).toContainText("not affiliated with Road Rash or Electronic Arts");
+
+  await credits.getByRole("button", { name: "Back" }).click();
+  await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
+});
+
 test("remembers Reduce motion after a reload", async ({ page }) => {
   await page.getByRole("button", { name: "Settings" }).click();
   const reduceMotion = page.getByRole("switch", { name: "Reduce motion" });

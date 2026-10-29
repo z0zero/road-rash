@@ -6,10 +6,12 @@ export function TitleScreen({
   personalBest,
   onStart,
   onSettings,
+  onCredits,
 }: {
   personalBest: PersonalBest;
   onStart: () => void;
   onSettings: () => void;
+  onCredits: () => void;
 }) {
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 bg-gradient-to-b from-night/75 via-dusk/35 to-transparent px-6 text-center">
@@ -20,6 +22,7 @@ export function TitleScreen({
           Start Race
         </Button>
         <Button onClick={onSettings}>Settings</Button>
+        <Button onClick={onCredits}>Credits</Button>
       </div>
       <p className="text-sm text-sand/85 drop-shadow">W/A/S/D or the arrow keys to ride &middot; Esc or P to pause</p>
       {personalBest.time !== null && (
