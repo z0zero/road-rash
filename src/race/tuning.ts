@@ -34,4 +34,44 @@ export const TUNING = {
   bumpShove: 2.5,
   /** ...and a shove dies away at this rate (1/s). */
   shoveDecay: 6,
+  /** Attacks reach riders at most this far along the track (m); how far sideways depends on the attack. */
+  attackReachAlong: 2,
+  /**
+   * Each attack: seconds from throwing it to its strike, and from the strike
+   * until the next can be thrown; how far sideways it reaches (m); the stamina
+   * it takes when it lands; and how fast it shoves its target sideways (m/s).
+   */
+  attacks: {
+    punch: { windUp: 0.12, recovery: 0.2, reachAcross: 1.8, stamina: 18, shove: 0 },
+    kick: { windUp: 0.25, recovery: 0.3, reachAcross: 1.8, stamina: 6, shove: 6 },
+    "club-swing": { windUp: 0.3, recovery: 0.35, reachAcross: 2.4, stamina: 30, shove: 0 },
+  },
+  /** A fresh rider's stamina; it runs down to 0... */
+  fullStamina: 100,
+  /** ...and recovers at this much per second... */
+  staminaRecovery: 6,
+  /** ...once the rider has gone this many seconds without being hit. */
+  staminaRecoveryDelay: 2,
+  /** A crashed rider is thrown along the road, tumbling to a stop over this many seconds... */
+  tumbleSeconds: 1.2,
+  /** ...while their bike drops and grinds to a halt sooner, slowing by this much (m/s²), so it ends up behind them... */
+  slideDeceleration: 80,
+  /** ...and the sideways motion of both dies away at this rate (1/s). */
+  sideSlideDecay: 3,
+  /** On foot, a rider runs back to their bike at this speed (m/s)... */
+  runSpeed: 6,
+  /** ...and full steering turns them this far (radians) from running straight at it. */
+  runTurn: Math.PI / 3,
+  /** A rider on foot this close to their bike (m) gets back on it... */
+  remountReach: 0.5,
+  /** ...riding off at this speed (m/s)... */
+  remountSpeed: 5,
+  /** ...with at least this much stamina. */
+  remountStamina: 50,
+  /** A bike in perfect condition; at 0 it is wrecked. */
+  fullCondition: 100,
+  /** Every crash takes this much off the bike's condition... */
+  crashConditionLoss: 6,
+  /** ...plus this much per km/h of the impact speed. */
+  crashConditionLossPerKmh: 0.15,
 } as const;
