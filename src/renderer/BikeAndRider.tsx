@@ -6,7 +6,10 @@ import { PLAYER } from "@/race";
 import { createPose, poseOf } from "./rider-pose";
 
 const GRAVITY = 9.81;
+/** Radians. */
 const MAX_LEAN = 0.75;
+/** How quickly the drawn lean follows the wanted lean (1/s), whatever the frame rate. */
+const LEAN_RESPONSE = 9;
 
 /**
  * The player's bike and rider: simple shapes built in code, placed from the
@@ -17,7 +20,7 @@ export function BikeAndRider({ session }: { session: GameSession }) {
   const lean = useRef(0);
   const pose = useRef(createPose());
 
-  useFrame(() => {
+  useFrame((_, delta) => {
     const bike = group.current;
     if (!bike) return;
     const view = session.view;
@@ -27,9 +30,11 @@ export function BikeAndRider({ session }: { session: GameSession }) {
     // Lean as a motorcycle does: into the sideways acceleration of the bend and of steering.
     const turning = speed * speed * road.curvature + (speed * sideways) / 60;
     const wanted = Math.max(-MAX_LEAN, Math.min(MAX_LEAN, 0.7 * Math.atan(turning / GRAVITY)));
-    lean.current += (wanted - lean.current) * 0.15;
+    lean.current += (wanted - lean.current) * (1 - Math.exp(-LEAN_RESPONSE * delta));
+    // Face along the road, turned a little towards the sideways motion; pitch with the grade; roll with lean and bank.
+    const yaw = -road.heading - Math.atan2(sideways, Math.max(speed, 1));
     bike.position.set(at.x, at.y, at.z);
-    bike.rotation.set(Math.atan(road.grade), -road.heading - Math.atan2(sideways, Math.max(speed, 1)), -(lean.current + road.bank), "YXZ");
+    bike.rotation.set(Math.atan(road.grade), yaw, -(lean.current + road.bank), "YXZ");
   });
 
   return (

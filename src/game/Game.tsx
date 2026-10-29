@@ -47,7 +47,8 @@ export default function Game() {
     let last: number | null = null;
     let frame = requestAnimationFrame(function tick(now) {
       session.advance(last === null ? 0 : (now - last) / 1000);
-      advance(now);
+      // R3F derives useFrame's delta from this timestamp: pass seconds, as its clock expects.
+      advance(now / 1000);
       last = now;
       frame = requestAnimationFrame(tick);
     });
