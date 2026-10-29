@@ -75,12 +75,7 @@ export function autopilot(race: Race, { targetSpeed = Infinity, lane = 0 } = {})
     const me = riders[PLAYER];
     const sideways = (me.offset - lastOffset) / STEP_SECONDS;
     lastOffset = me.offset;
-    let wanted = targetSpeed;
-    for (let ahead = 0; ahead <= 200; ahead += 5) {
-      const curvature = Math.abs(race.track.sampleAt(me.distance + ahead).curvature);
-      const cornerSpeed = Math.sqrt(16 / Math.max(curvature, 1e-6));
-      wanted = Math.min(wanted, Math.sqrt(cornerSpeed ** 2 + 2 * 9 * ahead));
-    }
+    let wanted = Math.min(targetSpeed, bendSpeed(race));
     // What it must not steer across, what it can follow until it gets past, and what ahead it may have to slow down for.
     const keepOut: KeepOut[] = [];
     const following: Stretch[] = [];
@@ -106,18 +101,39 @@ export function autopilot(race: Race, { targetSpeed = Infinity, lane = 0 } = {})
       const inThePath = (at: number) => Math.abs(at - offset) < halfWidth + 0.4 + 0.3;
       if (inThePath(me.offset) || inThePath(line)) wanted = Math.min(wanted, velocity + Math.sqrt(2 * 6 * Math.max(0, room - 1.5)));
     }
-    // Steer to move towards the line, allowing for how hard the bend pushes the bike outwards and how far steering reaches.
-    const share = me.speed / 62.5;
-    const reach = Math.max(1, Math.min(1.6 * me.speed, 8 - 3.5 * share * share));
-    const push = -0.3 * me.speed * me.speed * race.track.sampleAt(me.distance).curvature;
-    const towards = Math.max(-5, Math.min(5, 2.5 * (line - me.offset)));
     return {
       ...NO_INPUT,
-      steer: Math.max(-1, Math.min(1, (towards - push) / reach + 0.1 * (towards - sideways))),
+      steer: steerTowards(race, line, sideways),
       throttle: me.speed < wanted - 0.5 ? 1 : 0,
       brake: me.speed > wanted + 1 ? Math.min(1, (me.speed - wanted) / 4) : 0,
     };
   };
+}
+
+/** The fastest the player can ride now and still slow down in time for the bends in the next 200 m. */
+export function bendSpeed(race: Race): number {
+  const { distance } = player(race);
+  let fastest = Infinity;
+  for (let ahead = 0; ahead <= 200; ahead += 5) {
+    const curvature = Math.abs(race.track.sampleAt(distance + ahead).curvature);
+    const cornerSpeed = Math.sqrt(16 / Math.max(curvature, 1e-6));
+    fastest = Math.min(fastest, Math.sqrt(cornerSpeed ** 2 + 2 * 9 * ahead));
+  }
+  return fastest;
+}
+
+/**
+ * Steering that moves the player towards `line`, allowing for how hard the
+ * bend pushes the bike outwards and how far steering reaches, with the bike
+ * moving across the road at `sideways` (m/s) now.
+ */
+export function steerTowards(race: Race, line: number, sideways: number): number {
+  const me = player(race);
+  const share = me.speed / 62.5;
+  const reach = Math.max(1, Math.min(1.6 * me.speed, 8 - 3.5 * share * share));
+  const push = -0.3 * me.speed * me.speed * race.track.sampleAt(me.distance).curvature;
+  const towards = Math.max(-5, Math.min(5, 2.5 * (line - me.offset)));
+  return Math.max(-1, Math.min(1, (towards - push) / reach + 0.1 * (towards - sideways)));
 }
 
 /** A stretch of offsets, from left to right. */

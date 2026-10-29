@@ -1,5 +1,5 @@
 import { getCoastalTrack } from "./coastal-track";
-import { carRunningInto, knockDownBy, settleContact, settleTraffic, throwClearOf } from "./contact";
+import { carRunningInto, knockDownBy, settleContact, settleImpacts, throwClearOf } from "./contact";
 import {
   canRemount,
   carryOn,
@@ -14,14 +14,15 @@ import type { AttackKind, CrashCause, RaceEvent, RaceOutcome, RiderId } from "./
 import { lineUpOpponents } from "./field";
 import { attackStage, attackSteps, awayFrom, nearestWithinReach, windUpSteps, type Attack } from "./fighting";
 import { isDroppingBack, opponentAttack, opponentIntent } from "./opponent-fighting";
-import { catchUpFor, opponentControls, paceFor, type Hazard, type OpponentRiding } from "./opponent-riding";
+import { footprintOfCar, footprintOfObstacle, type Footprint } from "./footprint";
+import { catchUpFor, opponentControls, paceFor, type OpponentRiding } from "./opponent-riding";
 import { OPPONENTS, PLAYER_NAME, type Temperament } from "./opponents";
 import { createRandom } from "./random";
 import { ride, type Controls, type Motion } from "./riding";
 import { STEP_SECONDS, STEPS_PER_SECOND, stepsIn } from "./steps";
 import { nearestOpponent, warningsFor, type Warnings } from "./surroundings";
 import type { Track } from "./track";
-import { CLOSED_ROAD, createTraffic, velocityOf, type CarKind, type Traffic } from "./traffic";
+import { CLOSED_ROAD, createTraffic, type CarKind, type Traffic } from "./traffic";
 import { TUNING } from "./tuning";
 
 /** The player is always rider 0. */
@@ -297,25 +298,8 @@ export function createRace(options: RaceOptions): Race {
           riders[PLAYER].motion,
           Math.max(...riders.map((rider) => rider.motion.distance)) + CLEAR_OF_THE_GRID,
         );
-  /** The obstacles, as the hazards they are to riders: they never move. */
-  const obstacles: Hazard[] = track.obstacles.map(({ distance, offset, radius }) => ({
-    distance,
-    offset,
-    velocity: 0,
-    halfLength: radius,
-    halfWidth: radius,
-  }));
-  /** The cars and obstacles on the road, which opponents steer around. */
-  const hazards = (): Hazard[] => [
-    ...traffic.cars.map((car) => ({
-      distance: car.distance,
-      offset: car.offset,
-      velocity: velocityOf(car),
-      halfLength: car.length / 2,
-      halfWidth: car.width / 2,
-    })),
-    ...obstacles,
-  ];
+  /** Where the obstacles stand: they never move. */
+  const obstacles = track.obstacles.map(footprintOfObstacle);
 
   const clock = () => Math.max(0, stepsTaken - COUNTDOWN_STEPS) / STEPS_PER_SECOND;
 
@@ -382,6 +366,28 @@ export function createRace(options: RaceOptions): Race {
       rider.status = "wrecked";
       events.push({ type: "wrecked", rider: rider.id });
       if (rider.id === PLAYER) events.push({ type: "player-race-over", outcome: "wrecked" });
+    }
+  }
+
+  /**
+   * Riders on their bikes who run into the `cars` (by their footprints) or
+   * obstacles crash, or bump off them at a small speed difference; a car
+   * that runs into a rider on foot knocks them down.
+   */
+  function runIntoCarsAndObstacles(cars: readonly Footprint[]) {
+    for (const [footprints, cause] of [
+      [cars, "traffic"],
+      [obstacles, "obstacle"],
+    ] as const) {
+      for (const { rider, footprint, speedDifference } of settleImpacts(onTheirBikes(), footprints, edge)) {
+        crash(rider, cause, speedDifference);
+        if (rider.crash) throwClearOf(footprint, rider.motion, rider.crash.body, edge);
+      }
+    }
+    for (const rider of riders) {
+      if (rider.status !== "racing" || rider.crash?.phase !== "on-foot") continue;
+      const car = carRunningInto(rider.crash.body, cars);
+      if (car) events.push({ type: "knocked-down", rider: rider.id, impactSpeed: knockDownBy(car, rider.crash) });
     }
   }
 
@@ -482,13 +488,13 @@ export function createRace(options: RaceOptions): Race {
         for (const rider of riding) {
           if (rider.riding) rider.droppingBack = isDroppingBack(rider.droppingBack, rider.stamina);
         }
-        const onTheRoad = hazards();
+        const carsAndObstacles = [...traffic.cars.map(footprintOfCar), ...obstacles];
         // Riders off their bikes need no controls: their bikes slide on by themselves.
         const controls = riders.map((rider) => {
           if (rider.status !== "racing" || rider.crash) return FINISHED_CONTROLS;
           if (!rider.riding || !rider.temperament) return input;
           const intent = opponentIntent(rider.temperament, rider.motion, playerToFight, rider.droppingBack);
-          return opponentControls(rider.motion, rider.riding, track, field, catchUp(rider), intent, onTheRoad);
+          return opponentControls(rider.motion, rider.riding, track, field, catchUp(rider), intent, carsAndObstacles);
         });
         if (player.status === "racing" && !player.crash && !player.attack && (input.punch || input.kick)) {
           throwAttack(player, input.punch ? "punch" : "kick");
@@ -512,15 +518,7 @@ export function createRace(options: RaceOptions): Race {
         });
         traffic.step(whereIs(player));
         for (const { rider, speedDifference } of settleContact(riding, edge)) crash(rider, "rider", speedDifference);
-        for (const { rider, car, speedDifference } of settleTraffic(onTheirBikes(), traffic.cars, edge)) {
-          crash(rider, "traffic", speedDifference);
-          if (rider.crash) throwClearOf(car, rider.motion, rider.crash.body, edge);
-        }
-        for (const rider of riders) {
-          if (rider.status !== "racing" || rider.crash?.phase !== "on-foot") continue;
-          const car = carRunningInto(rider.crash.body, traffic.cars);
-          if (car) events.push({ type: "knocked-down", rider: rider.id, impactSpeed: knockDownBy(car, rider.crash) });
-        }
+        runIntoCarsAndObstacles(traffic.cars.map(footprintOfCar));
         advanceAttacks();
         recoverStamina();
         finishCrossings(distancesBefore, clockBefore);

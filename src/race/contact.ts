@@ -1,6 +1,6 @@
 import { knockDown, type Body, type Crash } from "./crashing";
+import type { Footprint } from "./footprint";
 import { clamp, type Motion } from "./riding";
-import { velocityOf, type Car } from "./traffic";
 import { TUNING } from "./tuning";
 
 /** A rider on a bike takes up about this many metres along the track... */
@@ -9,7 +9,7 @@ const RIDER_LENGTH = 2;
 const RIDER_WIDTH = 0.8;
 /** A rider on foot takes up about this many metres, along the track and across it. */
 const BODY_SIZE = 0.6;
-/** A rider who runs into a car is thrown sideways off it at least this fast (m/s), so they land beside it, not under it. */
+/** A rider who runs into a car or an obstacle is thrown sideways off it at least this fast (m/s), so they land beside it, not on it. */
 const THROWN_SIDEWAYS = 3;
 
 /** A rider who ran into another rider too fast to bump them: they crash. */
@@ -51,48 +51,49 @@ export function settleContact<T extends { readonly motion: Motion }>(riders: rea
   return runIns;
 }
 
-/** A rider who ran into a car too fast to bump off it: they crash. */
-export interface CarRunIn<T> {
+/** A rider who ran into a car or an obstacle too fast to bump off it: they crash. */
+export interface Impact<T> {
   readonly rider: T;
-  readonly car: Car;
-  /** How much faster than the car the rider was going, or how fast they met, for an oncoming car (m/s). */
+  /** What they ran into. */
+  readonly footprint: Footprint;
+  /** How fast they met it (m/s): for an oncoming car, the two speeds added together. */
   readonly speedDifference: number;
 }
 
 /**
- * Settles contact between riders on their bikes and cars, which drive on as
- * if nothing happened. At a speed difference under `TUNING.bumpSpeedLimit`
- * the rider bumps off the car: they are pushed clear of it the shorter way
- * (sideways when side by side, along the track when nose to tail) and
- * shoved sideways away from it; a rider behind it can't push through it, and
- * one it catches from behind is carried along by it. At a bigger speed
- * difference the rider runs into the car: they are returned, with the car,
- * to crash. Offsets stay within `edge`.
+ * Settles contact between riders on their bikes and cars or obstacles (their
+ * `footprints`), which carry on as if nothing happened. At a speed difference
+ * under `TUNING.bumpSpeedLimit` the rider bumps off it: they are pushed clear
+ * of it the shorter way (sideways when side by side, along the track when
+ * nose to tail) and shoved sideways away from it; a rider behind it can't
+ * push through it, and one a car catches from behind is carried along by it.
+ * At a bigger speed difference the rider runs into it: they are returned,
+ * with what they ran into, to crash. Offsets stay within `edge`.
  */
-export function settleTraffic<T extends { readonly motion: Motion }>(
+export function settleImpacts<T extends { readonly motion: Motion }>(
   riders: readonly T[],
-  cars: readonly Car[],
+  footprints: readonly Footprint[],
   edge: number,
-): CarRunIn<T>[] {
-  const runIns: CarRunIn<T>[] = [];
+): Impact<T>[] {
+  const impacts: Impact<T>[] = [];
   for (const rider of riders) {
-    for (const car of cars) {
-      const contact = contactWith(rider.motion, car);
+    for (const footprint of footprints) {
+      const contact = contactWith(rider.motion, footprint);
       if (!contact) continue;
-      const speedDifference = Math.abs(rider.motion.speed - velocityOf(car));
+      const speedDifference = Math.abs(rider.motion.speed - footprint.velocity);
       if (speedDifference >= TUNING.bumpSpeedLimit) {
-        runIns.push({ rider, car, speedDifference });
+        impacts.push({ rider, footprint, speedDifference });
         break;
       }
-      bumpOff(rider.motion, car, contact, edge);
+      bumpOff(rider.motion, footprint, contact, edge);
     }
   }
-  return runIns;
+  return impacts;
 }
 
-/** How a bike overlaps a car, or null if it doesn't. */
+/** How a bike overlaps a footprint, or null if it doesn't. */
 interface Contact {
-  /** Metres from the bike to the car along the track, and across it. */
+  /** Metres from the bike to the footprint along the track, and across it. */
   readonly along: number;
   readonly across: number;
   /** Metres they overlap by along the track, and across it. */
@@ -100,70 +101,69 @@ interface Contact {
   readonly overlapAcross: number;
 }
 
-function contactWith(bike: Motion, car: Car): Contact | null {
-  const along = car.distance - bike.distance;
-  const across = car.offset - bike.offset;
-  const overlapAlong = (car.length + RIDER_LENGTH) / 2 - Math.abs(along);
-  const overlapAcross = (car.width + RIDER_WIDTH) / 2 - Math.abs(across);
+function contactWith(bike: Motion, footprint: Footprint): Contact | null {
+  const along = footprint.distance - bike.distance;
+  const across = footprint.offset - bike.offset;
+  const overlapAlong = footprint.halfLength + RIDER_LENGTH / 2 - Math.abs(along);
+  const overlapAcross = footprint.halfWidth + RIDER_WIDTH / 2 - Math.abs(across);
   return overlapAlong > 0 && overlapAcross > 0 ? { along, across, overlapAlong, overlapAcross } : null;
 }
 
-function bumpOff(bike: Motion, car: Car, { along, across, overlapAlong, overlapAcross }: Contact, edge: number) {
-  // Which way the bike is pushed: away from the car, to the right when dead behind it.
+function bumpOff(bike: Motion, footprint: Footprint, { along, across, overlapAlong, overlapAcross }: Contact, edge: number) {
+  // Which way the bike is pushed: away from what it touched, to the right when dead behind it.
   const side = across !== 0 ? -Math.sign(across) : 1;
-  const velocity = velocityOf(car);
   if (overlapAcross <= overlapAlong) {
     bike.offset = clamp(bike.offset + side * overlapAcross, -edge, edge);
   } else if (along > 0) {
     bike.distance -= overlapAlong;
-    bike.speed = Math.max(0, Math.min(bike.speed, velocity));
+    bike.speed = Math.max(0, Math.min(bike.speed, footprint.velocity));
   } else {
     bike.distance += overlapAlong;
-    bike.speed = Math.max(bike.speed, velocity);
+    bike.speed = Math.max(bike.speed, footprint.velocity);
   }
   bike.shove = side > 0 ? Math.max(bike.shove, TUNING.bumpShove) : Math.min(bike.shove, -TUNING.bumpShove);
 }
 
 /**
- * After a rider has run into a car: their bike stops against it, clear of
- * it on the side it came from, going no faster than the car; and the rider
- * is thrown clear of it, sideways away from it, and along the road at least
- * as fast as the car if it caught them from behind.
+ * After a rider has run into a car or an obstacle (its `footprint`): their
+ * bike stops against it, clear of it on the side it came from, going no
+ * faster than it; and the rider is thrown clear of it, sideways away from it,
+ * and on along the road, at least as fast as a car that caught them from
+ * behind.
  */
-export function throwClearOf(car: Car, bike: Motion, body: Body, edge: number) {
-  const along = car.distance - bike.distance;
-  const velocity = velocityOf(car);
-  bike.distance = car.distance - Math.sign(along || 1) * ((car.length + RIDER_LENGTH) / 2 + 0.05);
+export function throwClearOf(footprint: Footprint, bike: Motion, body: Body, edge: number) {
+  const along = footprint.distance - bike.distance;
+  const { velocity } = footprint;
+  bike.distance = footprint.distance - Math.sign(along || 1) * (footprint.halfLength + RIDER_LENGTH / 2 + 0.05);
   bike.speed = Math.max(0, along > 0 ? Math.min(bike.speed, velocity) : velocity);
   bike.steering = 0;
   bike.shove = 0;
   bike.offset = clamp(bike.offset, -edge, edge);
-  const away = Math.sign(body.offset - car.offset) || 1;
+  const away = Math.sign(body.offset - footprint.offset) || 1;
   body.sideways = away * Math.max(Math.abs(body.sideways), THROWN_SIDEWAYS);
   body.speed = Math.max(body.speed, velocity);
 }
 
-/** The car running into a rider on foot at `body`, if any. */
-export function carRunningInto(body: Readonly<Body>, cars: readonly Car[]): Car | null {
+/** The car (one of `cars`, by their footprints) running into a rider on foot at `body`, if any. */
+export function carRunningInto(body: Readonly<Body>, cars: readonly Footprint[]): Footprint | null {
   return (
     cars.find(
       (car) =>
-        Math.abs(car.distance - body.distance) < (car.length + BODY_SIZE) / 2 &&
-        Math.abs(car.offset - body.offset) < (car.width + BODY_SIZE) / 2,
+        Math.abs(car.distance - body.distance) < car.halfLength + BODY_SIZE / 2 &&
+        Math.abs(car.offset - body.offset) < car.halfWidth + BODY_SIZE / 2,
     ) ?? null
   );
 }
 
 /**
- * A car knocks down the rider on foot whose crash is `crash`: they tumble
- * again, thrown along the road with it and sideways off it. Returns how fast
- * it hit them (m/s).
+ * A car (by its footprint) knocks down the rider on foot whose crash is
+ * `crash`: they tumble again, thrown along the road with it and sideways off
+ * it. Returns how fast it hit them (m/s).
  */
-export function knockDownBy(car: Car, crash: Crash): number {
-  const velocity = velocityOf(car);
-  const impactSpeed = Math.abs(velocity - crash.body.speed);
+export function knockDownBy(car: Footprint, crash: Crash): number {
+  const impactSpeed = Math.abs(car.velocity - crash.body.speed);
   const away = Math.sign(crash.body.offset - car.offset) || 1;
-  knockDown(crash, velocity, away * THROWN_SIDEWAYS);
+  knockDown(crash, car.velocity, away * THROWN_SIDEWAYS);
   return impactSpeed;
 }
 
