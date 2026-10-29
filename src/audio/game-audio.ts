@@ -81,6 +81,8 @@ export function startGameAudio(session: SoundSource): GameAudio {
   const loading = new AbortController();
   const musicBytes = fetchMusic(loading.signal);
   let sound: Sound | null = null;
+  /** Set once the sound has broken: the game carries on without it from then on. */
+  let broken = false;
 
   /** Runs `action` on the sound, if there is any; if the sound breaks, the game carries on without it. */
   const withSound = (action: (sound: Sound) => void) => {
@@ -91,6 +93,7 @@ export function startGameAudio(session: SoundSource): GameAudio {
       console.warn("The game's sound stopped working, so the game carries on without it.", error);
       sound.close();
       sound = null;
+      broken = true;
     }
   };
 
@@ -104,7 +107,7 @@ export function startGameAudio(session: SoundSource): GameAudio {
 
   return {
     unlock() {
-      if (loading.signal.aborted) return;
+      if (broken || loading.signal.aborted) return;
       if (!sound) {
         sound = Sound.create();
         if (!sound) return;
