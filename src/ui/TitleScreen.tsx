@@ -43,7 +43,7 @@ export function TitleScreen({
 
 export function GameTitle() {
   return (
-    <h1 className="font-display text-7xl uppercase italic tracking-wide text-sun drop-shadow-[0_4px_0_rgba(27,16,38,0.9)] sm:text-8xl">
+    <h1 className="font-display text-6xl uppercase italic tracking-wide text-sun drop-shadow-[0_4px_0_rgba(27,16,38,0.9)] sm:text-8xl">
       Rev &amp; Wreck
     </h1>
   );
