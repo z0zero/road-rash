@@ -1,13 +1,13 @@
 import { NO_INPUT, type PlayerInput } from "@/race";
+import { codesOf, KEYS } from "./bindings";
 
-// Physical key positions (KeyboardEvent.code), so W/A/S/D sit in the same place on any layout.
-const THROTTLE = ["KeyW", "ArrowUp"];
-const BRAKE = ["KeyS", "ArrowDown"];
-const LEFT = ["KeyA", "ArrowLeft"];
-const RIGHT = ["KeyD", "ArrowRight"];
-const PUNCH = ["KeyJ", "KeyZ"];
-const KICK = ["KeyK", "KeyX"];
-const PAUSE = ["Escape", "KeyP"];
+const THROTTLE = codesOf(KEYS.throttle);
+const BRAKE = codesOf(KEYS.brake);
+const LEFT = codesOf(KEYS.steerLeft);
+const RIGHT = codesOf(KEYS.steerRight);
+const PUNCH = codesOf(KEYS.punch);
+const KICK = codesOf(KEYS.kick);
+const PAUSE = codesOf(KEYS.pause);
 const RIDING = new Set([...THROTTLE, ...BRAKE, ...LEFT, ...RIGHT]);
 
 export interface Keyboard {

@@ -1,3 +1,4 @@
+import { KEYS, namesOf } from "@/input/bindings";
 import type { PersonalBest } from "@/save-data/save-data";
 import { Button } from "./Button";
 import { formatPosition, formatRaceTime } from "./format";
@@ -28,8 +29,8 @@ export function TitleScreen({
         <Button onClick={onCredits}>Credits</Button>
       </div>
       <p className="text-sm text-sand/85 drop-shadow">
-        W/A/S/D or the arrow keys to ride &middot; J or Z to punch, or swing a club &middot; K or X to kick &middot; Esc
-        or P to pause
+        {RIDING_LETTERS} or the arrow keys to ride &middot; {namesOf(KEYS.punch)} to punch, or swing a club &middot;{" "}
+        {namesOf(KEYS.kick)} to kick &middot; {namesOf(KEYS.pause)} to pause
       </p>
       {personalBest.time !== null && (
         <p className="text-sm text-sun drop-shadow">
@@ -40,6 +41,9 @@ export function TitleScreen({
     </div>
   );
 }
+
+/** The letter keys to ride with, "W/A/S/D": the first key for each way, the arrow keys being the others. */
+const RIDING_LETTERS = [KEYS.throttle, KEYS.steerLeft, KEYS.brake, KEYS.steerRight].map((keys) => keys[0].name).join("/");
 
 export function GameTitle() {
   return (

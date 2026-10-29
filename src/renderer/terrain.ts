@@ -5,8 +5,9 @@ import { hash, smoothNoise } from "./noise";
 
 /**
  * The land either side of the road, built from the track's own centreline: a
- * ditch, then cliffs rising on the inland side, and on the sea side a verge
- * where the guard rails stand, then a drop to below sea level. Each side
+ * ditch, then cliffs rising on the inland side, and on the sea side a strip
+ * of land beyond the shoulder where the guard rails stand, then a drop to
+ * below sea level. Each side
  * reaches out until it meets the land of another stretch of road (or the
  * middle of a tight bend), where a skirt drops it out of sight.
  */
@@ -284,7 +285,7 @@ function crossSection(
   const cliff = 7 + 30 * smoothNoise(distance / 140, 1); // metres of cliff face above the road
   const hill = smoothNoise(distance / 320, 2);
   const jag = smoothNoise(distance / 30, 3);
-  const drop = edgeY + 10; // metres from the verge down to the foot of the sea cliff
+  const drop = edgeY + 10; // metres from the shoulder's edge down to the foot of the sea cliff
 
   // [lateral, height] from under the shoulder's edge outwards.
   const inland: [number, number][] = [
