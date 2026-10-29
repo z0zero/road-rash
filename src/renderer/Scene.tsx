@@ -3,9 +3,11 @@ import { useMemo } from "react";
 import type { GameSession } from "@/game/session";
 import { BikeAndRider } from "./BikeAndRider";
 import { ChaseCamera } from "./ChaseCamera";
+import { drawnTrack } from "./drawn-track";
 import { Sea } from "./Sea";
 import { Sky } from "./Sky";
 import { installSunsetHaze, SUNSET, sunDirection, sunlightDirection } from "./sunset";
+import { Terrain } from "./Terrain";
 import { TrackModel } from "./TrackModel";
 
 /**
@@ -15,6 +17,7 @@ import { TrackModel } from "./TrackModel";
  */
 export function Scene({ session }: { session: GameSession }) {
   const track = session.view.track;
+  const drawn = useMemo(() => drawnTrack(track), [track]);
   const { sun, sunlight } = useMemo(() => {
     const sun = sunDirection(track.seaHeading);
     // Before anything is drawn, so every fogged material is built with the sunset haze.
@@ -30,7 +33,8 @@ export function Scene({ session }: { session: GameSession }) {
         <directionalLight position={sunlight} intensity={2.4} color={SUNSET.sunlight} />
         <Sky sun={sun} seaHeading={track.seaHeading} />
         <Sea sun={sun} />
-        <TrackModel track={track} />
+        <TrackModel track={drawn} />
+        <Terrain track={drawn} />
         <BikeAndRider session={session} />
         <ChaseCamera session={session} />
       </Canvas>
