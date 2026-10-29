@@ -1,4 +1,6 @@
 import { Fragment } from "react";
+import { KEYS, type Key } from "@/input/bindings";
+import { GAMEPAD_NAMES } from "@/input/gamepad";
 import { Button } from "./Button";
 
 /** One way to do something: keys, or gamepad controls, used together, such as A and D for steering. */
@@ -12,14 +14,23 @@ interface Binding {
   readonly gamepad: readonly Way[];
 }
 
+/** Each of the keys or gamepad controls on its own: any one of them will do. */
+const eachOf = (controls: readonly (Key | string)[]): Way[] =>
+  controls.map((control) => [typeof control === "string" ? control : control.name]);
+
 /** Every binding: the keys and gamepad controls the input reads (src/input). There is no remapping. */
 const BINDINGS: readonly Binding[] = [
-  { action: "Throttle", keyboard: [["W"], ["↑"]], gamepad: [["Right trigger"], ["A"]] },
-  { action: "Brake", keyboard: [["S"], ["↓"]], gamepad: [["Left trigger"]] },
-  { action: "Steer", keyboard: [["A", "D"], ["←", "→"]], gamepad: [["Left stick"], ["D-pad"]] },
-  { action: "Punch, or swing a club", keyboard: [["J"], ["Z"]], gamepad: [["X"]] },
-  { action: "Kick", keyboard: [["K"], ["X"]], gamepad: [["B"]] },
-  { action: "Pause", keyboard: [["Esc"], ["P"]], gamepad: [["Start"]] },
+  { action: "Throttle", keyboard: eachOf(KEYS.throttle), gamepad: eachOf(GAMEPAD_NAMES.throttle) },
+  { action: "Brake", keyboard: eachOf(KEYS.brake), gamepad: eachOf(GAMEPAD_NAMES.brake) },
+  {
+    action: "Steer",
+    // A key each way, used together: A and D, or the left and right arrows.
+    keyboard: KEYS.steerLeft.map((left, index) => [left.name, KEYS.steerRight[index].name]),
+    gamepad: eachOf(GAMEPAD_NAMES.steer),
+  },
+  { action: "Punch, or swing a club", keyboard: eachOf(KEYS.punch), gamepad: eachOf(GAMEPAD_NAMES.punch) },
+  { action: "Kick", keyboard: eachOf(KEYS.kick), gamepad: eachOf(GAMEPAD_NAMES.kick) },
+  { action: "Pause", keyboard: eachOf(KEYS.pause), gamepad: eachOf(GAMEPAD_NAMES.pause) },
 ];
 
 /** Every binding on the keyboard and on a gamepad, reached from the title screen. Esc goes back. */
