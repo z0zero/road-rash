@@ -21,6 +21,7 @@ import { ride, type Controls, type Motion } from "./riding";
 import { STEP_SECONDS, STEPS_PER_SECOND, stepsIn } from "./steps";
 import { nearestOpponent, warningsFor, type Warnings } from "./surroundings";
 import type { Track } from "./track";
+import { createTraffic, type CarKind } from "./traffic";
 import { TUNING } from "./tuning";
 
 /** The player is always rider 0. */
@@ -45,6 +46,15 @@ const FAST_FORWARD_STEPS = 180 * STEPS_PER_SECOND;
 
 /** Finishing in this position or better qualifies. */
 const QUALIFYING_POSITION = 3;
+
+/** Traffic fills the road from this many metres behind the player... */
+const TRAFFIC_BEHIND = 150;
+/** ...to this many metres ahead of them. */
+const TRAFFIC_AHEAD = 600;
+/** At the start, cars in the race direction keep at least this many metres ahead of the riders lined up for it. */
+const CLEAR_OF_THE_GRID = 60;
+/** Mixed into the race's seed for the traffic's own random choices, so they never change the riders' choices. */
+const TRAFFIC_SEED = 0x7ea5_1c3a;
 
 /** The player's controls for one step. Values outside their ranges are clamped. */
 export interface PlayerInput {
@@ -125,6 +135,28 @@ export interface RaceSnapshot {
   readonly nearestOpponent: RiderId | null;
   /** Opponents alongside the player, or coming up from behind, on either side of them. */
   readonly warnings: Warnings;
+  /** The cars on the road around the player. */
+  readonly traffic: readonly CarSnapshot[];
+}
+
+/** A car on the road: someone driving by who isn't racing. */
+export interface CarSnapshot {
+  /** No two cars in a race share an id, so a car can be followed from one snapshot to the next. */
+  readonly id: number;
+  /** The body the car is built on. */
+  readonly kind: CarKind;
+  /** Whether the car drives towards the riders, in the left lanes; otherwise it drives in the race direction, in the right lanes. */
+  readonly oncoming: boolean;
+  /** Metres along the track's centreline: the middle of the car. */
+  readonly distance: number;
+  /** Metres sideways from the centreline; positive is right of the race direction. */
+  readonly offset: number;
+  /** Metres per second in the car's own direction of travel. */
+  readonly speed: number;
+  /** Metres from bumper to bumper. */
+  readonly length: number;
+  /** Metres from side to side. */
+  readonly width: number;
 }
 
 /** How the race went for everyone, once the player's race is over. */
@@ -258,6 +290,13 @@ export function createRace(options: RaceOptions): Race {
     const riding = { pace: paceFor(skill), lane: offset };
     riders.push(lineUp({ id: PLAYER + 1 + index, name, temperament, riding }, distance, offset));
   });
+  const traffic = createTraffic(
+    track,
+    createRandom(options.seed ^ TRAFFIC_SEED),
+    track.startDistance - TRAFFIC_BEHIND,
+    track.startDistance + TRAFFIC_AHEAD,
+    Math.max(...riders.map((rider) => rider.motion.distance)) + CLEAR_OF_THE_GRID,
+  );
 
   const clock = () => Math.max(0, stepsTaken - COUNTDOWN_STEPS) / STEPS_PER_SECOND;
 
@@ -409,6 +448,7 @@ export function createRace(options: RaceOptions): Race {
   const race: Race = {
     track,
     step(input) {
+      traffic.step();
       if (stepsTaken >= COUNTDOWN_STEPS) {
         const clockBefore = clock();
         // Everyone decides what to do from where things stand, then everyone moves.
@@ -468,6 +508,16 @@ export function createRace(options: RaceOptions): Race {
         clock: clock(),
         nearestOpponent: nearestOpponent(player, opponents),
         warnings: warningsFor(player, opponents),
+        traffic: traffic.cars.map(({ id, kind, oncoming, distance, offset, speed, length, width }) => ({
+          id,
+          kind,
+          oncoming,
+          distance,
+          offset,
+          speed,
+          length,
+          width,
+        })),
         riders: riders.map((rider) => {
           const { distance, offset, speed } = whereIs(rider);
           return {
