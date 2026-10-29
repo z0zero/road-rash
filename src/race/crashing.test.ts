@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { NO_INPUT, PLAYER, STEP_SECONDS, type PlayerInput, type RaceEvent, type RiderSnapshot } from ".";
 import {
+  alongsideARacer,
   chase,
+  eventsDuring,
   eventsUntil,
   kmh,
   nearestOpponent,
@@ -92,6 +94,51 @@ describe("on foot, the player", () => {
     race.step({ ...NO_INPUT, kick: true });
 
     expect(race.drainEvents().filter((event) => event.type === "attack-thrown")).toEqual([]);
+  });
+});
+
+/** What a crash at `impactSpeed` (m/s) takes off a bike's condition, by the spec's rule: 6 + 0.15 x the impact speed in km/h. */
+const conditionLost = (impactSpeed: number) => 6 + 0.15 * impactSpeed * 3.6;
+
+describe("a bike's condition", () => {
+  it("starts full and drops with every crash by 6 + 0.15 x the impact speed in km/h", () => {
+    const race = startedRace();
+    expect(race.snapshot().riders.map((rider) => rider.condition)).toEqual(Array(15).fill(100));
+    const target = nearestOpponent(race);
+
+    const crash = eventsUntil(race, chase(race, target, 12), isCrash).find(isCrash);
+
+    expect(crash?.rider).toBe(PLAYER);
+    expect(player(race).condition).toBeCloseTo(100 - conditionLost(crash?.impactSpeed ?? NaN), 9);
+  });
+
+  it("drops for a rider knocked off, too", () => {
+    const { race, target, events } = racerKnockedOff();
+    const crash = events.find(isCrash);
+
+    expect(race.snapshot().riders[target].condition).toBeCloseTo(100 - conditionLost(crash?.impactSpeed ?? NaN), 9);
+  });
+
+  it("takes a wrecked opponent out of the race for good, with no position", () => {
+    const alongside = alongsideARacer();
+    const { race, target } = alongside;
+    const punching = () => ({ ...alongside.input(), punch: true });
+
+    const events = eventsUntil(race, punching, (event) => event.type === "wrecked", 120);
+
+    expect(events.filter(isCrash).filter((crash) => crash.rider === target).length).toBeGreaterThan(1);
+    expect(events.filter((event) => event.type === "wrecked")).toEqual([{ type: "wrecked", rider: target }]);
+    expect(race.snapshot().riders[target]).toMatchObject({ status: "wrecked", position: null, condition: 0 });
+    const positions = race.snapshot().riders.map((rider) => rider.position);
+    expect(positions.filter((position) => position !== null).sort((a, b) => (a ?? 0) - (b ?? 0))).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
+    ]);
+
+    const later = eventsDuring(race, 20, NO_INPUT);
+
+    expect(later.filter((event) => "rider" in event && event.rider === target)).toEqual([]);
+    expect(race.snapshot().riders[target]).toMatchObject({ status: "wrecked", position: null });
+    expect(race.snapshot().riders[target].crash).not.toBeNull();
   });
 });
 

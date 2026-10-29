@@ -33,6 +33,11 @@ const FINISHED_CONTROLS: Controls = { throttle: 0, brake: 0.7, steer: 0 };
 /** Opponents on foot run straight back to their bikes. */
 const RUN_STRAIGHT_BACK: OnFootControls = { steer: 0, brake: 0 };
 
+/** A rider whose race is over stays where they are once they are on their feet. */
+const STAND_STILL: OnFootControls = { steer: 0, brake: 1 };
+
+const KMH_PER_METRE_PER_SECOND = 3.6;
+
 /** Fast-forwarding races the rest of the field for at most three extra simulated minutes. */
 const FAST_FORWARD_STEPS = 180 * STEPS_PER_SECOND;
 
@@ -77,6 +82,8 @@ export interface RiderSnapshot {
   readonly finishTime: number | null;
   /** How much fight the rider has left: 100 when fresh, down to 0. */
   readonly stamina: number;
+  /** How intact the rider's bike is: 100 when perfect, down to 0, when it is wrecked. */
+  readonly condition: number;
   /** Null while the rider is on their bike; after a crash, "tumbling" and then "on-foot" until they remount. */
   readonly crash: CrashPhase | null;
   /** Where the rider's bike is: under them while they ride it, or wherever it slid to after a crash. */
@@ -171,6 +178,8 @@ interface Rider {
   /** 1 for the first rider over the finish line, 2 for the next, and so on. */
   finishOrder: number | null;
   stamina: number;
+  /** The bike's condition. */
+  condition: number;
   /** Steps since the rider was last hit (Infinity if never). */
   stepsSinceHit: number;
   /** The attack the rider is making, or null. */
@@ -205,6 +214,7 @@ export function createRace(options: RaceOptions): Race {
       finishTime: null,
       finishOrder: null,
       stamina: TUNING.fullStamina,
+      condition: TUNING.fullCondition,
       stepsSinceHit: Infinity,
       attack: null,
       crash: null,
@@ -221,6 +231,7 @@ export function createRace(options: RaceOptions): Race {
       finishTime: null,
       finishOrder: null,
       stamina: TUNING.fullStamina,
+      condition: TUNING.fullCondition,
       stepsSinceHit: Infinity,
       attack: null,
       crash: null,
@@ -278,11 +289,18 @@ export function createRace(options: RaceOptions): Race {
     target.stepsSinceHit = 0;
   }
 
-  /** Throws a rider off their bike. */
+  /** Throws a rider off their bike, which loses condition; a bike whose condition runs out is wrecked, and so is the rider's race. */
   function crash(rider: Rider, cause: CrashCause, impactSpeed: number) {
     events.push({ type: "crash", rider: rider.id, cause, impactSpeed });
     rider.attack = null;
     rider.crash = throwOff(rider.motion);
+    const loss = TUNING.crashConditionLoss + TUNING.crashConditionLossPerKmh * impactSpeed * KMH_PER_METRE_PER_SECOND;
+    rider.condition = Math.max(0, rider.condition - loss);
+    if (rider.condition === 0) {
+      rider.status = "wrecked";
+      events.push({ type: "wrecked", rider: rider.id });
+      if (rider.id === PLAYER) events.push({ type: "player-race-over", outcome: "wrecked" });
+    }
   }
 
   /** A rider on foot who has reached their bike rides off on it again, with at least some stamina. */
@@ -389,8 +407,9 @@ export function createRace(options: RaceOptions): Race {
             ride(rider.motion, controls[index], track, STEP_SECONDS);
           } else {
             slide(rider.motion, edge);
-            carryOn(rider.crash, rider.motion, rider.riding ? RUN_STRAIGHT_BACK : input, edge);
-            if (canRemount(rider.crash, rider.motion)) getBackOn(rider);
+            const onFoot = rider.status !== "racing" ? STAND_STILL : rider.riding ? RUN_STRAIGHT_BACK : input;
+            carryOn(rider.crash, rider.motion, onFoot, edge);
+            if (rider.status === "racing" && canRemount(rider.crash, rider.motion)) getBackOn(rider);
           }
         });
         for (const { rider, speedDifference } of settleContact(riding, edge)) crash(rider, "rider", speedDifference);
@@ -419,6 +438,7 @@ export function createRace(options: RaceOptions): Race {
             position: ranks.get(rider.id) ?? null,
             finishTime: rider.finishTime,
             stamina: rider.stamina,
+            condition: rider.condition,
             crash: rider.crash?.phase ?? null,
             bike: { distance: rider.motion.distance, offset: rider.motion.offset, speed: rider.motion.speed },
           };
