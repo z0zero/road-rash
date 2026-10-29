@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { GameSession } from "@/game/session";
 import { PLAYER } from "@/race";
-import { riderColours } from "@/renderer/rider-colours";
+import { liveryOf } from "@/renderer/liveries";
 import { formatRaceTime, toKmh } from "./format";
 
 /** How long "GO!" stays up after the countdown, in seconds of race time. */
@@ -76,7 +76,7 @@ export function Hud({ session }: { session: GameSession }) {
                   ? "absolute top-1/2 z-10 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-sand bg-sunset shadow"
                   : "absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-night/80"
               }
-              style={{ left: "0%", backgroundColor: id === PLAYER ? undefined : riderColours(id).bike }}
+              style={{ left: "0%", backgroundColor: id === PLAYER ? undefined : liveryOf(id).paint }}
             />
           ))}
         </div>

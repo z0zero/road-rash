@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_SAVE_DATA,
+  isMotionReduced,
   loadSaveData,
   recordRaceResult,
   storeSaveData,
@@ -77,6 +78,26 @@ describe("save data", () => {
 
     expect(loadSaveData(refusing)).toEqual(DEFAULT_SAVE_DATA);
     expect(storeSaveData(refusing, DEFAULT_SAVE_DATA)).toBe(false);
+  });
+});
+
+describe("the Reduce motion setting", () => {
+  it("follows the operating system's preference until the player chooses", () => {
+    const { settings } = loadSaveData(memoryStorage().storage);
+
+    expect(isMotionReduced(settings, true)).toBe(true);
+    expect(isMotionReduced(settings, false)).toBe(false);
+  });
+
+  it("keeps the player's choice after a reload, whatever the operating system prefers", () => {
+    for (const choice of [true, false]) {
+      const { storage } = memoryStorage();
+      storeSaveData(storage, { ...DEFAULT_SAVE_DATA, settings: { ...DEFAULT_SAVE_DATA.settings, reduceMotion: choice } });
+      const { settings } = loadSaveData(storage);
+
+      expect(isMotionReduced(settings, true)).toBe(choice);
+      expect(isMotionReduced(settings, false)).toBe(choice);
+    }
   });
 });
 
