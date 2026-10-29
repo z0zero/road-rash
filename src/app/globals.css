@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+@theme {
+  --color-night: #1b1026;
+  --color-dusk: #3a1c4a;
+  --color-sunset: #ff7a3d;
+  --color-sun: #ffc94d;
+  --color-sand: #fff1dc;
+  --color-sea: #1f5f7a;
+  --font-sans: ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Impact", "Haettenschweiler", "Arial Narrow Bold", ui-sans-serif, system-ui, sans-serif;
+}
+
+html,
+body {
+  margin: 0;
+  overscroll-behavior: none;
+  user-select: none;
+}
