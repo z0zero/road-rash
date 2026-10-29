@@ -35,7 +35,8 @@ export interface Gamepads {
  * right trigger or A throttles, the left trigger brakes, the left stick or
  * the D-pad steers, X punches, B kicks and Start calls `onPause`. A punch or
  * kick press counts once, in the next step read. Gamepads without the
- * standard mapping are ignored: their buttons could be anywhere.
+ * standard mapping are ignored: their buttons could be anywhere. While the
+ * window has lost focus, the gamepads count for nothing, as if let go.
  */
 export function listenToGamepads(target: Window, onPause: () => void): Gamepads {
   /** What every gamepad's buttons were doing at the last poll, by the gamepad's index. */
@@ -43,6 +44,19 @@ export function listenToGamepads(target: Window, onPause: () => void): Gamepads 
   let held: Pick<PlayerInput, "throttle" | "brake" | "steer"> = NO_INPUT;
   let punched = false;
   let kicked = false;
+  let focused = target.document.hasFocus();
+
+  const loseFocus = () => {
+    focused = false;
+    held = NO_INPUT;
+    punched = false;
+    kicked = false;
+  };
+  const regainFocus = () => {
+    focused = true;
+  };
+  target.addEventListener("blur", loseFocus);
+  target.addEventListener("focus", regainFocus);
 
   return {
     poll() {
@@ -53,6 +67,8 @@ export function listenToGamepads(target: Window, onPause: () => void): Gamepads 
         const pressed = pad.buttons.map((button) => button.pressed);
         const before = lastPressed.get(pad.index);
         lastPressed.set(pad.index, pressed);
+        // Without focus, only what the buttons are doing is kept, so that one held all along isn't taken for a new press.
+        if (!focused) continue;
         throttle = Math.max(throttle, triggerPull(pad, RIGHT_TRIGGER), pressed[A] ? 1 : 0);
         brake = Math.max(brake, triggerPull(pad, LEFT_TRIGGER));
         steer += steeringOf(pad, pressed);
@@ -71,7 +87,10 @@ export function listenToGamepads(target: Window, onPause: () => void): Gamepads 
       kicked = false;
       return input;
     },
-    dispose() {},
+    dispose() {
+      target.removeEventListener("blur", loseFocus);
+      target.removeEventListener("focus", regainFocus);
+    },
   };
 }
 

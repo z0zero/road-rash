@@ -253,6 +253,25 @@ test.describe("with a gamepad", () => {
     await gamepad(page).release(GAMEPAD.start);
     await expect(page.getByRole("dialog", { name: "Paused" })).toBeVisible();
   });
+
+  test("lets go of every held control while the window has lost focus", async ({ page }) => {
+    await startRacing(page);
+    await page.keyboard.down("w");
+    await gamepad(page).press(GAMEPAD.rightTrigger);
+    await play(page, 3);
+    const riding = await hudSpeed(page);
+
+    await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+    await play(page, 2);
+    const coasting = await hudSpeed(page);
+    expect(coasting).toBeLessThan(riding);
+
+    // The gamepad's trigger, still held, counts again once the window has focus back.
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await play(page, 2);
+    expect(await hudSpeed(page)).toBeGreaterThan(coasting + 10);
+    await page.keyboard.up("w");
+  });
 });
 
 test("opens Settings from the title screen and goes back", async ({ page }) => {
