@@ -153,11 +153,11 @@ test("shows the player's stamina and bike condition, full at the start", async (
   await expect(page.getByRole("meter", { name: "Bike condition", exact: true })).toHaveAttribute("aria-valuenow", "100");
 });
 
-test("starts the player without a club, so the HUD's weapon icon is hidden", async ({ page }) => {
+test("starts the player without a club, so the HUD's club icon is hidden", async ({ page }) => {
   await startRacing(page);
 
-  await expect(page.getByTestId("weapon")).toHaveCount(1);
-  await expect(page.getByTestId("weapon")).toBeHidden();
+  await expect(page.getByTestId("club")).toHaveCount(1);
+  await expect(page.getByTestId("club")).toBeHidden();
 });
 
 test("starts with the cops waiting far up the road, so the HUD's cop alert is hidden", async ({ page }) => {
