@@ -9,6 +9,27 @@
   --color-sea: #1f5f7a;
   --font-sans: ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-display: "Impact", "Haettenschweiler", "Arial Narrow Bold", ui-sans-serif, system-ui, sans-serif;
+  /* A cop's lights: red and blue taking turns, each lit once a second. */
+  --animate-cop-red: cop-red 1s steps(1, end) infinite;
+  --animate-cop-blue: cop-blue 1s steps(1, end) infinite;
+
+  @keyframes cop-red {
+    0% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.15;
+    }
+  }
+
+  @keyframes cop-blue {
+    0% {
+      opacity: 0.15;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
 }
 
 html,
