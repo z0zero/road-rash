@@ -3,7 +3,7 @@ import { useEffect, useMemo } from "react";
 import { Group, Quaternion, Vector3 } from "three";
 import type { GameSession } from "@/game/session";
 import { liveryOf } from "./liveries";
-import { hipsHeight, poseAttack, poseRun, poseTumble, restJoints } from "./rider-animation";
+import { hipsHeight, poseAttack, poseClub, poseRun, poseTumble, restJoints } from "./rider-animation";
 import type { RiderMotion } from "./rider-motion";
 import { createRiderModel, type RiderModel, WHEEL_RADIUS } from "./rider-model";
 
@@ -26,9 +26,10 @@ const LYING_HEIGHT = 0.24;
  * One rider on their bike, in the rider's own livery: the flat-shaded model
  * built in code, placed from the interpolated snapshots, its wheels turning,
  * leaning into corners with the rider hanging off the inside and tucking in
- * at speed, and punching and kicking. After a crash the rider leaves the bike,
- * which falls on its side and slides to a stop: they tumble along the road,
- * then get up and run back to it. It updates `motion` first each frame, so
+ * at speed, punching and kicking, and holding and swinging a club if they
+ * have one. After a crash the rider drops any club and leaves the bike, which
+ * falls on its side and slides to a stop: they tumble along the road, then
+ * get up and run back to it. It updates `motion` first each frame, so
  * whatever follows this rider (the camera follows the player) reads it fresh.
  */
 export function BikeAndRider({ session, motion }: { session: GameSession; motion: RiderMotion }) {
@@ -75,6 +76,7 @@ function poseRiding(model: RiderModel, body: { group: Group; seat: Vector3 }, mo
     torso.quaternion.copy(tuck).multiply(restTorso);
   }
   if (motion.attack) poseAttack(model, motion.attack);
+  poseClub(model, motion.weapon === "club", motion.clubHand, motion.attack);
 }
 
 /** Lays the bike on its side where it slid to, and puts the rider on their own: tumbling, or on foot. */
@@ -86,6 +88,8 @@ function poseCrashed(model: RiderModel, body: { group: Group; seat: Vector3 }, m
   for (const wheel of wheels) wheel.rotation.x = -motion.wheelTurn;
 
   if (rider.parent !== body.group) body.group.add(rider);
+  // A rider who crashes drops their club.
+  poseClub(model, false, motion.clubHand, null);
   const tumbling = motion.crash === "tumbling";
   body.group.position.set(motion.bodyX, motion.bodyY, motion.bodyZ);
   body.group.rotation.set(0, motion.bodyYaw, 0);

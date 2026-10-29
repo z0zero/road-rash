@@ -46,6 +46,11 @@ export interface RiderModel {
   readonly arms: readonly [Limb, Limb];
   /** Left, then right. */
   readonly legs: readonly [Limb, Limb];
+  /**
+   * A club gripped in each hand, left then right, both hidden until the rider
+   * holds one. Each turns at the grip, its shaft running along +y to its head.
+   */
+  readonly clubs: readonly [Group, Group];
   /** Every joint's turn in the riding crouch, to animate from and return to. */
   readonly rest: ReadonlyMap<Group, Quaternion>;
   /** Every mesh, to cast shadows or to swap materials. */
@@ -62,6 +67,9 @@ const LEATHER = "#2b2833";
 const GLOVE = "#1d1c22";
 const BOOT = "#1a191e";
 const VISOR = "#1b2230";
+/** Pale wood, so a club stands out against dark jackets and the road. */
+const WOOD = "#e2b06e";
+const GRIP_TAPE = "#2a2320";
 
 /** Builds a rider and their bike in a livery. Call `dispose` when done with it. */
 export function createRiderModel(livery: Livery): RiderModel {
@@ -124,6 +132,7 @@ export function createRiderModel(livery: Livery): RiderModel {
     ),
   );
 
+  const clubs: Group[] = [];
   const arm = (side: -1 | 1): Limb => {
     const shoulder = new Vector3(side * 0.21, 1.4, -0.07);
     const elbow = new Vector3(side * 0.28, 1.17, -0.3);
@@ -139,6 +148,12 @@ export function createRiderModel(livery: Livery): RiderModel {
           .build(),
       ),
     );
+    const club = new Group();
+    club.position.set(0, lower.length, 0);
+    club.visible = false;
+    club.add(mesh(clubGeometry()));
+    lower.group.add(club);
+    clubs.push(club);
     return { upper: upper.group, lower: lower.group };
   };
 
@@ -172,6 +187,7 @@ export function createRiderModel(livery: Livery): RiderModel {
     head,
     arms,
     legs,
+    clubs: [clubs[0], clubs[1]],
     rest: new Map(joints.map((group) => [group, group.quaternion.clone()])),
     meshes,
     dispose() {
@@ -243,6 +259,20 @@ function bikeGeometry({ paint, accent }: Livery): BufferGeometry {
       .add(new BoxGeometry(0.08, 0.05, 0.03), DARK_METAL, { at: [0.25, 1.04, -0.68] })
       .build()
   );
+}
+
+/**
+ * A wooden club about 0.9 m long, gripped at the origin: a taped grip with a
+ * knob below, widening to a heavy head above. It is a little oversized, so it
+ * reads from the chase camera.
+ */
+function clubGeometry(): BufferGeometry {
+  return new LowPoly()
+    .add(new CylinderGeometry(0.045, 0.045, 0.04, 7), GRIP_TAPE, { at: [0, -0.13, 0] })
+    .add(new CylinderGeometry(0.032, 0.032, 0.22, 7), GRIP_TAPE, { at: [0, 0, 0] })
+    .add(new CylinderGeometry(0.075, 0.036, 0.58, 7), WOOD, { at: [0, 0.4, 0] }, 0.12)
+    .add(new CylinderGeometry(0.06, 0.075, 0.08, 7), WOOD, { at: [0, 0.73, 0] }, 0.12)
+    .build();
 }
 
 /** The headlamp and tail lamp. */
