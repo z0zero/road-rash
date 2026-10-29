@@ -1,7 +1,7 @@
 import { getCoastalTrack } from "./coastal-track";
 import type { RaceEvent, RaceOutcome, RiderId } from "./events";
 import { lineUpOpponents } from "./field";
-import { opponentControls, type OpponentRiding } from "./opponent-riding";
+import { opponentControls, paceFor, type OpponentRiding } from "./opponent-riding";
 import { OPPONENTS, PLAYER_NAME, type Temperament } from "./opponents";
 import { createRandom } from "./random";
 import { ride, type Controls, type Motion } from "./riding";
@@ -167,7 +167,7 @@ export function createRace(options: RaceOptions): Race {
       name: OPPONENTS[index].name,
       temperament: OPPONENTS[index].temperament,
       motion: { distance, offset, speed: 0, steering: 0 },
-      riding: { pace: 0.9, lane: offset },
+      riding: { pace: paceFor(OPPONENTS[index].skill), lane: offset },
       status: "racing",
       finishTime: null,
       finishOrder: null,
