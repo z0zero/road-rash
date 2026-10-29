@@ -17,7 +17,7 @@ const FULL = 100;
 /**
  * Position, speed, race time, progress along the track with a marker for
  * every rider, the 3-2-1 countdown, the player's stamina and bike condition,
- * a weapon icon while the player holds a club, the nearest opponent's (or
+ * a club icon while the player holds one, the nearest opponent's (or
  * cop's) name, stamina and club, warning arrows for riders alongside or
  * coming up from behind, the cop alert while a cop is near (its lights
  * flashing unless motion is reduced), and callouts when a club changes hands
@@ -33,15 +33,15 @@ export function Hud({ session, reduceMotion }: { session: GameSession; reduceMot
   const markers = useRef<(HTMLDivElement | null)[]>([]);
   const stamina = useRef<HTMLDivElement>(null);
   const condition = useRef<HTMLDivElement>(null);
-  const opponent = useRef<HTMLDivElement>(null);
-  const opponentName = useRef<HTMLDivElement>(null);
-  const opponentStamina = useRef<HTMLDivElement>(null);
+  const nearestPanel = useRef<HTMLDivElement>(null);
+  const nearestName = useRef<HTMLDivElement>(null);
+  const nearestStamina = useRef<HTMLDivElement>(null);
   const warnLeft = useRef<HTMLDivElement>(null);
   const warnRight = useRef<HTMLDivElement>(null);
   const status = useRef<HTMLDivElement>(null);
-  const weapon = useRef<HTMLDivElement>(null);
-  const opponentClub = useRef<HTMLSpanElement>(null);
-  const opponentIsCop = useRef<HTMLSpanElement>(null);
+  const playerClub = useRef<HTMLDivElement>(null);
+  const nearestClub = useRef<HTMLSpanElement>(null);
+  const nearestIsCop = useRef<HTMLSpanElement>(null);
   const copAlert = useRef<HTMLDivElement>(null);
   const callout = useRef<HTMLDivElement>(null);
   /** The stretch of race time the callout shows for. */
@@ -81,21 +81,21 @@ export function Hud({ session, reduceMotion }: { session: GameSession; reduceMot
         setBar(stamina.current, player.stamina, staminaColour);
         setBar(condition.current, player.condition, conditionColour);
         const nearest = current.nearestOpponentOrCop;
-        setShown(opponent.current, nearest !== null);
+        setShown(nearestPanel.current, nearest !== null);
         if (nearest) {
           const isCop = nearest.kind === "cop";
           const them = isCop ? current.cops[nearest.id] : current.riders[nearest.id];
-          setText(opponentName.current, them.name);
-          setBar(opponentStamina.current, them.stamina, staminaColour, isCop ? COP_FULL_STAMINA : FULL);
-          setShown(opponentClub.current, them.weapon === "club");
-          setShown(opponentIsCop.current, isCop);
+          setText(nearestName.current, them.name);
+          setBar(nearestStamina.current, them.stamina, staminaColour, isCop ? COP_FULL_STAMINA : FULL);
+          setShown(nearestClub.current, them.weapon === "club");
+          setShown(nearestIsCop.current, isCop);
         }
         setShown(warnLeft.current, current.warnings.left);
         setShown(warnRight.current, current.warnings.right);
         setShown(copAlert.current, current.cops.some((cop) => cop.near));
         const copComing = current.cops.some((cop) => cop.busting === PLAYER);
         setText(status.current, statusOf(player, knockedDown.current, copComing));
-        setShown(weapon.current, player.weapon === "club");
+        setShown(playerClub.current, player.weapon === "club");
         // A callout goes once its time is up, or straight away in a race that has started over.
         const { from, until } = calloutShown.current;
         if (current.clock >= until || current.clock < from) setText(callout.current, "");
@@ -174,13 +174,13 @@ export function Hud({ session, reduceMotion }: { session: GameSession; reduceMot
         </div>
       </div>
       <div
-        ref={opponent}
+        ref={nearestPanel}
         data-testid="nearest-opponent"
         className="absolute right-8 top-4 hidden w-60 text-right drop-shadow-[0_3px_0_rgba(27,16,38,0.85)]"
       >
         <div className="flex items-center justify-end gap-2 text-sm uppercase tracking-widest text-sand/90">
           <span
-            ref={opponentIsCop}
+            ref={nearestIsCop}
             data-testid="nearest-opponent-cop"
             className="hidden rounded-sm bg-[#2a5bd7] px-1.5 py-px leading-tight text-sand"
           >
@@ -189,15 +189,15 @@ export function Hud({ session, reduceMotion }: { session: GameSession; reduceMot
           <span>Nearest</span>
         </div>
         <div className="flex items-center justify-end gap-2">
-          <span ref={opponentClub} data-testid="nearest-opponent-club" role="img" aria-label="Holding a club" className="hidden">
+          <span ref={nearestClub} data-testid="nearest-opponent-club" role="img" aria-label="Holding a club" className="hidden">
             <ClubIcon className="h-7 w-7 text-sun" />
           </span>
-          <div ref={opponentName} data-testid="nearest-opponent-name" className="truncate text-3xl italic leading-tight" />
+          <div ref={nearestName} data-testid="nearest-opponent-name" className="truncate text-3xl italic leading-tight" />
         </div>
-        <Bar fill={opponentStamina} label="Their stamina" />
+        <Bar fill={nearestStamina} label="Their stamina" />
       </div>
       <div className="absolute bottom-6 left-8 flex w-64 flex-col gap-2 drop-shadow-[0_3px_0_rgba(27,16,38,0.85)]">
-        <div ref={weapon} data-testid="weapon" className="hidden">
+        <div ref={playerClub} data-testid="club" className="hidden">
           <div role="img" aria-label="Holding a club" className="flex items-center gap-3">
             <div className="grid h-14 w-14 place-items-center rounded-md border-2 border-sun/80 bg-night/70">
               <ClubIcon className="h-10 w-10 text-sun" />
