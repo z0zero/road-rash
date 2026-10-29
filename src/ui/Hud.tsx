@@ -151,7 +151,7 @@ export function Hud({ session }: { session: GameSession }) {
       >
         <div className="text-sm uppercase tracking-widest text-sand/90">Nearest</div>
         <div className="flex items-center justify-end gap-2">
-          <span ref={opponentClub} data-testid="nearest-opponent-club" title="Holding a club" className="hidden">
+          <span ref={opponentClub} data-testid="nearest-opponent-club" role="img" aria-label="Holding a club" className="hidden">
             <ClubIcon className="h-7 w-7 text-sun" />
           </span>
           <div ref={opponentName} data-testid="nearest-opponent-name" className="truncate text-3xl italic leading-tight" />
