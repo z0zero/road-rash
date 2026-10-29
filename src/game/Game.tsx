@@ -76,8 +76,9 @@ export default function Game() {
       )}
       {state.screen === "settings" && (
         <SettingsScreen
+          settings={state.settings}
           reduceMotion={reduceMotion}
-          onReduceMotionChange={(on) => session.changeSettings({ reduceMotion: on })}
+          onChange={session.changeSettings}
           onBack={session.closeSettings}
         />
       )}
