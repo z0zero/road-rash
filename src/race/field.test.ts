@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createRace, NO_INPUT, PLAYER, type RaceEvent, type RiderSnapshot, type Track } from ".";
+import { createRace, NO_INPUT, PLAYER, type PlayerInput, type Race, type RaceEvent, type RiderSnapshot, type Track } from ".";
 import { autopilot, player, secondsUntil, startedRace, STEPS_PER_SECOND } from "./test-helpers";
 
 type RiderFinished = Extract<RaceEvent, { type: "rider-finished" }>;
@@ -231,6 +231,49 @@ describe("the opponents", () => {
     expect(other.map(({ id, name, temperament }) => ({ id, name, temperament }))).toEqual(
       riders.map(({ id, name, temperament }) => ({ id, name, temperament })),
     );
+  });
+});
+
+/** Input that rides up behind the opponent `target` at about `closing` m/s faster than it, steering straight at it. */
+function chase(race: Race, target: number, closing: number) {
+  return (): PlayerInput => {
+    const { riders } = race.snapshot();
+    const me = riders[PLAYER];
+    const them = riders[target];
+    const wanted = them.speed + closing;
+    return {
+      ...NO_INPUT,
+      steer: Math.max(-1, Math.min(1, 1.5 * (them.offset - me.offset))),
+      throttle: me.speed < wanted ? 1 : 0,
+      brake: me.speed > wanted + 1 ? 0.5 : 0,
+    };
+  };
+}
+
+describe("bumping", () => {
+  it("bumps riders apart who run into each other at a small speed difference, instead of riding through", () => {
+    const race = startedRace(1);
+    const grid = race.snapshot().riders.filter((rider) => rider.id !== PLAYER);
+    const target = grid.reduce((nearest, rider) => (rider.distance < nearest.distance ? rider : nearest)).id;
+    const input = chase(race, target, 4);
+    const gaps: { along: number; across: number; speedDifference: number }[] = [];
+
+    secondsUntil(race, input, () => {
+      const { riders } = race.snapshot();
+      const along = Math.abs(riders[target].distance - riders[PLAYER].distance);
+      const across = Math.abs(riders[target].offset - riders[PLAYER].offset);
+      if (along < 4 || gaps.length > 0) gaps.push({ along, across, speedDifference: riders[PLAYER].speed - riders[target].speed });
+      return gaps.length >= 3 * STEPS_PER_SECOND;
+    });
+
+    const touching = gaps.findIndex(({ along, across }) => along < 2.1 && across < 0.9);
+    expect(touching, "the player never reached the opponent").toBeGreaterThanOrEqual(0);
+    expect(Math.abs(gaps[touching].speedDifference)).toBeLessThan(8);
+    // They never ride through each other...
+    for (const { along, across } of gaps) expect(along >= 1.9 || across >= 0.7).toBe(true);
+    // ...and the bump pushes them apart sideways.
+    expect(Math.max(...gaps.slice(touching, touching + 20).map(({ across }) => across))).toBeGreaterThan(gaps[touching].across + 0.3);
+    expect(race.snapshot().riders.every((rider) => rider.status === "racing")).toBe(true);
   });
 });
 
