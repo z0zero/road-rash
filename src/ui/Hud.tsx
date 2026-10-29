@@ -131,11 +131,11 @@ export function Hud({ session, reduceMotion }: { session: GameSession; reduceMot
       >
         <div className="flex items-center gap-3 rounded-full border-2 border-sand/80 bg-night/80 px-4 py-1 shadow-lg">
           <span
-            className={`h-4 w-4 rounded-full bg-[#ff2a3d] shadow-[0_0_14px_4px_#ff2a3d] ${reduceMotion ? "" : "animate-cop-red"}`}
+            className={`h-4 w-4 rounded-full bg-cop-red shadow-[0_0_14px_4px_var(--color-cop-red)] ${reduceMotion ? "" : "animate-cop-red"}`}
           />
           <span className="text-3xl uppercase italic leading-none tracking-wide text-sand">Cop</span>
           <span
-            className={`h-4 w-4 rounded-full bg-[#2a7dff] shadow-[0_0_14px_4px_#2a7dff] ${reduceMotion ? "" : "animate-cop-blue"}`}
+            className={`h-4 w-4 rounded-full bg-cop-blue shadow-[0_0_14px_4px_var(--color-cop-blue)] ${reduceMotion ? "" : "animate-cop-blue"}`}
           />
         </div>
       </div>

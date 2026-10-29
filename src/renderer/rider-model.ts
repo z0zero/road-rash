@@ -82,12 +82,16 @@ const GRIP_TAPE = "#2a2320";
 /** A cop's bike: white panniers either side of the rear wheel, and a black light bar on a mast behind the seat. */
 const PANNIER = "#f2f3f5";
 const LIGHT_BAR = "#16161a";
-/** A light bar's lamps: their colours, and how bright they glow when lit (far brighter than white, so they bloom) and when dark. */
-const LAMP_RED = new Color("#ff1f35");
-const LAMP_BLUE = new Color("#1f63ff");
+/**
+ * A light bar's lamps: their colours, the same as the HUD's cop alert
+ * (`--color-cop-red` and `--color-cop-blue` in globals.css), and how bright
+ * they glow when lit (far brighter than white, so they bloom) and when dark.
+ */
+const LAMP_RED = new Color("#ff2a3d");
+const LAMP_BLUE = new Color("#2a7dff");
 const LAMP_LIT = 6;
 const LAMP_DARK = 0.18;
-/** The lamps take turns, each lit for this many seconds. */
+/** The lamps take turns, each lit for this many seconds, as the HUD's cop alert does (`--animate-cop-red` in globals.css). */
 const LAMP_TURN_SECONDS = 0.3;
 
 /**
