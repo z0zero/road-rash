@@ -1,6 +1,6 @@
 import { PerformanceMonitor } from "@react-three/drei";
 import { Canvas, useThree } from "@react-three/fiber";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { type Camera, PerspectiveCamera, type WebGLRenderer } from "three";
 import type { GameSession } from "@/game/session";
 import { PLAYER } from "@/race";
@@ -10,7 +10,14 @@ import { ChaseCamera } from "./ChaseCamera";
 import { drawnTrack } from "./drawn-track";
 import { Obstacles } from "./Obstacles";
 import { PostProcessing } from "./PostProcessing";
-import { isSoftwareRenderer, LOWEST_QUALITY, pixelRatio, QUALITY_LEVELS } from "./quality";
+import {
+  frameRateBounds,
+  isSoftwareRenderer,
+  LOWEST_QUALITY,
+  pixelRatio,
+  QUALITY_LEVELS,
+  QualityRetries,
+} from "./quality";
 import { COP_LIVERY, liveryOf } from "./liveries";
 import { CopMotion, RiderMotion } from "./rider-motion";
 import { Scenery } from "./Scenery";
@@ -22,18 +29,14 @@ import { Terrain } from "./Terrain";
 import { TrackModel } from "./TrackModel";
 import { Traffic } from "./Traffic";
 
-/** Frame rates (per second) below which the monitor lowers the quality, and above which it raises it again. */
-function frameRateBounds(refreshRate: number): [number, number] {
-  return refreshRate > 90 ? [55, 80] : [48, 57];
-}
-
 /**
  * The 3D view of the race: the sunset coast, the road with its scenery and
  * obstacles, the traffic, every rider and cop on their bike and the chase
  * camera behind the player, finished with post-processing. It draws whatever the
  * session's view holds and holds no game rules. Rendering is driven by the
  * game loop (frameloop "never" plus `advance`), right after the race has been
- * stepped. A performance monitor lowers the quality when the frame rate drops.
+ * stepped. A performance monitor lowers the quality when the frame rate drops,
+ * and raises it again when there is room to spare.
  */
 export function Scene({ session, reduceMotion }: { session: GameSession; reduceMotion: boolean }) {
   const track = session.view.track;
@@ -54,8 +57,7 @@ export function Scene({ session, reduceMotion }: { session: GameSession; reduceM
   const shake = useMemo(() => new CameraShake(), []);
   const [devicePixelRatio] = useState(() => window.devicePixelRatio);
   const [level, setLevel] = useState(0);
-  // The best level the monitor may climb back to: never one that has already proved too slow.
-  const best = useRef(0);
+  const retries = useMemo(() => new QualityRetries(), []);
   const [software, setSoftware] = useState(false);
   const quality = QUALITY_LEVELS[level];
 
@@ -79,11 +81,15 @@ export function Scene({ session, reduceMotion }: { session: GameSession; reduceM
         <PerformanceMonitor
           bounds={frameRateBounds}
           onDecline={() => {
-            const lower = Math.min(LOWEST_QUALITY, level + 1);
-            best.current = Math.max(best.current, lower);
-            setLevel(lower);
+            if (level === LOWEST_QUALITY) return;
+            retries.tooSlow(level, performance.now() / 1000);
+            setLevel(level + 1);
           }}
-          onIncline={() => setLevel(Math.max(best.current, level - 1))}
+          onIncline={() => {
+            // A software renderer stays at the cheapest level: it has no GPU to spare for more.
+            if (software || level === 0 || !retries.mayTry(level - 1, performance.now() / 1000)) return;
+            setLevel(level - 1);
+          }}
         />
         <DrawDistance metres={quality.drawDistance} />
         <fog attach="fog" args={[SUNSET.haze, quality.drawDistance * 0.12, quality.drawDistance]} />
