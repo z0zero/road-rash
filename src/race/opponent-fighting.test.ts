@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { PLAYER, STEP_SECONDS, type PlayerInput, type Race, type Temperament } from ".";
-import { alongsideARacer, autopilot, nearestWithinReach, player, startedRace } from "./test-helpers";
+import { PLAYER, STEP_SECONDS, type PlayerInput, type Race, type RaceEvent, type Temperament } from ".";
+import {
+  alongsideAn,
+  alongsideARacer,
+  autopilot,
+  nearestWithinReach,
+  player,
+  secondsUntil,
+  startedRace,
+} from "./test-helpers";
 
 /** Seconds an opponent spent free to attack with someone within reach, and the attacks it threw in that time. */
 interface Tally {
@@ -62,6 +70,31 @@ describe("opponents", () => {
   it("rarely attack the player if they are racers", () => {
     expect(tallies.player.racer.seconds).toBeGreaterThan(20);
     expect(rate(tallies.player.racer)).toBeLessThan(0.25);
+  });
+
+  it("drop back when badly beaten, without attacking, until they have recovered", () => {
+    const { race, target, input } = alongsideAn("brawler");
+    const them = () => race.snapshot().riders[target];
+    const punching = () => ({ ...input(), punch: true });
+    secondsUntil(race, punching, () => them().stamina < 30, 10);
+    race.drainEvents();
+    const cruising = autopilot(race, { targetSpeed: 40, lane: player(race).offset });
+    const fallsBehind: number[] = [];
+    const attacksWhileBeaten: RaceEvent[] = [];
+
+    secondsUntil(race, cruising, () => {
+      fallsBehind.push(player(race).distance - them().distance);
+      attacksWhileBeaten.push(...race.drainEvents().filter((event) => event.type === "attack-thrown" && event.attacker.id === target));
+      return them().stamina >= 80;
+    }, 30);
+
+    expect(Math.max(...fallsBehind)).toBeGreaterThan(15);
+    expect(attacksWhileBeaten).toEqual([]);
+
+    // Once recovered, they stop hanging back and ride up to the player again.
+    const easingOff = autopilot(race, { targetSpeed: 30, lane: player(race).offset });
+    const comingBack = secondsUntil(race, easingOff, () => Math.abs(player(race).distance - them().distance) < 5, 30);
+    expect(comingBack).toBeLessThan(30);
   });
 
   it("attack the player far more readily than each other, but now and then each other too", () => {
