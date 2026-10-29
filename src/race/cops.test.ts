@@ -118,7 +118,8 @@ function alongsideTheFirstCop(seed = 1) {
     const me = riders[PLAYER];
     const cop = cops[0];
     const reached = Math.abs(cop.offset - me.offset) <= 1.8 && Math.abs(cop.distance - me.distance) <= 2;
-    const nearer = riders.some((rider) => rider.id !== PLAYER && rider.status === "racing" && !rider.crash && apart(rider, me) <= apart(cop, me));
+    const riding = riders.filter((rider) => rider.id !== PLAYER && rider.status === "racing" && !rider.crash);
+    const nearer = riding.some((rider) => apart(rider, me) <= apart(cop, me));
     return reached && !nearer;
   };
   secondsUntil(race, input, withinReach, 30);

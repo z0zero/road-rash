@@ -363,7 +363,10 @@ class Sound {
 function hearingOf(race: RaceSnapshot, subject: RiderOrCop, other: RiderOrCop | null): Hearing {
   const player = race.riders[PLAYER];
   const isPlayer = (who: RiderOrCop | null) => who?.kind === "rider" && who.id === PLAYER;
-  const whereIs = (who: RiderOrCop | null) => (who === null ? undefined : who.kind === "rider" ? race.riders[who.id] : race.cops[who.id]);
+  const whereIs = (who: RiderOrCop | null) => {
+    if (who === null) return undefined;
+    return who.kind === "rider" ? race.riders[who.id] : race.cops[who.id];
+  };
   if (isPlayer(subject) || isPlayer(other)) {
     const them = whereIs(isPlayer(subject) ? other : subject);
     return { loudness: 1, pan: them ? panFor(them.distance - player.distance, them.offset - player.offset) : 0 };

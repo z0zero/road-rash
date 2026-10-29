@@ -57,7 +57,7 @@ export function lineUpCops(track: Track): Cop[] {
     name: COP_NAMES[id],
     motion: { distance: track.startDistance + along, offset: shoulder, speed: 0, steering: 0, shove: 0 },
     status: "waiting",
-    stamina: TUNING.cops.fullStamina,
+    stamina: COP_FULL_STAMINA,
     stepsSinceHit: Infinity,
     attack: null,
     weapon: "club",
