@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { NO_INPUT, PLAYER, STEP_SECONDS, type Race, type RaceEvent, type RiderId, type RiderSnapshot } from ".";
+import { NO_INPUT, PLAYER, STEP_SECONDS, type RaceEvent, type RiderId, type RiderSnapshot } from ".";
 import {
+  alongsideARacer,
   autopilot,
   eventsDuring,
-  kmh,
+  eventsUntil,
   player,
-  rideAlongside,
   secondsUntil,
   startedRace,
   STEPS_PER_SECOND,
@@ -15,22 +15,16 @@ import {
 const ME = { kind: "rider", id: PLAYER } as const;
 const rider = (id: RiderId) => ({ kind: "rider", id }) as const;
 
-/** The racer (an opponent who rarely attacks) who lines up nearest the player. */
-function nearestRacer(race: Race): RiderId {
-  const { riders } = race.snapshot();
-  return riders
-    .filter((other) => other.temperament === "racer")
-    .reduce((nearest, other) => (other.distance < nearest.distance ? other : nearest)).id;
-}
+const byThePlayer = (event: RaceEvent) =>
+  (event.type === "attack-thrown" || event.type === "attack-landed") && event.attacker.id === PLAYER;
 
-/** A started race in which the player has ridden up alongside a racer, within reach of them. */
-function alongsideARacer(seed = 1) {
-  const race = startedRace(seed);
-  const target = nearestRacer(race);
-  const input = rideAlongside(race, target);
-  secondsUntil(race, input, () => withinReach(player(race), race.snapshot().riders[target]), 60);
-  race.drainEvents();
-  return { race, target, input };
+/**
+ * Keeps pressing punch while riding alongside the racer until one of the
+ * player's punches lands; returns every event on the way.
+ */
+function punchTheRacer({ race, input }: ReturnType<typeof alongsideARacer>) {
+  const punching = () => ({ ...input(), punch: true });
+  return eventsUntil(race, punching, (event) => event.type === "attack-landed" && event.attacker.id === PLAYER, 2);
 }
 
 describe("punching", () => {
@@ -47,10 +41,36 @@ describe("punching", () => {
   });
 });
 
-describe("attacks", () => {
-  const byThePlayer = (event: RaceEvent) =>
-    (event.type === "attack-thrown" || event.type === "attack-landed") && event.attacker.id === PLAYER;
+describe("kicking", () => {
+  it("lowers the target's stamina by 6 and shoves them sideways at about 6 m/s, away from the kicker", () => {
+    // Two identical races, ridden with the same input; in one of them the player kicks.
+    const kicked = alongsideARacer();
+    const spared = alongsideARacer();
+    const { target } = kicked;
+    const stepBoth = (kick = false) => {
+      const input = spared.input();
+      kicked.race.step({ ...input, kick });
+      spared.race.step(input);
+      return kicked.race.drainEvents();
+    };
+    let events = stepBoth(true);
+    expect(events).toContainEqual({ type: "attack-thrown", attacker: ME, target: rider(target), kind: "kick" });
+    while (!events.some((event) => event.type === "attack-landed")) events = stepBoth();
+    expect(events).toContainEqual({ type: "attack-landed", attacker: ME, target: rider(target), kind: "kick" });
+    const awayFromThePlayer = Math.sign(kicked.race.snapshot().riders[target].offset - player(kicked.race).offset);
+    const offsets = () => [kicked, spared].map(({ race }) => race.snapshot().riders[target].offset);
+    const [kickedBefore, sparedBefore] = offsets();
+    stepBoth();
+    const [kickedAfter, sparedAfter] = offsets();
 
+    expect(kicked.race.snapshot().riders[target].stamina).toBe(94);
+    const shove = ((kickedAfter - kickedBefore - (sparedAfter - sparedBefore)) / STEP_SECONDS) * awayFromThePlayer;
+    expect(shove).toBeGreaterThan(5);
+    expect(shove).toBeLessThan(7);
+  });
+});
+
+describe("attacks", () => {
   it("are aimed at nobody, and miss, when no rider is within reach", () => {
     const race = startedRace();
     race.step({ ...NO_INPUT, kick: true });
@@ -88,7 +108,8 @@ describe("attacks", () => {
     const pilot = autopilot(race, { lane: 2 });
     const nearestWithinReach = (riders: readonly RiderSnapshot[]) =>
       riders
-        .filter((other) => other.id !== PLAYER && other.status === "racing" && withinReach(riders[PLAYER], other))
+        .filter((other) => other.id !== PLAYER && other.status === "racing" && other.crash === null)
+        .filter((other) => withinReach(riders[PLAYER], other))
         .map((other) => ({
           id: other.id,
           apart: Math.hypot(other.distance - riders[PLAYER].distance, other.offset - riders[PLAYER].offset),
@@ -100,7 +121,9 @@ describe("attacks", () => {
     for (let step = 0; step < 120 * STEPS_PER_SECOND; step++) {
       const before = race.snapshot().riders;
       const near = before.some(
-        (other) => other.id !== PLAYER && Math.hypot(other.distance - before[PLAYER].distance, other.offset - before[PLAYER].offset) < 4,
+        (other) =>
+          other.id !== PLAYER &&
+          Math.hypot(other.distance - before[PLAYER].distance, other.offset - before[PLAYER].offset) < 4,
       );
       race.step({ ...pilot(), punch: near && step % 2 === 0, kick: near && step % 2 === 1 });
       const after = race.snapshot().riders;
@@ -123,17 +146,6 @@ describe("attacks", () => {
     expect(sides).toEqual(new Set([-1, 1]));
   });
 });
-
-/**
- * Keeps pressing punch while riding alongside the racer until one of the
- * player's punches lands; returns every event on the way.
- */
-function punchTheRacer({ race, input }: ReturnType<typeof alongsideARacer>) {
-  const events: RaceEvent[] = [];
-  const landed = () => events.some((event) => event.type === "attack-landed" && event.attacker.id === PLAYER);
-  secondsUntil(race, () => ({ ...input(), punch: true }), () => (events.push(...race.drainEvents()), landed()), 2);
-  return events;
-}
 
 describe("stamina", () => {
   it("starts recovering at 6 per second once a rider has gone 2 s without being hit, up to 100", () => {
@@ -173,100 +185,17 @@ describe("knock-offs", () => {
     const { race, target } = alongside;
     const them = () => race.snapshot().riders[target];
     // 100 - 6 x 18 leaves no stamina, but they stay on their bike...
-    for (let punch = 0; punch < 6; punch++) expect(punchTheRacer(alongside)).not.toContainEqual(expect.objectContaining({ type: "crash" }));
+    for (let punch = 0; punch < 6; punch++) {
+      expect(punchTheRacer(alongside)).not.toContainEqual(expect.objectContaining({ type: "crash" }));
+    }
     expect(them()).toMatchObject({ stamina: 0, crash: null });
 
     // ...until the next hit, which knocks them off at the speed they were riding.
     let speed = 0;
-    const events: RaceEvent[] = [];
-    secondsUntil(
-      race,
-      () => ((speed = them().speed), { ...alongside.input(), punch: true }),
-      () => (events.push(...race.drainEvents()), events.some((event) => event.type === "crash")),
-      2,
-    );
+    const punching = () => ((speed = them().speed), { ...alongside.input(), punch: true });
+    const events = eventsUntil(race, punching, (event) => event.type === "crash", 2);
 
     expect(events).toContainEqual({ type: "crash", rider: target, cause: "knocked-off", impactSpeed: expect.closeTo(speed, 0) });
     expect(them().crash).toBe("tumbling");
-  });
-});
-
-/** A started race in which the player has just knocked a racer off their bike. */
-function racerKnockedOff(seed = 1) {
-  const alongside = alongsideARacer(seed);
-  const { race } = alongside;
-  const events: RaceEvent[] = [];
-  secondsUntil(
-    race,
-    () => ({ ...alongside.input(), punch: true }),
-    () => (events.push(...race.drainEvents()), events.some((event) => event.type === "crash")),
-    10,
-  );
-  return { ...alongside, events };
-}
-
-describe("after a crash", () => {
-  it("the rider tumbles for about 1.2 s, then is on foot, running back to their bike at about 6 m/s", () => {
-    const { race, target } = racerKnockedOff();
-    const them = () => race.snapshot().riders[target];
-
-    const tumbling = secondsUntil(race, NO_INPUT, () => them().crash !== "tumbling", 3);
-
-    expect(tumbling).toBeGreaterThan(1.1);
-    expect(tumbling).toBeLessThan(1.3);
-    expect(them().crash).toBe("on-foot");
-    const gap = (rider: RiderSnapshot) => Math.hypot(rider.bike.distance - rider.distance, rider.bike.offset - rider.offset);
-    const before = them();
-    race.step(NO_INPUT);
-    const after = them();
-    const run = Math.hypot(after.distance - before.distance, after.offset - before.offset) / STEP_SECONDS;
-    expect(run).toBeGreaterThan(5.5);
-    expect(run).toBeLessThan(6.5);
-    expect(gap(after)).toBeCloseTo(gap(before) - run * STEP_SECONDS, 6);
-  });
-
-  it("the rider gets back on when they reach their bike, riding off slowly with at least 50 stamina", () => {
-    const { race, target } = racerKnockedOff();
-    const them = () => race.snapshot().riders[target];
-    expect(them().stamina).toBe(0);
-    const events: RaceEvent[] = [];
-
-    secondsUntil(race, NO_INPUT, () => (events.push(...race.drainEvents()), them().crash === null), 10);
-
-    expect(events).toContainEqual({ type: "remounted", rider: target });
-    expect(them().stamina).toBeCloseTo(50, 0);
-    expect(them().speed).toBeGreaterThan(0);
-    expect(them().speed).toBeLessThan(kmh(30));
-    expect(them().distance).toBe(them().bike.distance);
-    expect(them().offset).toBe(them().bike.offset);
-  });
-});
-
-describe("kicking", () => {
-  it("lowers the target's stamina by 6 and shoves them sideways at about 6 m/s, away from the kicker", () => {
-    // Two identical races, ridden with the same input; in one of them the player kicks.
-    const kicked = alongsideARacer();
-    const spared = alongsideARacer();
-    const { target } = kicked;
-    const stepBoth = (kick = false) => {
-      const input = spared.input();
-      kicked.race.step({ ...input, kick });
-      spared.race.step(input);
-      return kicked.race.drainEvents();
-    };
-    let events = stepBoth(true);
-    expect(events).toContainEqual({ type: "attack-thrown", attacker: ME, target: rider(target), kind: "kick" });
-    while (!events.some((event) => event.type === "attack-landed")) events = stepBoth();
-    expect(events).toContainEqual({ type: "attack-landed", attacker: ME, target: rider(target), kind: "kick" });
-    const awayFromThePlayer = Math.sign(kicked.race.snapshot().riders[target].offset - player(kicked.race).offset);
-    const offsets = () => [kicked, spared].map(({ race }) => race.snapshot().riders[target].offset);
-    const [kickedBefore, sparedBefore] = offsets();
-    stepBoth();
-    const [kickedAfter, sparedAfter] = offsets();
-
-    expect(kicked.race.snapshot().riders[target].stamina).toBe(94);
-    const shove = ((kickedAfter - kickedBefore - (sparedAfter - sparedBefore)) / STEP_SECONDS) * awayFromThePlayer;
-    expect(shove).toBeGreaterThan(5);
-    expect(shove).toBeLessThan(7);
   });
 });

@@ -1,5 +1,5 @@
 import { getCoastalTrack } from "./coastal-track";
-import { bumpApart } from "./contact";
+import { settleContact } from "./contact";
 import {
   canRemount,
   carryOn,
@@ -370,7 +370,8 @@ export function createRace(options: RaceOptions): Race {
       if (stepsTaken >= COUNTDOWN_STEPS) {
         const clockBefore = clock();
         // Everyone decides what to do from where things stand, then everyone moves.
-        const field = onTheirBikes().map((rider) => rider.motion);
+        const riding = onTheirBikes();
+        const field = riding.map((rider) => rider.motion);
         const player = riders[PLAYER];
         // Catch-up keeps the field near the player, so it stops once the player's race is over.
         const catchUp = (rider: Rider) =>
@@ -392,7 +393,7 @@ export function createRace(options: RaceOptions): Race {
             if (canRemount(rider.crash, rider.motion)) getBackOn(rider);
           }
         });
-        bumpApart(field, edge);
+        for (const { rider, speedDifference } of settleContact(riding, edge)) crash(rider, "rider", speedDifference);
         advanceAttacks();
         recoverStamina();
         finishCrossings(distancesBefore, clockBefore);
