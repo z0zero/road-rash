@@ -31,3 +31,7 @@ _Avoid_: Motorcycle, motorbike, vehicle
 **Traffic**:
 Civilian vehicles on the road that are not part of the race.
 _Avoid_: NPC cars, obstacles
+
+**Position**:
+A rider's rank in the race, from first (the leader) to last.
+_Avoid_: Place, rank, standing
