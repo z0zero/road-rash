@@ -283,11 +283,21 @@ test.describe("with a gamepad", () => {
     await page.keyboard.up("w");
   });
 
-  /** Presses a gamepad button, waits for what it does, then lets go. */
+  /**
+   * Waits for the page's next animation frames, by when the game has read the
+   * gamepad again: it reads it once a frame, so a button let go of and pressed
+   * again between two frames would look held all along.
+   */
+  function nextFrames(page: Page) {
+    return page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  }
+
+  /** Presses a gamepad button, waits for what it does, then lets go, and waits for the game to have seen it let go. */
   async function tap(page: Page, button: number, then: () => Promise<void>) {
     await gamepad(page).press(button);
     await then();
     await gamepad(page).release(button);
+    await nextFrames(page);
   }
 
   test("moves between menu buttons with the D-pad or the left stick, and presses them with A", async ({ page }) => {
@@ -297,6 +307,7 @@ test.describe("with a gamepad", () => {
     await gamepad(page).push(0, 1);
     await expect(page.getByRole("button", { name: "Settings" })).toBeFocused();
     await gamepad(page).push(0, 0);
+    await nextFrames(page);
     await tap(page, GAMEPAD.up, () => expect(page.getByRole("button", { name: "Controls" })).toBeFocused());
     const controls = page.getByRole("dialog", { name: "Controls" });
     await tap(page, GAMEPAD.a, () => expect(controls).toBeVisible());
