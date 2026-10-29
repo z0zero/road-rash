@@ -69,6 +69,7 @@ export function Scene({ session, reduceMotion }: { session: GameSession; reduceM
           }
         }}
       >
+        {/* Its callbacks come from the frame loop, but only on the rare frames the quality changes. */}
         <PerformanceMonitor
           bounds={frameRateBounds}
           onDecline={() => {
