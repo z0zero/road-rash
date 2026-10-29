@@ -21,6 +21,10 @@ export interface Cop {
   stamina: number;
   /** The crashed rider the cop is riding to, to bust them; null when it isn't busting anyone. */
   busting: RiderId | null;
+  /** Steps the cop has still to stand by a rider it has busted, before riding on. */
+  standingBySteps: number;
+  /** Whether the cop is in the race near the player, as the race last said with cop-near or cop-gone. */
+  near: boolean;
 }
 
 /** The cops, each waiting on the right-hand shoulder at its waiting point, fresh. */
@@ -33,6 +37,8 @@ export function lineUpCops(track: Track): Cop[] {
     status: "waiting",
     stamina: TUNING.cops.fullStamina,
     busting: null,
+    standingBySteps: 0,
+    near: false,
   }));
 }
 
@@ -132,6 +138,11 @@ export function bustingIntent(me: Readonly<Motion>, rider: Place, edge: number):
   const speed = rider.speed + Math.sign(gap) * Math.sqrt(2 * PULL_UP_BRAKING * Math.abs(gap));
   const line = rider.offset - (rider.offset >= 0 ? 1 : -1) * PULL_UP_BESIDE;
   return { speed, line: clamp(line, -edge, edge), hurrying: true };
+}
+
+/** A cop standing by a rider it has busted: it stops where it is. */
+export function standingByIntent(me: Readonly<Motion>): CopIntent {
+  return { speed: 0, line: me.offset };
 }
 
 /**

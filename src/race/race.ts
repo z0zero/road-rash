@@ -1,6 +1,6 @@
 import { getCoastalTrack } from "./coastal-track";
 import { settleContact } from "./contact";
-import { bustingIntent, lineUpCops, moveCop, patrolIntent, type CopStatus } from "./cops";
+import { bustingIntent, lineUpCops, moveCop, patrolIntent, standingByIntent, type CopStatus } from "./cops";
 import {
   canRemount,
   carryOn,
@@ -159,6 +159,8 @@ export interface CopSnapshot {
   readonly crash: CrashPhase | null;
   /** The crashed rider the cop is riding to, to bust them; null when it isn't busting anyone. */
   readonly busting: RiderId | null;
+  /** Whether the cop is in the race within 150 m of the player: the cop alert is on, and the siren sounds, while one is. */
+  readonly near: boolean;
 }
 
 /** How the race went for everyone, once the player's race is over. */
@@ -421,6 +423,7 @@ export function createRace(options: RaceOptions): Race {
       if (!rider?.crash || rider.status !== "racing" || apart(cop.motion, whereIs(rider)) > TUNING.cops.bustingReach) continue;
       rider.status = "busted";
       cop.busting = null;
+      cop.standingBySteps = stepsIn(TUNING.cops.standingBySeconds);
       events.push({ type: "busted", rider: rider.id, cop: cop.id });
       if (rider.id === PLAYER) events.push({ type: "player-race-over", outcome: "busted" });
     }
@@ -450,6 +453,16 @@ export function createRace(options: RaceOptions): Race {
     if (player.status !== "racing") return;
     for (const cop of cops) {
       if (cop.status === "waiting" && whereIs(player).distance >= cop.motion.distance) cop.status = "riding";
+    }
+  }
+
+  /** Says which cops have come near the player, and which have gone: cops in the race within their alert range of the player. */
+  function alertThePlayer() {
+    for (const cop of cops) {
+      const near = cop.status === "riding" && apart(cop.motion, whereIs(riders[PLAYER])) <= TUNING.cops.alertRange;
+      if (near === cop.near) continue;
+      cop.near = near;
+      events.push({ type: near ? "cop-near" : "cop-gone", cop: cop.id });
     }
   }
 
@@ -547,15 +560,17 @@ export function createRace(options: RaceOptions): Race {
           // A club reaches further than a kick: a club holder swings at a rider its kick can't reach.
           if (kind) throwAttack(opponent, kind === "kick" && !withinReach(opponent.motion, nearest.motion, kind) ? "punch" : kind);
         }
-        // Cops ride to bust crashed riders who haven't got away yet; the rest patrol near the player, finding their
-        // way around everyone on a bike: the riders, and each other.
+        // Cops ride to bust crashed riders who haven't got away yet, and stand by the riders they have busted for a
+        // while; the rest patrol near the player, finding their way around everyone on a bike: the riders, and each other.
         letGo();
         const everyoneOnABike = [...field, ...cops.filter((cop) => cop.status !== "knocked-off").map((cop) => cop.motion)];
         const copIntents = cops.map((cop) => {
           if (cop.status !== "riding") return null;
           if (cop.busting !== null) return bustingIntent(cop.motion, whereIs(riders[cop.busting]), edge);
+          if (cop.standingBySteps > 0) return standingByIntent(cop.motion);
           return patrolIntent(cop.motion, whereIs(player), track, everyoneOnABike);
         });
+        for (const cop of cops) cop.standingBySteps = Math.max(0, cop.standingBySteps - 1);
         const distancesBefore = riders.map((rider) => whereIs(rider).distance);
         riders.forEach((rider, index) => {
           if (!rider.crash) {
@@ -577,6 +592,7 @@ export function createRace(options: RaceOptions): Race {
         advanceAttacks();
         recoverStamina();
         finishCrossings(distancesBefore, clockBefore);
+        alertThePlayer();
       }
       stepsTaken++;
       if (stepsTaken === COUNTDOWN_STEPS) events.push({ type: "race-started" });
@@ -622,6 +638,7 @@ export function createRace(options: RaceOptions): Race {
           stamina: cop.stamina,
           crash: null,
           busting: cop.busting,
+          near: cop.near,
         })),
       };
     },
