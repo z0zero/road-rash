@@ -10,7 +10,16 @@ import {
   type RiderSnapshot,
   type Track,
 } from ".";
-import { autopilot, chase, player, secondsUntil, startedRace, STEPS_PER_SECOND } from "./test-helpers";
+import {
+  autopilot,
+  bendSpeed,
+  chase,
+  player,
+  secondsUntil,
+  startedRace,
+  steerTowards,
+  STEPS_PER_SECOND,
+} from "./test-helpers";
 
 type RiderFinished = Extract<RaceEvent, { type: "rider-finished" }>;
 
@@ -293,6 +302,8 @@ describe("bumping", () => {
 
     secondsUntil(race, input, () => {
       const { riders } = race.snapshot();
+      // While they both stay on their bikes: bumped onto the shoulder, either of them may run into an obstacle there.
+      if (riders[target].crash || riders[PLAYER].crash) return true;
       const along = Math.abs(riders[target].distance - riders[PLAYER].distance);
       const across = Math.abs(riders[target].offset - riders[PLAYER].offset);
       if (along < 4 || gaps.length > 0) gaps.push({ along, across, speedDifference: riders[PLAYER].speed - riders[target].speed });
@@ -312,7 +323,9 @@ describe("bumping", () => {
 
 /**
  * Input that keeps the player about `gap` metres behind the opponent `target`,
- * a lane to the side of it, so the opponent always has the player close by.
+ * a lane to the side of it, so the opponent always has the player close by:
+ * it holds its line through the bends and slows for them, and steers round
+ * any obstacle in its way.
  */
 function shadow(race: Race, target: number, gap = 15) {
   let lastOffset = player(race).offset;
@@ -322,11 +335,19 @@ function shadow(race: Race, target: number, gap = 15) {
     const them = riders[target];
     const sideways = (me.offset - lastOffset) * STEPS_PER_SECOND;
     lastOffset = me.offset;
-    const lane = them.offset > 0 ? them.offset - 3 : them.offset + 3;
-    const wanted = Math.max(0, them.speed + 0.5 * (them.distance - me.distance - gap));
+    let lane = them.offset > 0 ? them.offset - 3 : them.offset + 3;
+    // Round any obstacle in its way.
+    for (const obstacle of race.track.obstacles) {
+      const ahead = obstacle.distance - me.distance;
+      const clearance = obstacle.radius + 1.2;
+      if (ahead > 0 && ahead < 60 && Math.abs(obstacle.offset - lane) < clearance) {
+        lane = obstacle.offset + (lane >= obstacle.offset ? clearance : -clearance);
+      }
+    }
+    const wanted = Math.min(bendSpeed(race), Math.max(0, them.speed + 0.5 * (them.distance - me.distance - gap)));
     return {
       ...NO_INPUT,
-      steer: Math.max(-1, Math.min(1, 0.6 * (lane - me.offset) - 0.25 * sideways)),
+      steer: steerTowards(race, lane, sideways),
       throttle: me.speed < wanted ? 1 : 0,
       brake: me.speed > wanted + 1 ? Math.min(1, (me.speed - wanted) / 4) : 0,
     };
