@@ -1,5 +1,5 @@
 import type { RaceView } from "@/game/session";
-import type { AttackSnapshot, CrashPhase, RiderId } from "@/race";
+import type { AttackSnapshot, CrashPhase, RiderId, Weapon } from "@/race";
 import { bikePoseOf, createPose, poseOf, type RiderPose } from "./rider-pose";
 
 const GRAVITY = 9.81;
@@ -50,6 +50,10 @@ export class RiderMotion {
   crash: CrashPhase | null = null;
   /** The attack the rider is making, or null. */
   attack: AttackSnapshot | null = null;
+  /** The weapon the rider holds, or null. */
+  weapon: Weapon | null = null;
+  /** The hand a held club is in: 1 the right, -1 the left. It moves to the side of each swing and stays there. */
+  clubHand: -1 | 1 = 1;
   /** After a crash: 0 while the bike is upright, 1 once it lies on its side. */
   fallen = 0;
   /** The side the crashed bike lies on: 1 its right, -1 its left. */
@@ -75,6 +79,8 @@ export class RiderMotion {
     const wasCrashed = this.crash !== null;
     this.crash = snapshot.crash;
     this.attack = snapshot.attack;
+    this.weapon = snapshot.weapon;
+    if (snapshot.attack?.kind === "club-swing") this.clubHand = snapshot.attack.side;
     const rider = poseOf(view, this.rider, this.pose);
     const bike = bikePoseOf(view, this.rider, this.bikePose);
     // Ground covered since the last frame: none while the race is paused.

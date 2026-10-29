@@ -24,19 +24,26 @@ const emptyTallies = (): Tallies => ({
   opponent: { racer: { seconds: 0, attacks: 0 }, brawler: { seconds: 0, attacks: 0 }, bully: { seconds: 0, attacks: 0 } },
 });
 
+type AttackThrown = Extract<RaceEvent, { type: "attack-thrown" }>;
+
 /**
  * Rides `race` with `input` for up to `seconds`, or until the player's race is
  * over, and tallies, at every step, each opponent on its bike and not already
  * attacking that has someone within reach: whether the nearest of them is the
- * player or another opponent, and whether the opponent attacks.
+ * player or another opponent, and whether the opponent attacks. Every attack
+ * the opponents throw goes into `thrown`.
  */
-function tallyAttacks(tallies: Tallies, race: Race, input: () => PlayerInput, seconds: number) {
+function tallyAttacks(tallies: Tallies, race: Race, input: () => PlayerInput, seconds: number, thrown: AttackThrown[]) {
   for (let step = 0; step < seconds / STEP_SECONDS && player(race).status === "racing"; step++) {
     const before = race.snapshot().riders;
     const free = before.filter((rider) => rider.temperament && rider.status === "racing" && !rider.crash && !rider.attack);
     const nearest = free.map((rider) => nearestWithinReach(before, rider));
     race.step(input());
-    const attackers = new Set(race.drainEvents().flatMap((event) => (event.type === "attack-thrown" ? [event.attacker.id] : [])));
+    const byOpponents = race
+      .drainEvents()
+      .filter((event): event is AttackThrown => event.type === "attack-thrown" && event.attacker.id !== PLAYER);
+    thrown.push(...byOpponents);
+    const attackers = new Set(byOpponents.map((event) => event.attacker.id));
     free.forEach((rider, index) => {
       if (nearest[index] === null || !rider.temperament) return;
       const tally = tallies[nearest[index] === PLAYER ? "player" : "opponent"][rider.temperament];
@@ -53,12 +60,18 @@ describe("opponents", () => {
   // Three races ridden at the field's pace, so the opponents get plenty of chances to attack the player and each other,
   // and a long ride alongside a racer, since racers don't come looking for a fight.
   const tallies = emptyTallies();
+  const thrown: AttackThrown[] = [];
   for (const seed of [1, 2, 3]) {
     const race = startedRace(seed);
-    tallyAttacks(tallies, race, autopilot(race, { targetSpeed: 48 }), 300);
+    tallyAttacks(tallies, race, autopilot(race, { targetSpeed: 48 }), 300, thrown);
   }
   const alongside = alongsideARacer();
-  tallyAttacks(tallies, alongside.race, alongside.input, 60);
+  tallyAttacks(tallies, alongside.race, alongside.input, 60, thrown);
+
+  it("only throw attacks that reach someone: a bully never kicks at a rider its kick can't reach", () => {
+    expect(thrown.filter((event) => event.kind === "kick").length).toBeGreaterThan(20);
+    expect(thrown.filter((event) => event.target === null)).toEqual([]);
+  });
 
   it("attack the player often if they are brawlers or bullies", () => {
     for (const temperament of ["brawler", "bully"] as const) {

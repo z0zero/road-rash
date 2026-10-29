@@ -12,7 +12,17 @@ import {
 } from "./crashing";
 import type { AttackKind, CrashCause, RaceEvent, RaceOutcome, RiderId } from "./events";
 import { lineUpOpponents } from "./field";
-import { attackStage, attackSteps, awayFrom, nearestWithinReach, windUpSteps, type Attack } from "./fighting";
+import {
+  attackStage,
+  attackSteps,
+  awayFrom,
+  isMidSwing,
+  nearestWithinReach,
+  windUpSteps,
+  withinReach,
+  type Attack,
+  type Weapon,
+} from "./fighting";
 import { isDroppingBack, opponentAttack, opponentIntent } from "./opponent-fighting";
 import { catchUpFor, opponentControls, paceFor, type OpponentRiding } from "./opponent-riding";
 import { OPPONENTS, PLAYER_NAME, type Temperament } from "./opponents";
@@ -88,6 +98,8 @@ export interface RiderSnapshot {
   readonly condition: number;
   /** The attack the rider is making, or null. */
   readonly attack: AttackSnapshot | null;
+  /** The weapon the rider holds, which their punches swing instead; null when they hold none. */
+  readonly weapon: Weapon | null;
   /** Null while the rider is on their bike; after a crash, "tumbling" and then "on-foot" until they remount. */
   readonly crash: CrashPhase | null;
   /** Where the rider's bike is: under them while they ride it, or wherever it slid to after a crash. */
@@ -208,6 +220,8 @@ interface Rider {
   stepsSinceHit: number;
   /** The attack the rider is making, or null. */
   attack: Attack | null;
+  /** The weapon the rider holds, or null. */
+  weapon: Weapon | null;
   /** Null while the rider is on their bike; how they are getting back to it after a crash. */
   crash: Crash | null;
   /** Whether an opponent is badly beaten and dropping back until it has recovered. */
@@ -228,7 +242,10 @@ export function createRace(options: RaceOptions): Race {
   let stepsTaken = 0;
   let events: RaceEvent[] = [];
   let finishers = 0;
-  /** A rider on the grid: fresh, on a bike in perfect condition, standing at `distance` and `offset`. */
+  /**
+   * A rider on the grid: fresh, on a bike in perfect condition, standing at
+   * `distance` and `offset`. Bullies start the race with a club.
+   */
   const lineUp = (
     rider: Pick<Rider, "id" | "name" | "temperament" | "riding">,
     distance: number,
@@ -243,6 +260,7 @@ export function createRace(options: RaceOptions): Race {
     condition: TUNING.fullCondition,
     stepsSinceHit: Infinity,
     attack: null,
+    weapon: rider.temperament === "bully" ? "club" : null,
     crash: null,
     droppingBack: false,
   });
@@ -268,8 +286,16 @@ export function createRace(options: RaceOptions): Race {
   /** The riders an attack can be aimed at. */
   const targets = onTheirBikes;
 
-  /** Starts an attack's wind-up, aimed at the nearest rider within reach (if any): towards them, or else to the right. */
-  function throwAttack(attacker: Rider, kind: AttackKind) {
+  /** A rider's punch: a club holder swings their club instead. */
+  const punchOf = (rider: Rider): AttackKind => (rider.weapon === "club" ? "club-swing" : "punch");
+
+  /**
+   * Starts an attack's wind-up, aimed at the nearest rider within reach (if
+   * any): towards them, or else to the right. A punch from a club holder is a
+   * club swing.
+   */
+  function throwAttack(attacker: Rider, thrown: AttackKind) {
+    const kind = thrown === "punch" ? punchOf(attacker) : thrown;
     const target = nearestWithinReach(attacker.motion, targets(), kind);
     attacker.attack = { kind, steps: 0, side: target ? awayFrom(attacker.motion, target.motion) : 1 };
     events.push({
@@ -304,6 +330,13 @@ export function createRace(options: RaceOptions): Race {
       target: { kind: "rider", id: target.id },
       kind,
     });
+    // Any hit in the middle of a club swing takes the club from its holder, and their swing never lands.
+    if (isMidSwing(target.attack)) {
+      target.weapon = null;
+      target.attack = null;
+      attacker.weapon = "club";
+      events.push({ type: "weapon-stolen", from: { kind: "rider", id: target.id }, by: { kind: "rider", id: attacker.id } });
+    }
     const { stamina, shove } = TUNING.attacks[kind];
     // A kick shoves its target sideways, away from the attacker.
     if (shove > 0) target.motion.shove = awayFrom(attacker.motion, target.motion) * shove;
@@ -313,10 +346,15 @@ export function createRace(options: RaceOptions): Race {
     target.stepsSinceHit = 0;
   }
 
-  /** Throws a rider off their bike, which loses condition; a bike whose condition runs out is wrecked, and so is the rider's race. */
+  /**
+   * Throws a rider off their bike, which loses condition; a bike whose
+   * condition runs out is wrecked, and so is the rider's race. A rider who
+   * crashes drops their club, which is lost.
+   */
   function crash(rider: Rider, cause: CrashCause, impactSpeed: number) {
     events.push({ type: "crash", rider: rider.id, cause, impactSpeed });
     rider.attack = null;
+    rider.weapon = null;
     rider.crash = throwOff(rider.motion);
     const loss = TUNING.crashConditionLoss + TUNING.crashConditionLossPerKmh * impactSpeed * KMH_PER_METRE_PER_SECOND;
     rider.condition = Math.max(0, rider.condition - loss);
@@ -434,9 +472,10 @@ export function createRace(options: RaceOptions): Race {
         }
         for (const opponent of riding) {
           if (!opponent.temperament || opponent.attack || opponent.droppingBack) continue;
-          const nearest = nearestWithinReach(opponent.motion, riding, "punch");
+          const nearest = nearestWithinReach(opponent.motion, riding, punchOf(opponent));
           const kind = nearest && opponentAttack(opponent.temperament, nearest.id === PLAYER, random);
-          if (kind) throwAttack(opponent, kind);
+          // A club reaches further than a kick: a club holder swings at a rider its kick can't reach.
+          if (kind) throwAttack(opponent, kind === "kick" && !withinReach(opponent.motion, nearest.motion, kind) ? "punch" : kind);
         }
         const distancesBefore = riders.map((rider) => whereIs(rider).distance);
         riders.forEach((rider, index) => {
@@ -483,6 +522,7 @@ export function createRace(options: RaceOptions): Race {
             stamina: rider.stamina,
             condition: rider.condition,
             attack: rider.attack && { kind: rider.attack.kind, side: rider.attack.side, ...attackStage(rider.attack) },
+            weapon: rider.weapon,
             crash: rider.crash?.phase ?? null,
             bike: { distance: rider.motion.distance, offset: rider.motion.offset, speed: rider.motion.speed },
           };
