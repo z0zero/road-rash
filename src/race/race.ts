@@ -19,6 +19,7 @@ import { OPPONENTS, PLAYER_NAME, type Temperament } from "./opponents";
 import { createRandom } from "./random";
 import { ride, type Controls, type Motion } from "./riding";
 import { STEP_SECONDS, STEPS_PER_SECOND, stepsIn } from "./steps";
+import { nearestOpponent, warningsFor, type Warnings } from "./surroundings";
 import type { Track } from "./track";
 import { TUNING } from "./tuning";
 
@@ -120,6 +121,10 @@ export interface RaceSnapshot {
   readonly clock: number;
   /** Every rider, indexed by `RiderId`. */
   readonly riders: readonly RiderSnapshot[];
+  /** The opponent on their bike nearest the player, whose name and stamina the HUD shows; null when none is within 50 m. */
+  readonly nearestOpponent: RiderId | null;
+  /** Opponents alongside the player, or coming up from behind, on either side of them. */
+  readonly warnings: Warnings;
 }
 
 /** How the race went for everyone, once the player's race is over. */
@@ -451,9 +456,15 @@ export function createRace(options: RaceOptions): Race {
     },
     snapshot() {
       const ranks = positions();
+      const player = { id: PLAYER, ...whereIs(riders[PLAYER]) };
+      const opponents = onTheirBikes()
+        .filter((rider) => rider.id !== PLAYER)
+        .map(({ id, motion: { distance, offset, speed } }) => ({ id, distance, offset, speed }));
       return {
         countdown: Math.max(0, COUNTDOWN_STEPS - stepsTaken) / STEPS_PER_SECOND,
         clock: clock(),
+        nearestOpponent: nearestOpponent(player, opponents),
+        warnings: warningsFor(player, opponents),
         riders: riders.map((rider) => {
           const { distance, offset, speed } = whereIs(rider);
           return {
