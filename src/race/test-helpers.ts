@@ -13,6 +13,7 @@ import {
   type RaceEvent,
   type RiderId,
   type RiderSnapshot,
+  type Temperament,
 } from ".";
 
 export const STEPS_PER_SECOND = 60;
@@ -89,7 +90,9 @@ export function withinReach(attacker: RiderSnapshot, target: RiderSnapshot) {
 /**
  * Scripted input that rides the player up alongside the opponent `target`,
  * `across` metres to its side (towards the middle of the road) and level with
- * it along the track, and holds the player there.
+ * it along the track, and holds the player there. It closes in on the target,
+ * and on any rider in its path, at no more than 5 m/s, so running into
+ * someone on the way only bumps them.
  */
 export function rideAlongside(race: Race, target: RiderId, { across = 1.4 } = {}) {
   let lastOffset = player(race).offset;
@@ -100,7 +103,14 @@ export function rideAlongside(race: Race, target: RiderId, { across = 1.4 } = {}
     const sideways = (me.offset - lastOffset) / STEP_SECONDS;
     lastOffset = me.offset;
     const lane = them.offset + (them.offset > 0 ? -across : across);
-    const wanted = Math.max(0, them.speed + 0.8 * (them.distance - me.distance));
+    const closing = Math.max(-5, Math.min(5, 0.8 * (them.distance - me.distance)));
+    let wanted = Math.max(0, them.speed + closing);
+    for (const other of riders) {
+      const ahead = other.distance - me.distance;
+      if (other.id !== PLAYER && ahead > 0 && ahead < 15 && Math.abs(other.offset - me.offset) < 1.2) {
+        wanted = Math.min(wanted, other.speed + 5);
+      }
+    }
     return {
       ...NO_INPUT,
       steer: Math.max(-1, Math.min(1, 0.8 * (lane - me.offset) - 0.25 * sideways)),
@@ -118,4 +128,65 @@ export function eventsDuring(race: Race, seconds: number, input: PlayerInput | (
     events.push(...race.drainEvents());
   }
   return events;
+}
+
+/**
+ * Steps with `input` until an event that `wanted` picks out is emitted, and
+ * returns every event emitted on the way, that one last.
+ */
+export function eventsUntil(
+  race: Race,
+  input: PlayerInput | (() => PlayerInput),
+  wanted: (event: RaceEvent) => boolean,
+  limitSeconds = 60,
+) {
+  const events: RaceEvent[] = [];
+  const done = () => {
+    for (const event of race.drainEvents()) events.push(event);
+    return events.some(wanted);
+  };
+  secondsUntil(race, input, done, limitSeconds);
+  return events;
+}
+
+/** The opponent of a temperament (any, if not given) who lines up nearest the player. */
+export function nearestOpponent(race: Race, temperament?: Temperament): RiderId {
+  return race
+    .snapshot()
+    .riders.filter((other) => other.id !== PLAYER && (!temperament || other.temperament === temperament))
+    .reduce((nearest, other) => (other.distance < nearest.distance ? other : nearest)).id;
+}
+
+/** A started race in which the player has ridden up alongside a racer (an opponent who rarely attacks), within reach of them. */
+export function alongsideARacer(seed = 1) {
+  const race = startedRace(seed);
+  const target = nearestOpponent(race, "racer");
+  const input = rideAlongside(race, target);
+  secondsUntil(race, input, () => withinReach(player(race), race.snapshot().riders[target]), 60);
+  race.drainEvents();
+  return { race, target, input };
+}
+
+/** A started race in which the player, riding alongside a racer, has just punched them off their bike. */
+export function racerKnockedOff(seed = 1) {
+  const alongside = alongsideARacer(seed);
+  const punching = () => ({ ...alongside.input(), punch: true });
+  const events = eventsUntil(alongside.race, punching, (event) => event.type === "crash", 10);
+  return { ...alongside, events };
+}
+
+/** Input that rides up behind the opponent `target` at about `closing` m/s faster than it, steering straight at it. */
+export function chase(race: Race, target: RiderId, closing: number) {
+  return (): PlayerInput => {
+    const { riders } = race.snapshot();
+    const me = riders[PLAYER];
+    const them = riders[target];
+    const wanted = them.speed + closing;
+    return {
+      ...NO_INPUT,
+      steer: Math.max(-1, Math.min(1, 1.5 * (them.offset - me.offset))),
+      throttle: me.speed < wanted ? 1 : 0,
+      brake: me.speed > wanted + 1 ? 0.5 : 0,
+    };
+  };
 }

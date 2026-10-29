@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createRace, NO_INPUT, PLAYER, type PlayerInput, type Race, type RaceEvent, type RiderSnapshot, type Track } from ".";
-import { autopilot, player, secondsUntil, startedRace, STEPS_PER_SECOND } from "./test-helpers";
+import { autopilot, chase, player, secondsUntil, startedRace, STEPS_PER_SECOND } from "./test-helpers";
 
 type RiderFinished = Extract<RaceEvent, { type: "rider-finished" }>;
 
@@ -247,22 +247,6 @@ describe("the opponents", () => {
     );
   });
 });
-
-/** Input that rides up behind the opponent `target` at about `closing` m/s faster than it, steering straight at it. */
-function chase(race: Race, target: number, closing: number) {
-  return (): PlayerInput => {
-    const { riders } = race.snapshot();
-    const me = riders[PLAYER];
-    const them = riders[target];
-    const wanted = them.speed + closing;
-    return {
-      ...NO_INPUT,
-      steer: Math.max(-1, Math.min(1, 1.5 * (them.offset - me.offset))),
-      throttle: me.speed < wanted ? 1 : 0,
-      brake: me.speed > wanted + 1 ? 0.5 : 0,
-    };
-  };
-}
 
 describe("bumping", () => {
   it("bumps riders apart who run into each other at a small speed difference, instead of riding through", () => {
