@@ -12,6 +12,7 @@ import {
   type PlayerInput,
   type Race,
   type RaceEvent,
+  type RaceOptions,
   type RiderId,
   type RiderSnapshot,
   type Temperament,
@@ -30,9 +31,9 @@ export function stepFor(race: Race, seconds: number, input: PlayerInput = NO_INP
   for (let i = 0; i < steps; i++) race.step(input);
 }
 
-/** A race whose countdown has just run out. */
-export function startedRace(seed = 1) {
-  const race = createRace({ seed });
+/** A race whose countdown has just run out, set up with `options` besides the seed. */
+export function startedRace(seed = 1, options: Omit<RaceOptions, "seed"> = {}) {
+  const race = createRace({ ...options, seed });
   stepFor(race, 3);
   race.drainEvents();
   return race;
@@ -195,18 +196,19 @@ export function nearestOpponent(race: Race, temperament?: Temperament): RiderId 
 /**
  * A started race in which the player has ridden up alongside a racer (an
  * opponent who rarely attacks): the racer is the nearest rider within reach.
+ * The race is set up with `options` besides the seed.
  */
-export function alongsideARacer(seed = 1) {
-  return alongsideAn("racer", seed);
+export function alongsideARacer(seed = 1, options: Omit<RaceOptions, "seed"> = {}) {
+  return alongsideAn("racer", seed, options);
 }
 
 /**
  * A started race in which the player has ridden up alongside the opponent of
  * a temperament who lined up nearest them: that opponent is the nearest rider
- * within reach.
+ * within reach. The race is set up with `options` besides the seed.
  */
-export function alongsideAn(temperament: Temperament, seed = 1) {
-  const race = startedRace(seed);
+export function alongsideAn(temperament: Temperament, seed = 1, options: Omit<RaceOptions, "seed"> = {}) {
+  const race = startedRace(seed, options);
   const target = nearestOpponent(race, temperament);
   const input = rideAlongside(race, target);
   const racerNearest = () => {
