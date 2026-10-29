@@ -22,6 +22,10 @@ _Avoid_: Place, rank, standing
 Having finished a race in third position or better.
 _Avoid_: Won, passed
 
+**Remark**:
+A one-line comment on how the player's race went, from an opponent or a cop, shown with the results.
+_Avoid_: Quote, quip, taunt, banter
+
 ### Riders
 
 **Rider**:

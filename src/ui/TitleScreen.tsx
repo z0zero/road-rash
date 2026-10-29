@@ -5,11 +5,13 @@ import { formatPosition, formatRaceTime } from "./format";
 export function TitleScreen({
   personalBest,
   onStart,
+  onControls,
   onSettings,
   onCredits,
 }: {
   personalBest: PersonalBest;
   onStart: () => void;
+  onControls: () => void;
   onSettings: () => void;
   onCredits: () => void;
 }) {
@@ -21,6 +23,7 @@ export function TitleScreen({
         <Button autoFocus onClick={onStart}>
           Start Race
         </Button>
+        <Button onClick={onControls}>Controls</Button>
         <Button onClick={onSettings}>Settings</Button>
         <Button onClick={onCredits}>Credits</Button>
       </div>
@@ -40,7 +43,7 @@ export function TitleScreen({
 
 export function GameTitle() {
   return (
-    <h1 className="font-display text-7xl uppercase italic tracking-wide text-sun drop-shadow-[0_4px_0_rgba(27,16,38,0.9)] sm:text-8xl">
+    <h1 className="font-display text-6xl uppercase italic tracking-wide text-sun drop-shadow-[0_4px_0_rgba(27,16,38,0.9)] sm:text-8xl">
       Rev &amp; Wreck
     </h1>
   );
