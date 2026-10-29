@@ -6,7 +6,7 @@ import type { GameSession } from "@/game/session";
 import { PLAYER } from "@/race";
 import { BikeAndRider } from "./BikeAndRider";
 import { CameraShake } from "./camera-shake";
-import { ChaseCamera } from "./ChaseCamera";
+import { ChaseCamera, FIELD_OF_VIEW_DEGREES } from "./ChaseCamera";
 import { drawnTrack } from "./drawn-track";
 import { Obstacles } from "./Obstacles";
 import { PostProcessing } from "./PostProcessing";
@@ -68,7 +68,7 @@ export function Scene({ session, reduceMotion }: { session: GameSession; reduceM
         dpr={pixelRatio(quality, devicePixelRatio)}
         shadows="percentage"
         gl={{ antialias: false, powerPreference: "high-performance" }}
-        camera={{ fov: 64, near: 1, far: quality.drawDistance + 100 }}
+        camera={{ fov: FIELD_OF_VIEW_DEGREES, near: 1, far: quality.drawDistance + 100 }}
         onCreated={({ gl }) => {
           // A software renderer has no GPU to spare: start at the cheapest quality.
           if (isSoftwareRenderer(rendererName(gl))) {

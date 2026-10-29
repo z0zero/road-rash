@@ -165,7 +165,7 @@ export function playFinish(kit: Kit, out: AudioNode) {
 }
 
 /** The two tones of the siren, hertz, and how long each sounds before the other, seconds. */
-const SIREN_TONES = [960, 770];
+const SIREN_TONES_HZ = [960, 770];
 const SIREN_TONE_SECONDS = 0.55;
 const SIREN_LOUDNESS = 0.16;
 
@@ -179,7 +179,7 @@ export class Siren {
     out: AudioNode,
   ) {
     const now = kit.context.currentTime;
-    const [high, low] = SIREN_TONES;
+    const [high, low] = SIREN_TONES_HZ;
     const voice = tone(kit, "sawtooth", (high + low) / 2, now);
     // A slow square wave flips the pitch between the two tones; a low-pass softens each change.
     const flip = tone(kit, "square", 1 / (2 * SIREN_TONE_SECONDS), now);
