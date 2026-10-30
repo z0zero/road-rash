@@ -4,7 +4,7 @@ import { type Camera, PerspectiveCamera } from "three";
 import type { GameSession } from "@/game/session";
 import { PLAYER, TOP_SPEED, type AttackKind, type RaceEvent, type RiderOrCop } from "@/race";
 import type { CameraShake } from "./camera-shake";
-import type { RiderMotion } from "./rider-motion";
+import type { RiderMotion } from "./bike-motion";
 
 /** Where the camera sits relative to the player: metres behind along the track, above the road, and the look-ahead. */
 interface Framing {

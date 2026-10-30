@@ -34,6 +34,8 @@ export interface SessionState {
   readonly newBestPosition: boolean;
   /** The player's settings, as saved. */
   readonly settings: Settings;
+  /** The seed of the race on now, or last raced: `?seed=` in the page's address plays it again. */
+  readonly seed: number;
 }
 
 /**
@@ -90,7 +92,8 @@ export class GameSession {
 
   constructor(private readonly options: SessionOptions) {
     this.saveData = loadSaveData(options.storage);
-    this.race = createRace({ seed: options.newSeed() });
+    const seed = options.newSeed();
+    this.race = createRace({ seed });
     const snapshot = this.race.snapshot();
     this.frame = { track: this.race.track, previous: snapshot, current: snapshot, alpha: 1 };
     this.state = {
@@ -100,6 +103,7 @@ export class GameSession {
       newBestTime: false,
       newBestPosition: false,
       settings: this.saveData.settings,
+      seed,
     };
   }
 
@@ -130,8 +134,8 @@ export class GameSession {
 
   /** Starts a new race with its countdown, from any screen. */
   startRace = () => {
-    this.loadRace();
-    this.setState({ screen: "racing", results: null, newBestTime: false, newBestPosition: false });
+    const seed = this.loadRace();
+    this.setState({ screen: "racing", results: null, newBestTime: false, newBestPosition: false, seed });
   };
 
   restart = () => this.startRace();
@@ -150,8 +154,8 @@ export class GameSession {
   };
 
   quitToTitle = () => {
-    this.loadRace();
-    this.setState({ screen: "title", results: null, newBestTime: false, newBestPosition: false });
+    const seed = this.loadRace();
+    this.setState({ screen: "title", results: null, newBestTime: false, newBestPosition: false, seed });
   };
 
   /** Shows the Settings screen; only from the title screen. */
@@ -237,8 +241,10 @@ export class GameSession {
     });
   }
 
-  private loadRace() {
-    this.race = createRace({ seed: this.options.newSeed() });
+  /** Loads a new race, ready for its countdown, and returns its seed. */
+  private loadRace(): number {
+    const seed = this.options.newSeed();
+    this.race = createRace({ seed });
     const snapshot = this.race.snapshot();
     this.frame.track = this.race.track;
     this.frame.previous = snapshot;
@@ -246,6 +252,7 @@ export class GameSession {
     this.frame.alpha = 1;
     this.accumulator = 0;
     this.framesBeforeStepping = FRAMES_BEFORE_STEPPING;
+    return seed;
   }
 
   private setState(change: Partial<SessionState>) {

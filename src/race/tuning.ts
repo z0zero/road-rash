@@ -42,11 +42,13 @@ export const TUNING = {
    * Each attack: seconds from throwing it to its strike, and from the strike
    * until the next can be thrown; how far sideways it reaches (m); the stamina
    * it takes when it lands; and how fast it shoves its target sideways (m/s).
+   * A club swing's long wind-up is all the time it needs: it is ready again
+   * almost as it strikes, so a club knocks riders off sooner than fists.
    */
   attacks: {
     punch: { windUp: 0.12, recovery: 0.2, reachAcross: 1.8, stamina: 18, shove: 0 },
     kick: { windUp: 0.25, recovery: 0.3, reachAcross: 1.8, stamina: 6, shove: 6 },
-    "club-swing": { windUp: 0.3, recovery: 0.35, reachAcross: 2.4, stamina: 30, shove: 0 },
+    "club-swing": { windUp: 0.3, recovery: 0.05, reachAcross: 2.4, stamina: 30, shove: 0 },
   },
   /** A fresh rider's stamina; it runs down to 0... */
   fullStamina: 100,

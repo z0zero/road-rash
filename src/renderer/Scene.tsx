@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { type Camera, PerspectiveCamera, type WebGLRenderer } from "three";
 import type { GameSession } from "@/game/session";
 import { PLAYER } from "@/race";
-import { BikeAndRider } from "./BikeAndRider";
+import { BikeAndBody } from "./BikeAndBody";
 import { CameraShake } from "./camera-shake";
 import { ChaseCamera, FIELD_OF_VIEW_DEGREES } from "./ChaseCamera";
 import { drawnTrack } from "./drawn-track";
@@ -19,7 +19,7 @@ import {
   QualityRetries,
 } from "./quality";
 import { COP_LIVERY, liveryOf } from "./liveries";
-import { CopMotion, RiderMotion } from "./rider-motion";
+import { CopMotion, RiderMotion } from "./bike-motion";
 import { Scenery } from "./Scenery";
 import { Sea } from "./Sea";
 import { Sky } from "./Sky";
@@ -103,10 +103,10 @@ export function Scene({ session, reduceMotion }: { session: GameSession; reduceM
         <Obstacles track={drawn} />
         <Traffic session={session} />
         {motions.map((motion) => (
-          <BikeAndRider key={motion.rider} session={session} motion={motion} livery={liveryOf(motion.rider)} />
+          <BikeAndBody key={motion.rider} session={session} motion={motion} livery={liveryOf(motion.rider)} />
         ))}
         {copMotions.map((motion) => (
-          <BikeAndRider key={`cop-${motion.cop}`} session={session} motion={motion} livery={COP_LIVERY} cop />
+          <BikeAndBody key={`cop-${motion.cop}`} session={session} motion={motion} livery={COP_LIVERY} cop />
         ))}
         <ChaseCamera session={session} player={player} shake={shake} reduceMotion={reduceMotion} />
         <PostProcessing session={session} player={player} reduceMotion={reduceMotion} multisampling={software ? 0 : 4} />
