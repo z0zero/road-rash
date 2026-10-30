@@ -65,6 +65,7 @@ export default function Game() {
     audio.current?.unlock();
     session.restart();
   };
+  const inputDevice = () => controls.current?.lastUsed() ?? "keyboard";
 
   useEffect(() => {
     const pauseWhenHidden = () => {
@@ -113,7 +114,9 @@ export default function Game() {
       )}
       {state.screen === "controls" && <ControlsScreen onBack={session.backToTitle} />}
       {state.screen === "credits" && <CreditsScreen onBack={session.backToTitle} />}
-      {(state.screen === "racing" || state.screen === "paused") && <Hud session={session} reduceMotion={reduceMotion} />}
+      {(state.screen === "racing" || state.screen === "paused") && (
+        <Hud session={session} reduceMotion={reduceMotion} inputDevice={inputDevice} />
+      )}
       {state.screen === "paused" && (
         <PauseMenu seed={state.seed} onResume={session.resume} onRestart={restart} onQuit={session.quitToTitle} />
       )}

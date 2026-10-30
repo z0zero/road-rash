@@ -1,10 +1,14 @@
-import { useEffect, useRef, type RefObject } from "react";
+import { type ReactNode, useEffect, useRef, type RefObject } from "react";
 import type { GameSession } from "@/game/session";
+import { KEYS } from "@/input/bindings";
+import { GAMEPAD } from "@/input/gamepad";
+import type { InputDevice } from "@/input/player-controls";
 import { clamp } from "@/math";
 import {
   COP_FULL_STAMINA,
   FULL_CONDITION,
   FULL_STAMINA,
+  isPlayer,
   PLAYER,
   type RaceEvent,
   type RaceSnapshot,
@@ -13,6 +17,8 @@ import {
 import { liveryOf } from "@/renderer/liveries";
 import { ClubIcon } from "./ClubIcon";
 import { formatRaceTime, toKmh } from "./format";
+import { useKeyboardLabels } from "./key-names";
+import { Alternatives, keyCombos, padCombos } from "./KeyCaps";
 
 /** How long "GO!" stays up after the countdown, in seconds of race time. */
 const GO_SECONDS = 0.8;
@@ -20,17 +26,30 @@ const GO_SECONDS = 0.8;
 /** How long a callout, such as a club changing hands, stays up, in seconds of race time. */
 const CALLOUT_SECONDS = 1.8;
 
+/** How long the hit-back prompt stays up after a hit, unless the player attacks first, in seconds of race time. */
+const HIT_BACK_PROMPT_SECONDS = 4;
+
 /**
  * Position, speed, race time, progress along the track with a marker for
  * every rider, the 3-2-1 countdown, the player's stamina and bike condition,
  * a club icon while the player holds one, the nearest opponent's (or
  * cop's) name, stamina and club, warning arrows for riders alongside or
  * coming up from behind, the cop alert while a cop is near (its lights
- * flashing unless motion is reduced), and callouts when a club changes hands
- * with the player or a cop fights back, goes down or busts someone. It is
- * updated straight from the frame loop through refs, never through React state.
+ * flashing unless motion is reduced), callouts when a club changes hands
+ * with the player or a cop fights back, goes down or busts someone, and the
+ * hit-back prompt, naming the controls of `inputDevice`, the one the player is
+ * using. It is updated straight from the frame loop through refs, never
+ * through React state.
  */
-export function Hud({ session, reduceMotion }: { session: GameSession; reduceMotion: boolean }) {
+export function Hud({
+  session,
+  reduceMotion,
+  inputDevice,
+}: {
+  session: GameSession;
+  reduceMotion: boolean;
+  inputDevice: () => InputDevice;
+}) {
   const speed = useRef<HTMLSpanElement>(null);
   const position = useRef<HTMLSpanElement>(null);
   const clock = useRef<HTMLSpanElement>(null);
@@ -52,18 +71,35 @@ export function Hud({ session, reduceMotion }: { session: GameSession; reduceMot
   const callout = useRef<HTMLDivElement>(null);
   /** The stretch of race time the callout shows for. */
   const calloutShown = useRef({ from: 0, until: 0 });
+  const hitBackPrompt = useRef<HTMLDivElement>(null);
+  const hitBackKeys = useRef<HTMLDivElement>(null);
+  const hitBackButtons = useRef<HTMLDivElement>(null);
+  /** The stretch of race time the hit-back prompt shows for, unless the player attacks first. */
+  const hitBackShown = useRef({ from: 0, until: 0 });
   const riders = session.view.current.riders;
+  const labels = useKeyboardLabels();
 
   useEffect(
     () =>
       session.onRaceEvent((event) => {
-        const text = calloutFor(event, session.view.current);
-        if (!text) return;
-        setText(callout.current, text);
         const { clock } = session.view.current;
-        calloutShown.current = { from: clock, until: clock + CALLOUT_SECONDS };
+        const text = calloutFor(event, session.view.current);
+        if (text) {
+          setText(callout.current, text);
+          calloutShown.current = { from: clock, until: clock + CALLOUT_SECONDS };
+        }
+        // An opponent's hit on a player who has never attacked shows them how, on what they are riding with...
+        if (isAnOpponentsHitOnThePlayer(event) && !session.getState().settings.hasAttacked) {
+          const gamepad = inputDevice() === "gamepad";
+          setShown(hitBackKeys.current, !gamepad);
+          setShown(hitBackButtons.current, gamepad);
+          setShown(hitBackPrompt.current, true);
+          hitBackShown.current = { from: clock, until: clock + HIT_BACK_PROMPT_SECONDS };
+        }
+        // ...until they attack.
+        if (event.type === "attack-thrown" && isPlayer(event.attacker)) setShown(hitBackPrompt.current, false);
       }),
-    [session],
+    [session, inputDevice],
   );
 
   useEffect(
@@ -98,9 +134,11 @@ export function Hud({ session, reduceMotion }: { session: GameSession; reduceMot
         const copComing = current.cops.some((cop) => cop.busting === PLAYER);
         setText(status.current, statusOf(player, copComing));
         setShown(playerClub.current, player.weapon === "club");
-        // A callout goes once its time is up, or straight away in a race that has started over.
+        // A callout or the hit-back prompt goes once its time is up, or straight away in a race that has started over.
         const { from, until } = calloutShown.current;
         if (current.clock >= until || current.clock < from) setText(callout.current, "");
+        const prompt = hitBackShown.current;
+        if (current.clock >= prompt.until || current.clock < prompt.from) setShown(hitBackPrompt.current, false);
       }),
     [session],
   );
@@ -219,6 +257,28 @@ export function Hud({ session, reduceMotion }: { session: GameSession; reduceMot
           <Bar fill={condition} label="Bike condition" full={FULL_CONDITION} testId="condition" />
         </div>
       </div>
+      {/* Between the stamina and bike bars and the speed, wrapping onto two lines where it would reach them. */}
+      <div ref={hitBackPrompt} data-testid="hit-back-prompt" role="status" className="absolute inset-x-0 bottom-6 hidden">
+        <div
+          className={`mx-auto flex w-fit max-w-[max(20rem,calc(100vw-37rem))] flex-col items-center gap-2 rounded-xl border-2 border-sun/70 bg-night/85 px-6 pb-3 pt-2 shadow-lg ${reduceMotion ? "" : "animate-prompt-in"}`}
+        >
+          <div className="text-4xl uppercase italic leading-none tracking-wide text-sun drop-shadow-[0_3px_0_rgba(27,16,38,0.85)]">
+            Hit back!
+          </div>
+          <div ref={hitBackKeys} data-testid="hit-back-keys">
+            <PunchAndKick
+              punch={<Alternatives combos={keyCombos(KEYS.punch, labels)} large />}
+              kick={<Alternatives combos={keyCombos(KEYS.kick, labels)} large />}
+            />
+          </div>
+          <div ref={hitBackButtons} data-testid="hit-back-buttons" className="hidden">
+            <PunchAndKick
+              punch={<Alternatives combos={padCombos(GAMEPAD.punch)} large />}
+              kick={<Alternatives combos={padCombos(GAMEPAD.kick)} large />}
+            />
+          </div>
+        </div>
+      </div>
       <div className="absolute bottom-6 right-8 text-right drop-shadow-[0_3px_0_rgba(27,16,38,0.85)]">
         <span ref={speed} data-testid="speed" className="text-7xl italic tabular-nums">
           0
@@ -243,6 +303,27 @@ export function Hud({ session, reduceMotion }: { session: GameSession; reduceMot
       </div>
     </div>
   );
+}
+
+/** The hit-back prompt's line: the keys or buttons to punch with, then those to kick with. */
+function PunchAndKick({ punch, kick }: { punch: ReactNode; kick: ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
+      <span className="whitespace-nowrap">
+        {punch}
+        <span className="ml-2 text-2xl uppercase italic tracking-wide">to punch</span>
+      </span>
+      <span className="whitespace-nowrap">
+        {kick}
+        <span className="ml-2 text-2xl uppercase italic tracking-wide">to kick</span>
+      </span>
+    </div>
+  );
+}
+
+/** Whether an event is an opponent's hit landing on the player. */
+function isAnOpponentsHitOnThePlayer(event: RaceEvent): boolean {
+  return event.type === "attack-landed" && isPlayer(event.target) && event.attacker.kind === "rider";
 }
 
 /** A meter from 0 to `full`, at first full, whose fill the frame loop sizes and colours (and refills to its own full value). */

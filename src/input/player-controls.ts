@@ -4,11 +4,16 @@ import { listenToGamepads } from "./gamepad";
 import { listenToKeyboard } from "./keyboard";
 import { moveThroughMenu, pressInMenu } from "./menus";
 
+/** What the player rides and fights with. */
+export type InputDevice = "keyboard" | "gamepad";
+
 export interface PlayerControls {
   /** Reads the gamepads: call it once every animation frame, whatever the screen, so that Start pauses and resumes. */
   poll(): void;
   /** The player's input for one step, from the keyboard and the gamepads together. */
   read(): PlayerInput;
+  /** What the player last rode or fought with, so the screens can name its controls: the keyboard until a gamepad is used. */
+  lastUsed(): InputDevice;
   /** Stops listening. */
   dispose(): void;
 }
@@ -26,14 +31,28 @@ export function listenToPlayer(target: Window, onPause: () => void): PlayerContr
     onMenuMove: (direction) => moveThroughMenu(target.document, direction),
     onMenuPress: () => pressInMenu(target.document),
   });
+  let lastUsed: InputDevice = "keyboard";
   return {
     poll: () => gamepads.poll(),
-    read: () => combine(keyboard.read(), gamepads.read()),
+    read() {
+      const fromKeyboard = keyboard.read();
+      const fromGamepads = gamepads.read();
+      // The one doing something, if only one is: with both or neither, the player is still using the one they last did.
+      const keys = isDoingSomething(fromKeyboard);
+      if (keys !== isDoingSomething(fromGamepads)) lastUsed = keys ? "keyboard" : "gamepad";
+      return combine(fromKeyboard, fromGamepads);
+    },
+    lastUsed: () => lastUsed,
     dispose() {
       keyboard.dispose();
       gamepads.dispose();
     },
   };
+}
+
+/** Whether an input rides or fights at all: a pedal pressed, steering, or a punch or kick. */
+function isDoingSomething({ throttle, brake, steer, punch, kick }: PlayerInput): boolean {
+  return throttle > 0 || brake > 0 || steer !== 0 || punch || kick;
 }
 
 /** Two devices' input as one: the harder of the two on each pedal, their steering added up, and the presses of either. */
