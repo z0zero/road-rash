@@ -174,14 +174,23 @@ export function patrolIntent(
  * crashes close in front of a cop is caught, and one who crashes with it
  * following at its usual gap gets back on their bike first if they run
  * straight back to it. If they are behind it, it stops and rides back down the
- * road to them. Offsets stay within `edge`.
+ * road to them. It finds its way around the riders on the road (`field`, the
+ * motions of everyone on a bike) and the cars and obstacles on it as on
+ * patrol. Offsets stay within `edge`.
  */
-export function bustingIntent(me: Readonly<Motion>, rider: Place, edge: number): CopIntent {
+export function bustingIntent(
+  me: Readonly<Motion>,
+  rider: Place,
+  field: readonly Readonly<Motion>[],
+  carsAndObstacles: readonly Footprint[],
+  edge: number,
+): CopIntent {
   const gap = rider.distance - me.distance;
   const pullingUp = rider.speed + Math.sign(gap) * Math.sqrt(2 * PULL_UP_BRAKING * Math.abs(gap));
+  const beside = clamp(rider.offset - (rider.offset >= 0 ? 1 : -1) * PULL_UP_BESIDE, -edge, edge);
+  const { line, holdBehind } = lineAround(me, beside, field, carsAndObstacles, edge);
   const speed = clamp(pullingUp, -ARREST_PACE, ARREST_PACE);
-  const line = rider.offset - (rider.offset >= 0 ? 1 : -1) * PULL_UP_BESIDE;
-  return { speed, line: clamp(line, -edge, edge), hurrying: true };
+  return { speed: speed > 0 ? Math.min(speed, holdBehind) : speed, line, hurrying: true };
 }
 
 /** A cop fighting back swings its club about once every this many seconds. */

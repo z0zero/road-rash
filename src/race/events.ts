@@ -16,8 +16,8 @@ export type RiderOrCop = { readonly kind: "rider"; readonly id: RiderId } | { re
 
 export type AttackKind = "punch" | "kick" | "club-swing";
 
-/** What made a rider crash: a knock-off by a hit, or running into another rider, traffic or an obstacle. */
-export type CrashCause = "knocked-off" | "rider" | "traffic" | "obstacle";
+/** What made a rider crash: a knock-off by a hit, or running into another rider, a cop, traffic or an obstacle. */
+export type CrashCause = "knocked-off" | "rider" | "cop" | "traffic" | "obstacle";
 
 /** The three ways a rider's race ends. */
 export type RaceOutcome = "finished" | "wrecked" | "busted";
