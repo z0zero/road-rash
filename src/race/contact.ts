@@ -16,7 +16,7 @@ const BODY_SIZE = 0.6;
 const THROWN_SIDEWAYS = 3;
 
 /** A rider who ran into another bike too fast to bump it: they crash. */
-export interface RunIn<T> {
+interface RunIn<T> {
   /** The faster of the two. */
   readonly rider: T;
   /** The bike they ran into. */
@@ -37,7 +37,7 @@ export interface RunIn<T> {
  * `canCrash` not, when the two only bump. Pairs are taken in a fixed order, so
  * the outcome is deterministic.
  */
-export function settleContact<T extends { readonly motion: Motion }>(
+function settleContact<T extends { readonly motion: Motion }>(
   bikes: readonly T[],
   edge: number,
   canCrash: (bike: T) => boolean = () => true,
@@ -62,7 +62,7 @@ export function settleContact<T extends { readonly motion: Motion }>(
 }
 
 /** A rider who ran into a car or an obstacle too fast to bump off it: they crash. */
-export interface Impact<T> {
+interface Impact<T> {
   readonly rider: T;
   /** What they ran into. */
   readonly footprint: Footprint;
@@ -81,7 +81,7 @@ export interface Impact<T> {
  * what they ran into, to crash; unless they `canCrash` not, when they only
  * bump. Offsets stay within `edge`.
  */
-export function settleImpacts<T extends { readonly motion: Motion }>(
+function settleImpacts<T extends { readonly motion: Motion }>(
   riders: readonly T[],
   footprints: readonly Footprint[],
   edge: number,
@@ -144,7 +144,7 @@ function bumpOff(bike: Motion, footprint: Footprint, { along, across, overlapAlo
  * behind. A rider who runs into the back of a car going their way lands
  * behind it, going no faster than it, so it drives on away from them.
  */
-export function throwClearOf(footprint: Footprint, bike: Motion, body: Body, edge: number) {
+function throwClearOf(footprint: Footprint, bike: Motion, body: Body, edge: number) {
   const along = footprint.distance - bike.distance;
   const { velocity } = footprint;
   bike.distance = footprint.distance - Math.sign(along || 1) * (footprint.halfLength + BIKE_HALF_LENGTH + 0.05);
@@ -164,7 +164,7 @@ export function throwClearOf(footprint: Footprint, bike: Motion, body: Body, edg
 }
 
 /** The car (one of `cars`, by their footprints) running into a rider on foot at `body`, if any. */
-export function carRunningInto(body: Readonly<Body>, cars: readonly Footprint[]): Footprint | null {
+function carRunningInto(body: Readonly<Body>, cars: readonly Footprint[]): Footprint | null {
   return (
     cars.find(
       (car) =>
@@ -179,7 +179,7 @@ export function carRunningInto(body: Readonly<Body>, cars: readonly Footprint[])
  * `crash`: they tumble again, thrown along the road with it and sideways off
  * it. Returns how fast it hit them (m/s).
  */
-export function knockDownBy(car: Footprint, crash: Crash): number {
+function knockDownBy(car: Footprint, crash: Crash): number {
   const impactSpeed = Math.abs(car.velocity - crash.body.speed);
   const away = Math.sign(crash.body.offset - car.offset) || 1;
   knockDown(crash, car.velocity, away * THROWN_SIDEWAYS);
