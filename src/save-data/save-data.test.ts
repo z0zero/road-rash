@@ -36,7 +36,7 @@ describe("save data", () => {
   it("round-trips settings and the personal best under a single key", () => {
     const { storage, backing } = memoryStorage();
     const data: SaveData = {
-      settings: { masterVolume: 0.4, musicVolume: 0, effectsVolume: 0.9, reduceMotion: true },
+      settings: { masterVolume: 0.4, musicVolume: 0, effectsVolume: 0.9, reduceMotion: true, hasAttacked: true },
       personalBest: { time: 163.25, position: 2 },
     };
 
@@ -55,7 +55,7 @@ describe("save data", () => {
   it("keeps the valid parts of partly corrupt or incomplete data", () => {
     const storage = storageHolding(
       JSON.stringify({
-        settings: { masterVolume: "loud", musicVolume: 0.25, effectsVolume: 7, reduceMotion: "yes" },
+        settings: { masterVolume: "loud", musicVolume: 0.25, effectsVolume: 7, reduceMotion: "yes", hasAttacked: 1 },
         personalBest: { time: 171.5 },
       }),
     );
@@ -98,6 +98,17 @@ describe("the Reduce motion setting", () => {
       expect(isMotionReduced(settings, true)).toBe(choice);
       expect(isMotionReduced(settings, false)).toBe(choice);
     }
+  });
+});
+
+describe("remembering that the player has attacked in a race", () => {
+  it("says they haven't until it is saved that they have, and says so after a reload", () => {
+    const { storage } = memoryStorage();
+    expect(loadSaveData(storage).settings.hasAttacked).toBe(false);
+
+    storeSaveData(storage, { ...DEFAULT_SAVE_DATA, settings: { ...DEFAULT_SAVE_DATA.settings, hasAttacked: true } });
+
+    expect(loadSaveData(storage).settings.hasAttacked).toBe(true);
   });
 });
 
