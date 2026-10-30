@@ -95,8 +95,8 @@ function SaidAfterTheRace({ remark }: { remark: Remark }) {
           />
         ) : (
           <span aria-hidden="true" className="flex shrink-0 gap-0.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-[#ff2a3d]" />
-            <span className="h-2.5 w-2.5 rounded-full bg-[#2a7dff]" />
+            <span className="h-2.5 w-2.5 rounded-full bg-cop-red" />
+            <span className="h-2.5 w-2.5 rounded-full bg-cop-blue" />
           </span>
         )}
         {remark.name}

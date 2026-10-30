@@ -14,9 +14,17 @@ _Avoid_: Match, round, stage, level
 The stretch of road a race is run on.
 _Avoid_: Course, map, route
 
+**Start grid**:
+Where the riders line up for the start: the player last, the opponents ahead of them in groups of two or three.
+_Avoid_: Spawn, starting line-up
+
 **Position**:
 A rider's rank in the race, from first (the leader) to last. Wrecked and busted riders have no position.
 _Avoid_: Place, rank, standing
+
+**Standings**:
+Every rider's final position and finishing time once the race is over, or how their race ended, as the results list them. One rider's row is never "a standing": it is their position.
+_Avoid_: Ranking, leaderboard, scoreboard
 
 **Qualified**:
 Having finished a race in third position or better.
@@ -48,6 +56,18 @@ _Avoid_: Rubber-banding
 How an opponent races and fights: a *racer* concentrates on racing and rarely attacks, a *brawler* attacks often, and a *bully* attacks often and starts the race with a weapon. "Racer" names a temperament here, never a rider.
 _Avoid_: Personality, style, AI type
 
+**Skill**:
+How close to the limit an opponent rides, from 0 (the least skilled) to 1 (the most). Racers are the most skilled.
+_Avoid_: Level, difficulty, rating
+
+**Pace**:
+How fast an opponent rides when nothing gets in its way: a share of the fastest it could safely go at each point of the track, higher the more skilled it is. Catch-up and its intent raise or lower it a little.
+_Avoid_: Target speed, cruising speed
+
+**Intent**:
+What an opponent is riding for at the moment: just racing, riding up alongside a rider to fight them, or dropping back.
+_Avoid_: AI state, mode, goal
+
 **Bike**:
 The motorcycle a rider races on.
 _Avoid_: Motorcycle, motorbike, vehicle
@@ -65,23 +85,27 @@ How intact a bike is, from full to empty. It drops with every crash, and a bike 
 _Avoid_: Damage, durability, bike health
 
 **Bump**:
-Two riders on their bikes running into each other at a small speed difference and being pushed apart, without either of them crashing.
+A rider on their bike running into another rider on a bike, a car or an obstacle at a small speed difference (under 8 m/s) and being pushed apart, without crashing.
 _Avoid_: Nudge, collision
+
+**Run-in**:
+Two riders on their bikes running into each other at a larger speed difference than a bump: the faster of the two crashes.
+_Avoid_: Collision, impact
 
 **Crash**:
 A rider being thrown off their bike, either by a hit or by running into something. After a crash the rider is on foot and runs back to their bike.
 _Avoid_: Wipeout, bail, fall, spill
 
 **Knock-off**:
-A crash caused by a hit landing on a rider who has no stamina left. A cop with no stamina left is knocked off by the next hit too, and is out of the race.
-_Avoid_: KO, knockdown
+A crash caused by a hit landing on a rider who has no stamina left. A cop with no stamina left is knocked off by the next hit too, and is out of the race. Not a knock-down, which only a car does, to a rider on foot.
+_Avoid_: KO, knocked out
 
 **On foot**:
 A rider off their bike after a crash, once they have stopped tumbling along the road: they run back to their bike and get back on it, which is remounting.
 _Avoid_: Running, walking, dismounted
 
 **Knock-down**:
-A car running into a rider on foot and throwing them to the ground: they tumble again, then get up and carry on back to their bike. It is not a crash, so it costs their bike nothing.
+A car running into a rider on foot and throwing them to the ground: they tumble again, then get up and carry on back to their bike. It is not a crash, so it costs their bike nothing. Not a knock-off, which a hit does.
 _Avoid_: Run over, hit
 
 **Wrecked**:
@@ -91,11 +115,11 @@ _Avoid_: Totaled, destroyed, DNF
 ### Fighting
 
 **Attack**:
-A punch, kick or weapon swing aimed at the nearest rider within reach. Punches and weapon swings lower stamina; a kick mostly shoves its target sideways.
+A punch, kick or club swing aimed at the nearest rider within reach. Punches and club swings lower stamina; a kick mostly shoves its target sideways.
 _Avoid_: Strike, move, hit (for the action)
 
 **Reach**:
-How far from an attacker an attack can land: up to 2 m along the track and, on either side, 1.8 m across it (2.4 m for a weapon swing).
+How far from an attacker an attack can land: up to 2 m along the track and, on either side, 1.8 m across it (2.4 m for a club swing).
 _Avoid_: Range
 
 **Wind-up**:
@@ -110,6 +134,10 @@ _Avoid_: Retreating, fleeing
 A club a rider swings instead of punching. A rider takes one by hitting its holder in the middle of a swing, and drops it in a crash.
 _Avoid_: Item, power-up, tool
 
+**Club swing**:
+The attack a rider holding a club makes instead of a punch.
+_Avoid_: Weapon swing, swipe, bash
+
 ### The road
 
 **Lane**:
@@ -121,7 +149,7 @@ The strip of gravel beyond either edge of the road, where a bike slows sharply a
 _Avoid_: Verge, kerb
 
 **Car**:
-One vehicle of the traffic: a hatchback, saloon, van or pickup, driving in the race direction in the right lanes or oncoming in the left lanes. Some change lanes now and then.
+One of the traffic's cars: a hatchback, saloon, van or pickup, driving in the race direction in the right lanes or oncoming in the left lanes. Some change lanes now and then.
 _Avoid_: Vehicle, NPC
 
 **Closed road**:
@@ -129,12 +157,16 @@ A road with no traffic, which a race can be set up on.
 _Avoid_: Empty road, private road
 
 **Traffic**:
-Civilian vehicles on the road that are not part of the race.
+The civilians' cars on the road, which are not part of the race.
 _Avoid_: NPC cars, obstacles
 
 **Obstacle**:
-A fixed object on or beside the road, such as a rock or a sign, that makes a rider who runs into it crash.
+A fixed object on or beside the road, such as a rock or a sign, that makes a rider who runs into it crash, unless they run into it slower than 8 m/s, when they only bump off it.
 _Avoid_: Hazard, barrier
+
+**Footprint**:
+Where a car or an obstacle is on the road, how much of it it covers and how fast it moves along it: what riders steer around and run into.
+_Avoid_: Hitbox, bounds
 
 **Scenery**:
 Everything beside the road that nobody can hit: palms, pines, rocks, houses, signs and guard rails beyond the shoulders.
@@ -143,6 +175,14 @@ _Avoid_: Props, decoration
 **Cop**:
 A police officer on a motorcycle who rides among the riders and busts anyone who crashes nearby. Two cops wait on the shoulder and join the race as the player passes them, then stay near the player.
 _Avoid_: Police, officer
+
+**Patrol**:
+What a cop in the race does when nobody needs busting: riding near the player, dropping back behind one who rides fast and coming past one who rides slowly.
+_Avoid_: Chase, pursuit
+
+**Standing by**:
+A cop staying beside a rider it has busted for a few seconds before riding on.
+_Avoid_: Waiting, idling
 
 **Cop alert**:
 The warning on the HUD, with the siren, that a cop in the race is near the player: within 150 m.

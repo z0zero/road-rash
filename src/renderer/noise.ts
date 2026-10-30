@@ -1,3 +1,5 @@
+import { smoothstep } from "@/math";
+
 /**
  * Repeatable randomness for building the world: the same numbers every time,
  * so the coast, its scenery and its models look the same in every race.
@@ -14,7 +16,7 @@ export function hash(n: number): number {
 export function smoothNoise(t: number, seed: number): number {
   const i = Math.floor(t);
   const f = t - i;
-  const u = f * f * (3 - 2 * f);
+  const u = smoothstep(0, 1, f);
   const a = hash(i * 7919 + seed * 104729);
   const b = hash((i + 1) * 7919 + seed * 104729);
   return a + (b - a) * u;

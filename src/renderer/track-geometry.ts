@@ -1,5 +1,6 @@
-import { BufferGeometry, Color, Float32BufferAttribute } from "three";
+import { type BufferGeometry, Color } from "three";
 import type { Track, WorldPoint } from "@/race";
+import { geometryFrom } from "./low-poly";
 
 /** Metres between the road mesh's cross-sections. */
 const SECTION = 2;
@@ -34,11 +35,7 @@ class Triangles {
   }
 
   build(): BufferGeometry {
-    const geometry = new BufferGeometry();
-    geometry.setAttribute("position", new Float32BufferAttribute(this.positions, 3));
-    geometry.setAttribute("color", new Float32BufferAttribute(this.colors, 3));
-    geometry.computeVertexNormals();
-    return geometry;
+    return geometryFrom(this.positions, this.colors);
   }
 }
 
