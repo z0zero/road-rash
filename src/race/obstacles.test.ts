@@ -1,35 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { NO_INPUT, PLAYER, type ObstaclePlacement, type PlayerInput, type Race, type RaceEvent } from ".";
+import { NO_INPUT, PLAYER, type ObstaclePlacement, type Race, type RaceEvent } from ".";
 import {
   autopilot,
   eventsDuring,
   eventsUntil,
   NO_COPS,
   player,
+  rideInto,
   secondsUntil,
   startedRace,
   stepFor,
-  STEPS_PER_SECOND,
 } from "./test-helpers";
 
 type Crash = Extract<RaceEvent, { type: "crash" }>;
 const playerCrashed = (event: RaceEvent): event is Crash => event.type === "crash" && event.rider === PLAYER;
-
-/** Input that rides at about `speed` straight at `obstacle`, lined up with it. */
-function rideInto(race: Race, obstacle: ObstaclePlacement, speed: number) {
-  let lastOffset = player(race).offset;
-  return (): PlayerInput => {
-    const me = player(race);
-    const sideways = (me.offset - lastOffset) * STEPS_PER_SECOND;
-    lastOffset = me.offset;
-    return {
-      ...NO_INPUT,
-      steer: Math.max(-1, Math.min(1, 0.8 * (obstacle.offset - me.offset) - 0.25 * sideways)),
-      throttle: me.speed < speed ? 1 : 0,
-      brake: me.speed > speed + 1 ? Math.min(1, (me.speed - speed) / 4) : 0,
-    };
-  };
-}
 
 /**
  * A started race in which the field has ridden off, leaving the player on

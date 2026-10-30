@@ -86,6 +86,62 @@ export function opponentIntent(
 }
 
 /**
+ * Brawlers and bullies take turns at fighting the player: one that wants to
+ * while another has its turn waits its turn this many metres behind them...
+ */
+const WAITING_GAP = 8;
+
+/**
+ * What a brawler or bully that wants to fight the player does while another
+ * has its turn: behind the player, it waits its turn `WAITING_GAP` behind
+ * them, riding at its fighting pace to keep up; level with them or ahead, it
+ * just races, so it never slows down in their way.
+ */
+export function waitingIntent(me: Readonly<Motion>, player: Readonly<Motion>): Intent {
+  if (me.distance >= player.distance) return RACING;
+  return { alongside: { ...player, distance: player.distance - WAITING_GAP }, paceShare: FIGHTING_PACE };
+}
+
+/**
+ * Whose turn it is to fight the player, of the brawlers and bullies that want
+ * to (`wanting`): the one whose turn it is already (`current`) for as long as
+ * it wants to, or else the one nearest the player along the track; nobody if
+ * none wants to.
+ */
+export function whoseTurn<T extends { readonly motion: Readonly<Motion> }>(
+  current: T | null,
+  wanting: readonly T[],
+  player: Readonly<Motion>,
+): T | null {
+  if (current && wanting.includes(current)) return current;
+  let nearest: T | null = null;
+  for (const rider of wanting) {
+    const gap = Math.abs(rider.motion.distance - player.distance);
+    if (!nearest || gap < Math.abs(nearest.motion.distance - player.distance)) nearest = rider;
+  }
+  return nearest;
+}
+
+/** The player is fighting an opponent back while they have hit it within this many steps... */
+const FIGHTING_BACK_STEPS = stepsIn(5);
+/** ...and otherwise, once an opponent's hit lands on them, it gives them this many steps before attacking them again. */
+const BREATHER_STEPS = stepsIn(3);
+
+/** Whether the player is fighting back against an opponent they last hit `stepsSinceThePlayerHitIt` steps ago. */
+export function isFightingBack(stepsSinceThePlayerHitIt: number): boolean {
+  return stepsSinceThePlayerHitIt <= FIGHTING_BACK_STEPS;
+}
+
+/**
+ * How many steps an opponent whose hit has just landed on the player gives
+ * them before it attacks them again: none while they fight it back, so a
+ * brawl is a brawl, but a breather for a player who doesn't hit back.
+ */
+export function breatherAfterHitting(stepsSinceThePlayerHitIt: number): number {
+  return isFightingBack(stepsSinceThePlayerHitIt) ? 0 : BREATHER_STEPS;
+}
+
+/**
  * How many times a second an opponent of each temperament attacks the player
  * when the player is within its reach and it is free to. A bully attacks less
  * readily than a brawler, as its club hits hard and is ready again almost as

@@ -492,8 +492,9 @@ describe("riding with the pack in traffic", () => {
       expect(gotPast).toBeGreaterThan(400);
     });
 
-    it("rarely crash into one, though they still can: no more than once a race among the whole field", () => {
-      expect(crashedInto).toBeGreaterThan(0);
+    // They can still crash into one (a car with no way round it, a kick into one), but so seldom that six races may
+    // see none.
+    it("rarely crash into one: no more than once a race among the whole field", () => {
       expect(crashedInto).toBeLessThanOrEqual(races.length);
     });
   });
