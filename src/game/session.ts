@@ -1,5 +1,6 @@
 import {
   createRace,
+  isPlayer,
   NO_INPUT,
   STEP_SECONDS,
   type PlayerInput,
@@ -213,6 +214,10 @@ export class GameSession {
     this.frame.current = this.race.snapshot();
     for (const event of this.race.drainEvents()) {
       for (const listener of this.eventListeners) listener(event);
+      // Once the player has attacked in a race, the HUD never prompts them to hit back again.
+      if (event.type === "attack-thrown" && isPlayer(event.attacker) && !this.saveData.settings.hasAttacked) {
+        this.changeSettings({ hasAttacked: true });
+      }
       if (event.type === "player-race-over") {
         this.showResults();
         return;
