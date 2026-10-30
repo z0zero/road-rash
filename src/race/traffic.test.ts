@@ -151,6 +151,31 @@ describe("traffic", () => {
     }
   });
 
+  it("queues behind a car stopped ahead of it in its lane, rather than running into it", () => {
+    // The player stops in a lane going their way and stands there, so that the cars coming up behind them queue up.
+    const race = startedRace(1, NO_COPS);
+    secondsUntil(race, autopilot(race, { lane: 1.5 }), () => player(race).distance > race.track.startDistance + 1000, 60);
+    const inEachOther: string[] = [];
+    let queued = 0;
+    eventsDuring(race, 90, () => {
+      const { traffic, clock } = race.snapshot();
+      const stopped = traffic.filter((car) => !car.oncoming && car.speed < 0.5 && car.distance < player(race).distance);
+      queued = Math.max(queued, stopped.length);
+      for (const car of traffic) {
+        for (const other of traffic) {
+          if (other.id <= car.id || other.oncoming !== car.oncoming) continue;
+          const along = Math.abs(car.distance - other.distance) < (car.length + other.length) / 2;
+          if (along && Math.abs(car.offset - other.offset) < (car.width + other.width) / 2) inEachOther.push(`${clock.toFixed(1)} s: cars ${car.id} and ${other.id}`);
+        }
+      }
+      const me = player(race);
+      return me.speed > 0 ? { ...NO_INPUT, brake: 1, steer: Math.max(-1, Math.min(1, 1.5 - me.offset)) } : { ...NO_INPUT, brake: 1 };
+    });
+
+    expect(queued).toBeGreaterThanOrEqual(2);
+    expect([...new Set(inEachOther.map((entry) => entry.split(": ")[1]))]).toEqual([]);
+  });
+
   it("stays off a closed road", () => {
     const race = startedRace(1, { traffic: false });
     const pilot = autopilot(race);
