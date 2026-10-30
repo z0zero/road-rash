@@ -145,7 +145,7 @@ One of the road's four 3 m strips: the two right of the centreline carry traffic
 _Avoid_: Carriageway
 
 **Shoulder**:
-The strip of gravel beyond either edge of the road, where a bike slows sharply and obstacles stand. Nobody rides beyond it.
+The strip of gravel beyond either edge of the road, where a bike slows sharply and obstacles stand. Nobody rides beyond it. A rider on a shoulder is off the road.
 _Avoid_: Verge, kerb
 
 **Car**:

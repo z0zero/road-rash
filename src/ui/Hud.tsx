@@ -47,15 +47,11 @@ export function Hud({ session, reduceMotion }: { session: GameSession; reduceMot
   const callout = useRef<HTMLDivElement>(null);
   /** The stretch of race time the callout shows for. */
   const calloutShown = useRef({ from: 0, until: 0 });
-  /** Whether the player last went down because a car knocked them down while on foot, rather than in a crash. */
-  const knockedDown = useRef(false);
   const riders = session.view.current.riders;
 
   useEffect(
     () =>
       session.onRaceEvent((event) => {
-        if (event.type === "crash" && event.rider === PLAYER) knockedDown.current = false;
-        if (event.type === "knocked-down" && event.rider === PLAYER) knockedDown.current = true;
         const text = calloutFor(event, session.view.current);
         if (!text) return;
         setText(callout.current, text);
@@ -95,7 +91,7 @@ export function Hud({ session, reduceMotion }: { session: GameSession; reduceMot
         setShown(warnRight.current, current.warnings.right);
         setShown(copAlert.current, current.cops.some((cop) => cop.near));
         const copComing = current.cops.some((cop) => cop.busting === PLAYER);
-        setText(status.current, statusOf(player, knockedDown.current, copComing));
+        setText(status.current, statusOf(player, copComing));
         setShown(playerClub.current, player.weapon === "club");
         // A callout goes once its time is up, or straight away in a race that has started over.
         const { from, until } = calloutShown.current;
@@ -290,14 +286,13 @@ function calloutFor(event: RaceEvent, { riders, cops }: RaceSnapshot): string | 
 
 /**
  * What the player is doing, if they are off their bike: tumbling after a
- * crash, or after a car `knockedDown` them, then on foot, with a cop riding
+ * crash, or after a car knocked them down, then on foot, with a cop riding
  * to bust them from the moment it sets off if `copComing`.
  */
-function statusOf(player: RiderSnapshot, knockedDown: boolean, copComing: boolean): string {
-  if (player.status !== "racing") return "";
-  if (player.crash === "tumbling") return `${knockedDown ? "Knocked down!" : "Crash!"}${copComing ? " Cop coming!" : ""}`;
+function statusOf(player: RiderSnapshot, copComing: boolean): string {
+  if (player.status !== "racing" || player.crash === null) return "";
   if (player.crash === "on-foot") return copComing ? "Cop coming! Back to your bike!" : "Back to your bike!";
-  return "";
+  return `${player.crash === "knocked-down" ? "Knocked down!" : "Crash!"}${copComing ? " Cop coming!" : ""}`;
 }
 
 /** Green when fresh, yellow when tiring, red when nearly out. */

@@ -87,7 +87,7 @@ function aim(
   reduceMotion: boolean,
   delta: number,
 ) {
-  const { track } = session.view;
+  const { track, current } = session.view;
   const { screen } = session.getState();
   // In a race, paused or not, and on its results; every menu shows the title view.
   const racing = screen === "racing" || screen === "paused" || screen === "results";
@@ -95,7 +95,7 @@ function aim(
   const { distance, offset, speed } = player.pose;
 
   const rumble = speed > RUMBLE_SPEED ? (RUMBLE * (speed - RUMBLE_SPEED)) / (FULL_SPEED - RUMBLE_SPEED) : 0;
-  const offRoad = player.offRoad && speed > 8 ? OFF_ROAD_RUMBLE : 0;
+  const offRoad = current.riders[PLAYER].offRoad && speed > 8 ? OFF_ROAD_RUMBLE : 0;
   shake.update(screen === "paused" ? 0 : delta, racing ? Math.max(rumble, offRoad) : 0, reduceMotion || screen === "paused");
 
   const eye = track.pointAt(distance - framing.behind, offset * 0.85);

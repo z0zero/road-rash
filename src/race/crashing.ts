@@ -2,8 +2,12 @@ import { clamp, type Motion } from "./riding";
 import { STEP_SECONDS, stepsIn } from "./steps";
 import { TUNING } from "./tuning";
 
-/** Where a crashed rider is in getting back on: tumbling just after the crash, then on foot running back to the bike. */
-export type CrashPhase = "tumbling" | "on-foot";
+/**
+ * Where a crashed rider is in getting back on: tumbling just after the crash,
+ * then on foot running back to the bike; knocked down while they tumble again
+ * after a car has run into them on foot, then on foot again.
+ */
+export type CrashPhase = "tumbling" | "knocked-down" | "on-foot";
 
 /** A rider's own motion while off their bike, in track space. */
 export interface Body {
@@ -41,7 +45,7 @@ export function throwOff(bike: Readonly<Motion>): Crash {
 
 /** Knocks a rider on foot down: they tumble again, thrown along the track at `speed` and sideways at `sideways` (m/s). */
 export function knockDown(crash: Crash, speed: number, sideways: number): void {
-  crash.phase = "tumbling";
+  crash.phase = "knocked-down";
   crash.steps = 0;
   crash.body.speed = speed;
   crash.body.sideways = sideways;
@@ -83,10 +87,10 @@ export function remount(bike: Motion): void {
   bike.kickShove = 0;
 }
 
-/** Moves a crashed rider on by a step: tumbling to a stop, then on foot, running back to their bike. */
+/** Moves a crashed rider on by a step: tumbling to a stop (after a crash or a knock-down), then on foot, running back to their bike. */
 export function carryOn(crash: Crash, bike: Readonly<Motion>, controls: OnFootControls, edge: number): void {
   crash.steps++;
-  if (crash.phase === "tumbling") {
+  if (crash.phase !== "on-foot") {
     tumble(crash, edge);
     if (crash.steps >= TUMBLE_STEPS) {
       crash.phase = "on-foot";
