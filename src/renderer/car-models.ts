@@ -60,9 +60,13 @@ const BUMPER = "#34343b";
 const CHROME = "#b9bcc2";
 const GRILLE = "#1f1f25";
 const BED_LINER = "#2b2a2f";
-/** The lamps glow brighter than white, so they bloom: the headlamps bright, the tail lamps a deep red glow. */
+/**
+ * The lamps glow brighter than white, so they bloom: the headlamps bright,
+ * and the tail lamps a red glow bright enough to bloom a little too, so a car
+ * ahead, its back in shadow against the low sun, can be seen in time.
+ */
 const HEADLAMP = new Color("#fff1cf").multiplyScalar(3.2);
-const TAIL_LAMP = new Color("#ff2a1a").multiplyScalar(1.7);
+const TAIL_LAMP = new Color("#ff2a1a").multiplyScalar(5);
 
 const WHEEL_RADIUS = 0.32;
 
@@ -112,7 +116,7 @@ class CarParts {
     const { width } = this;
     for (const side of [-1, 1]) {
       this.lamps.add(new BoxGeometry(0.32, 0.12, 0.04), HEADLAMP, { at: [side * (width / 2 - 0.27), height, front - 0.01] }, 0);
-      this.lamps.add(new BoxGeometry(0.2, 0.16, 0.04), TAIL_LAMP, { at: [side * (width / 2 - 0.17), tailHeight, back + 0.01] }, 0);
+      this.lamps.add(new BoxGeometry(0.26, 0.18, 0.04), TAIL_LAMP, { at: [side * (width / 2 - 0.2), tailHeight, back + 0.01] }, 0);
     }
     this.trim.add(new BoxGeometry(width * 0.42, 0.14, 0.03), GRILLE, { at: [0, height - 0.02, front - 0.005] }, 0.02);
     return this;
