@@ -138,7 +138,8 @@ function bumpOff(bike: Motion, footprint: Footprint, { along, across, overlapAlo
  * bike stops against it, clear of it on the side it came from, going no
  * faster than it; and the rider is thrown clear of it, sideways away from it,
  * and on along the road, at least as fast as a car that caught them from
- * behind.
+ * behind. A rider who runs into the back of a car going their way lands
+ * behind it, going no faster than it, so it drives on away from them.
  */
 export function throwClearOf(footprint: Footprint, bike: Motion, body: Body, edge: number) {
   const along = footprint.distance - bike.distance;
@@ -151,7 +152,12 @@ export function throwClearOf(footprint: Footprint, bike: Motion, body: Body, edg
   bike.offset = clamp(bike.offset, -edge, edge);
   const away = Math.sign(body.offset - footprint.offset) || 1;
   body.sideways = away * Math.max(Math.abs(body.sideways), THROWN_SIDEWAYS);
-  body.speed = Math.max(body.speed, velocity);
+  if (along > 0 && velocity > 0) {
+    body.distance = Math.min(body.distance, footprint.distance - footprint.halfLength - BODY_SIZE / 2 - 0.05);
+    body.speed = Math.min(body.speed, velocity);
+  } else {
+    body.speed = Math.max(body.speed, velocity);
+  }
 }
 
 /** The car (one of `cars`, by their footprints) running into a rider on foot at `body`, if any. */
