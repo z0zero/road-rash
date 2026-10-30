@@ -76,7 +76,7 @@ function racerKnockedOffJustPastTheFirstCop(seed = 1) {
  * cop, has knocked it off with the cop following them at speed at its usual
  * gap, about 1.5 s behind them at their speed, and within 80 m.
  */
-function racerKnockedOffAheadOfTheFollowingCop(seed = 2) {
+function racerKnockedOffAheadOfTheFollowingCop(seed = 3) {
   const alongside = alongsideARacerPastTheFirstCop(seed);
   const { race, target, input } = alongside;
   const cop = () => race.snapshot().cops[0];
@@ -323,7 +323,7 @@ describe("fighting a cop", () => {
 
 describe("the cop alert", () => {
   it("is on while a cop in the race is within 150 m of the player: cop-near as one comes that close at up to 66 m/s, faster than any bike, cop-gone as it leaves", () => {
-    const { race, target, input } = alongsideARacer(2);
+    const { race, target, input } = alongsideARacer(3);
     const them = () => race.snapshot().riders[target];
     const cop = () => race.snapshot().cops[0];
     const near = new Set<number>();
