@@ -1,10 +1,8 @@
-import type { Crash } from "./crashing";
 import type { RaceOutcome, RiderId, RiderOrCop } from "./events";
-import type { Attack, Weapon } from "./fighting";
+import type { FighterState } from "./fighting";
 import type { Patience } from "./opponent-fighting";
 import type { OpponentRiding } from "./opponent-riding";
 import type { Temperament } from "./opponents";
-import type { Motion } from "./riding";
 import type { Moving } from "./track";
 
 /** The player is always rider 0. */
@@ -30,28 +28,17 @@ export interface Opponent extends RiderState {
   readonly riding: OpponentRiding;
 }
 
-/** What the race keeps track of for every rider, the player or an opponent. */
-interface RiderState {
+/** What the race keeps track of for every rider, the player or an opponent, besides what it does for anyone who fights. */
+interface RiderState extends FighterState {
   readonly kind: "rider";
   readonly id: RiderId;
   readonly name: string;
-  /** The bike's motion, which is the rider's too while they ride it. */
-  readonly motion: Motion;
   status: RiderStatus;
   finishTime: number | null;
   /** 1 for the first rider over the finish line, 2 for the next, and so on. */
   finishOrder: number | null;
-  stamina: number;
   /** The bike's condition. */
   condition: number;
-  /** Steps since the rider was last hit (Infinity if never). */
-  stepsSinceHit: number;
-  /** The attack the rider is making, or null. */
-  attack: Attack | null;
-  /** The weapon the rider holds, or null. */
-  weapon: Weapon | null;
-  /** Null while the rider is on their bike; how they are getting back to it after a crash. */
-  crash: Crash | null;
   /** Whether an opponent is badly beaten and dropping back until it has recovered. */
   droppingBack: boolean;
   /** How long an opponent will still ride alongside the player if they ride slowly, and whether it has given up on them. */
