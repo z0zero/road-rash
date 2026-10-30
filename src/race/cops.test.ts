@@ -261,7 +261,8 @@ describe("busting", () => {
     expect(events).not.toContainEqual({ type: "remounted", rider: target });
     // Caught as they got to their feet, the tumble over.
     expect(them().crash).toBe("on-foot");
-    expect(race.snapshot().clock - crashedAt).toBeGreaterThanOrEqual(1.2);
+    // At least 1.2 s, to the step: the clock adds up steps, so it can fall a hair short of a whole number of them.
+    expect(race.snapshot().clock - crashedAt).toBeGreaterThan(1.2 - 1e-9);
   });
 
   it("lets a rider go who crashes with the cop over 60 m off and runs straight back to their bike: the cop closes in at an arrest pace", () => {

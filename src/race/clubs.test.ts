@@ -2,12 +2,16 @@ import { describe, expect, it } from "vitest";
 import { createRace, NO_INPUT, PLAYER, type AttackKind, type RaceEvent, type RiderId } from ".";
 import {
   alongsideAn,
+  autopilot,
   eventsDuring,
   eventsUntil,
+  nearestWithinReach,
   player,
   punchedMidSwing,
   rideAlongside,
   secondsUntil,
+  startedRace,
+  STEPS_PER_SECOND,
 } from "./test-helpers";
 
 type AttackThrown = Extract<RaceEvent, { type: "attack-thrown" }>;
@@ -103,8 +107,40 @@ describe("clubs", () => {
   });
 });
 
+describe("holding a club", () => {
+  it("lasts while the player keeps swinging it: opponents seldom throw a hit into a swing, so a holding usually lasts 10 s or more", () => {
+    // Whole races in which the player rides on autopilot and mashes the punch button whenever anyone is within reach.
+    const holdings: { seconds: number; stolen: boolean }[] = [];
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      const race = startedRace(seed);
+      const riding = autopilot(race);
+      let heldFrom: number | null = null;
+      let { riders } = race.snapshot();
+      for (let step = 0; riders[PLAYER].status === "racing" && step < 300 * STEPS_PER_SECOND; step++) {
+        const me = riders[PLAYER];
+        const someoneInReach = nearestWithinReach(riders, me, me.weapon === "club" ? "club-swing" : "punch") !== null;
+        race.step({ ...riding(), punch: someoneInReach && step % 8 === 0 });
+        const stolen = race.drainEvents().some((event) => event.type === "weapon-stolen" && event.from.id === PLAYER);
+        ({ riders } = race.snapshot());
+        const holding = riders[PLAYER].weapon === "club";
+        if (holding && heldFrom === null) heldFrom = step;
+        if (!holding && heldFrom !== null) {
+          holdings.push({ seconds: (step - heldFrom) / STEPS_PER_SECOND, stolen });
+          heldFrom = null;
+        }
+      }
+      // Held to the end of the player's race.
+      if (heldFrom !== null) holdings.push({ seconds: Infinity, stolen: false });
+    }
+
+    expect(holdings.length).toBeGreaterThanOrEqual(5);
+    expect(holdings.filter((holding) => holding.seconds >= 10).length).toBeGreaterThanOrEqual(0.75 * holdings.length);
+    expect(holdings.filter((holding) => holding.stolen).length).toBeLessThanOrEqual(0.25 * holdings.length);
+  });
+});
+
 describe("stealing a club", () => {
-  it("takes it from its holder with a hit landing in the middle of their swing, which then never lands", () => {
+  it("takes it from its holder with a hit thrown early in their swing's wind-up, which then never lands", () => {
     const { race, target, events } = punchedMidSwing();
 
     expect(events).toContainEqual({ type: "attack-landed", attacker: ME, target: rider(target), kind: "punch" });
@@ -114,7 +150,29 @@ describe("stealing a club", () => {
     expect(events.filter(isSwingLandingOn(PLAYER))).toEqual([]);
   });
 
-  it("doesn't happen with a hit landing after the swing has struck", () => {
+  it("takes it with a hit thrown at any moment of the wind-up, even late in it: the hit lands after the swing has struck", () => {
+    const { race, target, input } = alongsideAn("bully");
+    const lateInTheWindUp = () => {
+      const attack = race.snapshot().riders[target].attack;
+      return attack?.kind === "club-swing" && attack.stage === "wind-up" && attack.progress >= 0.8;
+    };
+    secondsUntil(race, input, lateInTheWindUp, 30);
+    race.drainEvents();
+
+    // Thrown about 0.25 s into the 0.3 s wind-up, a punch takes a little over 0.1 s to land, after the swing strikes.
+    race.step({ ...input(), punch: true });
+    const events = [...race.drainEvents(), ...eventsDuring(race, 0.25, input)];
+
+    const punchLanded = events.findIndex((event) => event.type === "attack-landed" && event.attacker.id === PLAYER);
+    const swingLanded = events.findIndex((event) => event.type === "attack-landed" && event.attacker.id === target);
+    expect(swingLanded).toBeGreaterThanOrEqual(0);
+    expect(punchLanded).toBeGreaterThan(swingLanded);
+    expect(events).toContainEqual({ type: "weapon-stolen", from: rider(target), by: ME });
+    expect(player(race).weapon).toBe("club");
+    expect(race.snapshot().riders[target].weapon).toBeNull();
+  });
+
+  it("doesn't happen with a hit thrown after the swing has struck", () => {
     const { race, target, input } = alongsideAn("bully");
     const swingJustStruck = () => {
       const attack = race.snapshot().riders[target].attack;

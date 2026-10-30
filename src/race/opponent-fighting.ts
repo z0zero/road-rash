@@ -45,18 +45,24 @@ export function opponentIntent(
 
 /** How many times a second an opponent of each temperament attacks the player when the player is within its reach... */
 const ATTACKS_PER_SECOND: Record<Temperament, number> = { racer: 0.1, brawler: 1.8, bully: 1.8 };
-/** ...and, as a share of that, another opponent within its reach. */
+/** ...and, as a share of that, another opponent within its reach... */
 const AT_EACH_OTHER = 0.1;
+/**
+ * ...and, as a further share, a rider winding up a club swing: a hit thrown
+ * then would take their club, but few dare to throw one into a swing.
+ */
+const INTO_A_SWING = 0.05;
 /** The share of opponents' attacks that are kicks rather than punches. */
 const KICKS = 0.3;
 
 /**
  * Whether an opponent of a temperament attacks this step, and with what,
  * when the nearest rider within its reach is the player (`atThePlayer`) or
- * another opponent.
+ * another opponent, and whether that rider is winding up a club swing
+ * (`intoASwing`).
  */
-export function opponentAttack(temperament: Temperament, atThePlayer: boolean, random: Random): AttackKind | null {
-  const rate = ATTACKS_PER_SECOND[temperament] * (atThePlayer ? 1 : AT_EACH_OTHER);
+export function opponentAttack(temperament: Temperament, atThePlayer: boolean, intoASwing: boolean, random: Random): AttackKind | null {
+  const rate = ATTACKS_PER_SECOND[temperament] * (atThePlayer ? 1 : AT_EACH_OTHER) * (intoASwing ? INTO_A_SWING : 1);
   if (!random.chance(rate * STEP_SECONDS)) return null;
   return random.chance(KICKS) ? "kick" : "punch";
 }
