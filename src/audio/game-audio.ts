@@ -37,13 +37,28 @@ export interface GameAudio {
   /**
    * Creates the audio context, or resumes it. Call it straight from a click
    * that starts a race (Start Race, Restart): browsers only let sound start
-   * from a click or a key press. Never throws: if the browser blocks sound,
-   * the game carries on without it.
+   * from a click or a key press. Where a gamepad pressed the button, a browser
+   * may keep the sound locked until the next key press or click. Never
+   * throws: if the browser blocks sound, the game carries on without it.
    */
   unlock(): void;
   /** Stops everything and lets go of the browser's audio. */
   dispose(): void;
 }
+
+/**
+ * A browser that lets the sound start does so at once; one still holding it
+ * back this long after a race asked for it (milliseconds) is keeping it
+ * locked until a key press or click.
+ */
+const LOCKED_AFTER_MS = 1000;
+
+/**
+ * The input that browsers let sound start from: a key press, a click or a
+ * tap. (A gamepad's press counts in some browsers, but not in Safari, nor in
+ * Firefox before 155.)
+ */
+const GESTURES = ["keydown", "mousedown", "pointerup", "touchend"] as const;
 
 /** The music's level while the game is paused: it ducks under the pause menu. */
 const PAUSED_MUSIC_LEVEL = 0.3;
@@ -88,14 +103,27 @@ const LOUDEST_GRAVEL_SPEED = 25;
 /**
  * Starts the game's sound. Call it once the title screen is up: it fetches the
  * music straight away, so the music is ready when the race starts. Nothing
- * plays until `unlock`.
+ * plays until `unlock`. A browser can keep the sound locked even then, as
+ * some do when a gamepad starts the race: `onLockChange` hears when it does,
+ * and when the sound starts after all, from the next key press or click.
  */
-export function startGameAudio(session: SoundSource): GameAudio {
+export function startGameAudio(session: SoundSource, onLockChange: (locked: boolean) => void = () => {}): GameAudio {
   const loading = new AbortController();
   const musicBytes = fetchMusic(loading.signal);
   let sound: Sound | null = null;
   /** Set once the sound has broken: the game carries on without it from then on. */
   let broken = false;
+  /** Whether the browser is keeping the sound locked, as `onLockChange` last heard. */
+  let locked = false;
+  let lockCheck: number | undefined;
+
+  const setLocked = (now: boolean) => {
+    if (now === locked) return;
+    locked = now;
+    onLockChange(now);
+  };
+  /** Whether the browser is holding the sound back: there is sound, the page can be seen, but it isn't playing. */
+  const heldBack = () => sound !== null && !document.hidden && sound.context.state !== "running";
 
   /** Runs `action` on the sound, if there is any; if the sound breaks, the game carries on without it. */
   const withSound = (action: (sound: Sound) => void) => {
@@ -107,6 +135,7 @@ export function startGameAudio(session: SoundSource): GameAudio {
       sound.close();
       sound = null;
       broken = true;
+      setLocked(false);
     }
   };
 
@@ -117,6 +146,11 @@ export function startGameAudio(session: SoundSource): GameAudio {
   const stopHearingFrames = session.onFrame((view) => withSound((sound) => sound.frame(view)));
   const followVisibility = () => withSound((sound) => sound.setAudible(!document.hidden));
   document.addEventListener("visibilitychange", followVisibility);
+  /** A key press or click while the browser holds the sound back asks it again to play it: now it may. */
+  const askAgain = () => {
+    if (heldBack()) withSound((sound) => sound.setAudible(true));
+  };
+  for (const gesture of GESTURES) window.addEventListener(gesture, askAgain, { capture: true, passive: true });
 
   return {
     unlock() {
@@ -125,6 +159,9 @@ export function startGameAudio(session: SoundSource): GameAudio {
         sound = Sound.create();
         if (!sound) return;
         const context = sound.context;
+        context.addEventListener("statechange", () => {
+          if (context.state === "running") setLocked(false);
+        });
         void musicBytes
           .then((bytes) => (bytes ? context.decodeAudioData(bytes) : null))
           .catch(() => null)
@@ -136,6 +173,8 @@ export function startGameAudio(session: SoundSource): GameAudio {
         sound.setAudible(true);
         sound.follow(session.getState());
       });
+      window.clearTimeout(lockCheck);
+      lockCheck = window.setTimeout(() => setLocked(heldBack()), LOCKED_AFTER_MS);
     },
     dispose() {
       loading.abort();
@@ -143,6 +182,8 @@ export function startGameAudio(session: SoundSource): GameAudio {
       stopHearingEvents();
       stopHearingFrames();
       document.removeEventListener("visibilitychange", followVisibility);
+      for (const gesture of GESTURES) window.removeEventListener(gesture, askAgain, { capture: true });
+      window.clearTimeout(lockCheck);
       sound?.close();
       sound = null;
     },
