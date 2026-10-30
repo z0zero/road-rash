@@ -33,6 +33,8 @@ export function listenToKeyboard(target: Window, onPause: () => void): Keyboard 
   const keyDown = (event: KeyboardEvent) => {
     // Sliders and other form controls keep their own keys, such as the arrows.
     if (event.target instanceof HTMLInputElement) return;
+    // Browser shortcuts stay the browser's: Ctrl+P prints, Cmd+D bookmarks.
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
     if (PAUSE.includes(event.code)) {
       event.preventDefault();
       if (!event.repeat) onPause();
@@ -48,6 +50,8 @@ export function listenToKeyboard(target: Window, onPause: () => void): Keyboard 
   };
   const keyUp = (event: KeyboardEvent) => {
     held.delete(event.code);
+    // On a Mac, a key let go of while Cmd is down never says so, so letting go of Cmd lets go of every key.
+    if (event.key === "Meta") held.clear();
   };
   const releaseAll = () => {
     held.clear();
