@@ -30,7 +30,12 @@ export function throwOff(bike: Readonly<Motion>): Crash {
   return {
     phase: "tumbling",
     steps: 0,
-    body: { distance: bike.distance, offset: bike.offset, speed: bike.speed, sideways: bike.steering + bike.shove },
+    body: {
+      distance: bike.distance,
+      offset: bike.offset,
+      speed: bike.speed,
+      sideways: bike.steering + bike.shove + bike.kickShove,
+    },
   };
 }
 
@@ -46,11 +51,12 @@ export function knockDown(crash: Crash, speed: number, sideways: number): void {
 export function slide(bike: Motion, edge: number): void {
   bike.speed = Math.max(0, bike.speed - TUNING.slideDeceleration * STEP_SECONDS);
   bike.distance += bike.speed * STEP_SECONDS;
-  bike.offset = clamp(bike.offset + (bike.steering + bike.shove) * STEP_SECONDS, -edge, edge);
+  bike.offset = clamp(bike.offset + (bike.steering + bike.shove + bike.kickShove) * STEP_SECONDS, -edge, edge);
   // Its sideways slide dies away too, and stops when the bike does.
   const settle = bike.speed > 0 ? Math.exp(-TUNING.sideSlideDecay * STEP_SECONDS) : 0;
   bike.steering *= settle;
   bike.shove *= settle;
+  bike.kickShove *= settle;
 }
 
 /** How a rider on foot is steered: running straight at the bike, turned left or right of it, or stopped by braking. */
@@ -74,6 +80,7 @@ export function remount(bike: Motion): void {
   bike.speed = TUNING.remountSpeed;
   bike.steering = 0;
   bike.shove = 0;
+  bike.kickShove = 0;
 }
 
 /** Moves a crashed rider on by a step: tumbling to a stop, then on foot, running back to their bike. */

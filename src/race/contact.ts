@@ -138,6 +138,7 @@ export function throwClearOf(footprint: Footprint, bike: Motion, body: Body, edg
   bike.speed = Math.max(0, along > 0 ? Math.min(bike.speed, velocity) : velocity);
   bike.steering = 0;
   bike.shove = 0;
+  bike.kickShove = 0;
   bike.offset = clamp(bike.offset, -edge, edge);
   const away = Math.sign(body.offset - footprint.offset) || 1;
   body.sideways = away * Math.max(Math.abs(body.sideways), THROWN_SIDEWAYS);
