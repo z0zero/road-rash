@@ -32,6 +32,8 @@ function subscribe(listener: () => void): () => void {
       void navigator.keyboard
         .getLayoutMap()
         .then((map) => {
+          // A browser that knows no keyboard (a headless one, say) gives an empty map: as good as none.
+          if (map.size === 0) return;
           labels = map;
           for (const told of listeners) told();
         })

@@ -62,11 +62,12 @@ const GRILLE = "#1f1f25";
 const BED_LINER = "#2b2a2f";
 /**
  * The lamps glow brighter than white, so they bloom: the headlamps bright,
- * and the tail lamps a red glow bright enough to bloom a little too, so a car
- * ahead, its back in shadow against the low sun, can be seen in time.
+ * the tail lamps a deep red glow, big and bright enough that a car ahead, its
+ * back in shadow against the low sun, can be seen in time, though not so
+ * bright that tone mapping turns them orange.
  */
 const HEADLAMP = new Color("#fff1cf").multiplyScalar(3.2);
-const TAIL_LAMP = new Color("#ff2a1a").multiplyScalar(5);
+const TAIL_LAMP = new Color("#ff1a10").multiplyScalar(2.6);
 
 const WHEEL_RADIUS = 0.32;
 
