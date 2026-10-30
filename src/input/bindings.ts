@@ -11,6 +11,7 @@ export type KeyAction = "throttle" | "brake" | "steerLeft" | "steerRight" | "pun
 export interface Key {
   /** By place, not by letter, so that W/A/S/D sit in the same place on any layout. */
   readonly code: string;
+  /** Its name on a US keyboard; the screens show the player's own keyboard's label instead where the browser can say it. */
   readonly name: string;
 }
 
@@ -49,9 +50,4 @@ export const KEYS: Readonly<Record<KeyAction, readonly Key[]>> = {
 /** The keys' codes, for matching key presses. */
 export function codesOf(keys: readonly Key[]): readonly string[] {
   return keys.map((key) => key.code);
-}
-
-/** The keys' names, as a sentence says them: "J or Z". */
-export function namesOf(keys: readonly Key[]): string {
-  return keys.map((key) => key.name).join(" or ");
 }

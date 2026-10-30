@@ -2,7 +2,7 @@ import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import { BackSide, type Mesh, type ShaderMaterial, type ShaderMaterialParameters, Vector2, type Vector3 } from "three";
 import { groundDirection } from "./geography";
-import { STOP_NAN_GLSL, SUNSET, sunsetHazeGlsl } from "./sunset";
+import { STOP_NAN_GLSL, SUNSET, sunsetSkyGlsl } from "./sunset";
 
 const vertexShader = /* glsl */ `
   varying vec3 vDirection;
@@ -17,9 +17,6 @@ const vertexShader = /* glsl */ `
 
 function fragmentShader(sun: Vector3) {
   return /* glsl */ `
-    uniform vec3 zenith;
-    uniform vec3 upperSky;
-    uniform vec3 lowerSky;
     uniform vec3 haze;
     uniform vec3 sunColor;
     uniform vec3 sunDirection;
@@ -27,7 +24,7 @@ function fragmentShader(sun: Vector3) {
     uniform float time;
     varying vec3 vDirection;
 
-    ${sunsetHazeGlsl(sun)}
+    ${sunsetSkyGlsl(sun)}
 
     float hash(vec2 p) {
       p = fract(p * vec2(123.34, 456.21));
@@ -63,10 +60,7 @@ function fragmentShader(sun: Vector3) {
       float up = direction.y;
       float towardsSun = max(dot(direction, sunDirection), 0.0);
 
-      vec3 sky = mix(lowerSky, upperSky, smoothstep(0.03, 0.32, up));
-      sky = mix(sky, zenith, smoothstep(0.3, 0.95, up));
-      sky = sunsetHaze(sky, direction);
-      vec3 color = mix(sunsetHaze(haze, direction), sky, smoothstep(0.0, 0.14, up));
+      vec3 color = sunsetSky(direction);
 
       // Streaks of cloud on a high, flat layer, lit from below by the low sun.
       if (up > 0.015) {
@@ -113,9 +107,6 @@ export function Sky({ sun, seaHeading }: { sun: Vector3; seaHeading: number }) {
       vertexShader,
       fragmentShader: fragmentShader(sun),
       uniforms: {
-        zenith: { value: SUNSET.zenith },
-        upperSky: { value: SUNSET.upperSky },
-        lowerSky: { value: SUNSET.lowerSky },
         haze: { value: SUNSET.haze },
         sunColor: { value: SUNSET.sun },
         sunDirection: { value: sun },
