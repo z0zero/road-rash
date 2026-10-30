@@ -1,6 +1,6 @@
 import type { RiderId } from "@/race";
 
-/** A rider's colours: their bike's bodywork, its stripes and wheel rims, their jacket and their helmet. */
+/** A rider's or a cop's colours: their bike's bodywork, its stripes and wheel rims, their jacket and their helmet. */
 export interface Livery {
   readonly paint: string;
   readonly accent: string;

@@ -89,7 +89,7 @@ async function startRacing(page: Page) {
   await expect(page.getByTestId("countdown")).toHaveText("GO!");
 }
 
-async function hudSpeed(page: Page) {
+async function hudSpeedKmh(page: Page) {
   return Number(await page.getByTestId("speed").textContent());
 }
 
@@ -105,13 +105,13 @@ test("shows the player's position out of fifteen, starting last, and a progress 
 
 test("raises the HUD's speed while the throttle is held", async ({ page }) => {
   await startRacing(page);
-  expect(await hudSpeed(page)).toBe(0);
+  expect(await hudSpeedKmh(page)).toBe(0);
 
   await page.keyboard.down("w");
   await play(page, 3);
   await page.keyboard.up("w");
 
-  expect(await hudSpeed(page)).toBeGreaterThan(40);
+  expect(await hudSpeedKmh(page)).toBeGreaterThan(40);
 });
 
 test("pauses on Esc, offering resume, restart and quit to title", async ({ page }) => {
@@ -132,6 +132,15 @@ test("pauses on Esc, offering resume, restart and quit to title", async ({ page 
 
   await menu.getByRole("button", { name: "Quit to title" }).click();
   await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
+});
+
+test("shows the race's seed on the pause menu, and races the seed the page's address asks for", async ({ page }) => {
+  await page.goto("/?seed=1234");
+  await startRacing(page);
+
+  await page.keyboard.press("Escape");
+
+  await expect(page.getByRole("dialog", { name: "Paused" }).getByTestId("race-seed")).toHaveText(/^Race seed 1234$/i);
 });
 
 test("pauses by itself when the browser tab is hidden", async ({ page }) => {
@@ -180,7 +189,7 @@ test("punches and kicks with J and K while riding", async ({ page }) => {
   }
   await page.keyboard.up("w");
 
-  expect(await hudSpeed(page)).toBeGreaterThan(0);
+  expect(await hudSpeedKmh(page)).toBeGreaterThan(0);
 });
 
 /** Buttons of the standard gamepad mapping, named as on an Xbox controller. */
@@ -195,8 +204,8 @@ interface FakeGamepad {
 
 declare global {
   interface Window {
-    /** Set in the page by `plugInAGamepad`. */
-    fakeGamepad: FakeGamepad;
+    /** Set in the page by `plugInAGamepad`; the game itself never has it. */
+    fakeGamepad?: FakeGamepad;
   }
 }
 
@@ -229,9 +238,21 @@ function plugInAGamepad() {
 /** The page's fake gamepad, from the test. */
 function gamepad(page: Page) {
   return {
-    press: (button: number, value = 1) => page.evaluate(([b, v]) => window.fakeGamepad.press(b, v), [button, value]),
-    release: (button: number) => page.evaluate((b) => window.fakeGamepad.release(b), button),
-    push: (x: number, y: number) => page.evaluate(([px, py]) => window.fakeGamepad.push(px, py), [x, y]),
+    press: (button: number, value = 1) =>
+      page.evaluate(([b, v]) => {
+        if (!window.fakeGamepad) throw new Error("No gamepad plugged in: add plugInAGamepad first");
+        window.fakeGamepad.press(b, v);
+      }, [button, value]),
+    release: (button: number) =>
+      page.evaluate((b) => {
+        if (!window.fakeGamepad) throw new Error("No gamepad plugged in: add plugInAGamepad first");
+        window.fakeGamepad.release(b);
+      }, button),
+    push: (x: number, y: number) =>
+      page.evaluate(([px, py]) => {
+        if (!window.fakeGamepad) throw new Error("No gamepad plugged in: add plugInAGamepad first");
+        window.fakeGamepad.push(px, py);
+      }, [x, y]),
   };
 }
 
@@ -246,17 +267,17 @@ test.describe("with a gamepad", () => {
 
     await gamepad(page).press(GAMEPAD.rightTrigger);
     await play(page, 3);
-    const fast = await hudSpeed(page);
-    expect(fast).toBeGreaterThan(40);
+    const fastKmh = await hudSpeedKmh(page);
+    expect(fastKmh).toBeGreaterThan(40);
     await gamepad(page).release(GAMEPAD.rightTrigger);
     await gamepad(page).press(GAMEPAD.leftTrigger);
     await play(page, 1);
-    const braked = await hudSpeed(page);
-    expect(braked).toBeLessThan(fast - 25);
+    const brakedKmh = await hudSpeedKmh(page);
+    expect(brakedKmh).toBeLessThan(fastKmh - 25);
     await gamepad(page).release(GAMEPAD.leftTrigger);
     await gamepad(page).press(GAMEPAD.a);
     await play(page, 2);
-    expect(await hudSpeed(page)).toBeGreaterThan(braked + 15);
+    expect(await hudSpeedKmh(page)).toBeGreaterThan(brakedKmh + 15);
 
     await gamepad(page).press(GAMEPAD.start);
     await play(page, 0.2);
@@ -269,17 +290,17 @@ test.describe("with a gamepad", () => {
     await page.keyboard.down("w");
     await gamepad(page).press(GAMEPAD.rightTrigger);
     await play(page, 3);
-    const riding = await hudSpeed(page);
+    const ridingKmh = await hudSpeedKmh(page);
 
     await page.evaluate(() => window.dispatchEvent(new Event("blur")));
     await play(page, 2);
-    const coasting = await hudSpeed(page);
-    expect(coasting).toBeLessThan(riding);
+    const coastingKmh = await hudSpeedKmh(page);
+    expect(coastingKmh).toBeLessThan(ridingKmh);
 
     // The gamepad's trigger, still held, counts again once the window has focus back.
     await page.evaluate(() => window.dispatchEvent(new Event("focus")));
     await play(page, 2);
-    expect(await hudSpeed(page)).toBeGreaterThan(coasting + 10);
+    expect(await hudSpeedKmh(page)).toBeGreaterThan(coastingKmh + 10);
     await page.keyboard.up("w");
   });
 
@@ -345,7 +366,7 @@ test("credits the music and disclaims any tie to Road Rash, from the title scree
 
   const credits = page.getByRole("dialog", { name: "Credits" });
   await expect(credits).toBeVisible();
-  await expect(credits.getByText("Joth")).toBeVisible();
+  await expect(credits.getByText("MintoDog")).toBeVisible();
   await expect(credits.getByText("CC0")).toBeVisible();
   await expect(credits).toContainText("inspired by Road Rash");
   await expect(credits).toContainText("not affiliated with Road Rash or Electronic Arts");
@@ -447,8 +468,8 @@ interface SoundSpy {
 
 declare global {
   interface Window {
-    /** Set in the page by `spyOnSound`. */
-    soundSpy: SoundSpy;
+    /** Set in the page by `spyOnSound`; the game itself never has it. */
+    soundSpy?: SoundSpy;
   }
 }
 
@@ -481,12 +502,16 @@ function spyOnSound() {
 
 /** The state of every audio context the page made, oldest first. */
 function audioStates(page: Page) {
-  return page.evaluate(() => window.soundSpy.contexts.map((context) => context.state));
+  return page.evaluate(() => {
+    if (!window.soundSpy) throw new Error("No spy on the sound: add spyOnSound first");
+    return window.soundSpy.contexts.map((context) => context.state);
+  });
 }
 
 /** The loudest sample going to the speakers right now, from 0 (silence) up. */
 function loudness(page: Page) {
   return page.evaluate(() => {
+    if (!window.soundSpy) throw new Error("No spy on the sound: add spyOnSound first");
     let peak = 0;
     for (const output of window.soundSpy.outputs) {
       const samples = new Float32Array(output.fftSize);
@@ -552,7 +577,7 @@ for (const [behaviour, blockAudio] of [
     await startRacing(page);
     await page.keyboard.down("w");
     await play(page, 3);
-    expect(await hudSpeed(page)).toBeGreaterThan(40);
+    expect(await hudSpeedKmh(page)).toBeGreaterThan(40);
     await page.keyboard.up("w");
     await page.keyboard.press("Escape");
     await page.getByRole("dialog", { name: "Paused" }).getByRole("button", { name: "Restart" }).click();
@@ -592,10 +617,13 @@ test.describe("on a touch-only phone or tablet", () => {
     await expect(page.locator("canvas")).toHaveCount(0);
   });
 
-  test("lets a player who has a keyboard or gamepad there play anyway", async ({ page }) => {
-    await page.getByRole("button", { name: /Play anyway/ }).click();
+  test("lets a player who has a keyboard or gamepad there play anyway, by pressing a key", async ({ page }) => {
+    await expect(page.getByRole("button")).toHaveCount(0);
+
+    await page.keyboard.press("Space");
 
     await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
+    await expect(page.getByTestId("countdown")).toHaveCount(0);
   });
 });
 
