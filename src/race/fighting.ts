@@ -60,7 +60,7 @@ export function attackStage({ kind, steps }: Attack): { stage: "wind-up" | "reco
 }
 
 /** Steps from throwing an attack to its strike. */
-export function windUpSteps(kind: AttackKind): number {
+function windUpSteps(kind: AttackKind): number {
   return stepsIn(TUNING.attacks[kind].windUp);
 }
 
@@ -70,7 +70,7 @@ export function isMidSwing(attack: Attack | null): boolean {
 }
 
 /** Steps from throwing an attack until its attacker can throw the next. */
-export function attackSteps(kind: AttackKind): number {
+function attackSteps(kind: AttackKind): number {
   return windUpSteps(kind) + stepsIn(TUNING.attacks[kind].recovery);
 }
 
@@ -83,7 +83,7 @@ export function withinReach(attacker: Readonly<Motion>, target: Readonly<Motion>
 }
 
 /** Which way `target` lies sideways from `attacker`: 1 for right, -1 for left (right when level). */
-export function awayFrom(attacker: Readonly<Motion>, target: Readonly<Motion>): Side {
+function awayFrom(attacker: Readonly<Motion>, target: Readonly<Motion>): Side {
   return target.offset >= attacker.offset ? 1 : -1;
 }
 

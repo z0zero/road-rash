@@ -84,7 +84,7 @@ export const STAND_STILL: OnFootControls = { steer: 0, brake: 1 };
 const TUMBLE_STEPS = stepsIn(TUNING.tumbleSeconds);
 
 /** Whether a crashed rider is on foot and close enough to their bike to get back on. */
-export function canRemount(crash: Crash, bike: Readonly<Motion>): boolean {
+function canRemount(crash: Crash, bike: Readonly<Motion>): boolean {
   const { body } = crash;
   return crash.phase === "on-foot" && Math.hypot(bike.distance - body.distance, bike.offset - body.offset) <= TUNING.remountReach;
 }
