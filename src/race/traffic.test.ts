@@ -380,10 +380,14 @@ describe("riding with the pack in traffic", () => {
   /** Every lane change, and those that moved a car over into the path of a rider in the lane it moved into. */
   let laneChanges = 0;
   const intoARider: string[] = [];
+  /** Cars that drove into a fallen rock on the road, and the steps cars spent driving past one. */
+  const throughARock: string[] = [];
+  let pastARock = 0;
   for (const seed of races) {
     const race = startedRace(seed, NO_COPS);
     const pilot = autopilot(race, { targetSpeed: 48 });
     const { laneWidth } = race.track;
+    const fallenRocks = race.track.obstacles.filter((obstacle) => obstacle.kind === "fallen-rock");
     /** Every car seen so far, and its offset in the last snapshot. */
     const lastOffsets = new Map(race.snapshot().traffic.map((car) => [car.id, car.offset]));
     /** Every car and obstacle an opponent is coming up to with it in its path, by "rider: thing". */
@@ -400,6 +404,13 @@ describe("riding with the pack in traffic", () => {
       /** Riders on their bikes in the lane whose middle is at `lane`. */
       const inTheLane = (lane: number) => onTheirBikes.filter((rider) => Math.abs(rider.offset - lane) < laneWidth / 2);
       for (const car of traffic) {
+        for (const rock of fallenRocks) {
+          const along = Math.abs(rock.distance - car.distance);
+          if (along < car.length / 2 + 10) pastARock++;
+          if (along < car.length / 2 + rock.radius && Math.abs(rock.offset - car.offset) < car.width / 2 + rock.radius) {
+            throughARock.push(`seed ${seed} at ${clock.toFixed(1)} s: car ${car.id}`);
+          }
+        }
         const last = lastOffsets.get(car.id);
         lastOffsets.set(car.id, car.offset);
         if (last === undefined) {
@@ -448,6 +459,11 @@ describe("riding with the pack in traffic", () => {
     it("change lanes out of the riders' way: never into the path of a rider close by in the lane they move into", () => {
       expect(laneChanges).toBeGreaterThan(30);
       expect(intoARider).toEqual([]);
+    });
+
+    it("keep clear of the fallen rocks on the road: none drives into one", () => {
+      expect(pastARock).toBeGreaterThan(100);
+      expect([...new Set(throughARock)]).toEqual([]);
     });
   });
 
