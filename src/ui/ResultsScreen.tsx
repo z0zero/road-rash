@@ -13,9 +13,10 @@ const BANNERS: Record<RaceOutcome, string> = { finished: "Finished", wrecked: "W
  * The buttons can't be pressed, or take the focus, until this long after the
  * results come up (milliseconds), when Restart takes the focus unless the
  * player has already moved it to a button. A gamepad's A presses the button
- * in focus, and A is also a throttle, so a rider still pressing it as the
- * race ends, or pushing the stick that moves the focus, would otherwise
- * restart the race before they had read the results.
+ * in focus and its B goes back to the title, but A is also a throttle and B
+ * a kick, so a rider still pressing them as the race ends, or pushing the
+ * stick that moves the focus, would otherwise leave the results before they
+ * had read them.
  */
 const FOCUS_RESTART_AFTER_MS = 1500;
 
@@ -104,7 +105,7 @@ export function ResultsScreen({
             <Button ref={restart} onClick={onRestart}>
               Restart
             </Button>
-            <Button onClick={onTitle}>Back to title</Button>
+            <Button data-back onClick={onTitle}>Back to title</Button>
           </div>
           <RaceSeed seed={seed} />
         </div>

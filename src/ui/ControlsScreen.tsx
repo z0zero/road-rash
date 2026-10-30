@@ -56,7 +56,7 @@ export function ControlsScreen({ onBack }: { onBack: () => void }) {
         <p>After a crash, steer to run back to your bike, and brake to stand still.</p>
         {labels === null && <p>The letter keys are where they are on a US keyboard, whatever yours are labelled.</p>}
       </div>
-      <Button autoFocus onClick={onBack}>
+      <Button data-back autoFocus onClick={onBack}>
         Back
       </Button>
     </Dialog>

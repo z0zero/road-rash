@@ -206,6 +206,14 @@ async function playUntil(page: Page, seconds: number, happened: () => Promise<bo
  */
 const HIT_EARLY = "/?seed=9";
 
+/** A race that a rider who just holds the throttle wrecks in the first half-minute. Any seed will do in which that is so. */
+const WRECKED_EARLY = "/?seed=17";
+
+/** Whether the save data says the player has ever attacked in a race, as a punch or kick thrown in one does. */
+function hasAttacked(page: Page) {
+  return page.evaluate(() => Object.values(localStorage).some((saved) => /"hasAttacked":true/.test(String(saved))));
+}
+
 async function staminaNow(page: Page) {
   return Number(await page.getByRole("meter", { name: "Stamina", exact: true }).getAttribute("aria-valuenow"));
 }
@@ -421,30 +429,39 @@ test.describe("with a gamepad", () => {
     await gamepad(page).release(GAMEPAD.rightTrigger);
   });
 
-  test("leaves the results up for a stick push and A as they open, then gives Restart the focus", async ({ page }) => {
+  test("leaves the results up for a stick push, A and B as they open, then gives Restart the focus and B goes back", async ({
+    page,
+  }) => {
     // Half a minute of racing, a frame at a time.
     test.slow();
-    // A race that a rider who just holds the throttle wrecks in the first half-minute. Any seed will do in which that is so.
-    await page.goto("/?seed=17");
+    await page.goto(WRECKED_EARLY);
     await startRacing(page);
     await gamepad(page).press(GAMEPAD.rightTrigger);
     const results = page.getByRole("dialog", { name: "Wrecked" });
     expect(await playUntil(page, 40, () => results.isVisible())).toBe(true);
 
-    // Still steering and throttling as the race ends: the stick's push would move the focus to a button, and A press it.
+    // Still steering, throttling and kicking as the race ends: the stick's push would move the focus to a button,
+    // A press it and B go back to the title.
     await gamepad(page).push(-0.7, 0.7);
     await page.clock.fastForward(FRAME_MS);
     await gamepad(page).push(0, 0);
     await gamepad(page).release(GAMEPAD.rightTrigger);
     await page.clock.fastForward(FRAME_MS);
-    await gamepad(page).press(GAMEPAD.a);
-    await page.clock.fastForward(FRAME_MS);
-    await gamepad(page).release(GAMEPAD.a);
-    await page.clock.fastForward(FRAME_MS);
+    for (const button of [GAMEPAD.a, GAMEPAD.b]) {
+      await gamepad(page).press(button);
+      await page.clock.fastForward(FRAME_MS);
+      await gamepad(page).release(button);
+      await page.clock.fastForward(FRAME_MS);
+    }
     await expect(results).toBeVisible();
 
     await play(page, 1);
     await expect(results.getByRole("button", { name: "Restart" })).toBeFocused();
+    await gamepad(page).press(GAMEPAD.b);
+    await play(page, 0.2);
+    await gamepad(page).release(GAMEPAD.b);
+    await expect(results).toBeHidden();
+    await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
   });
 
   test("moves between menu buttons with the D-pad or the left stick, and presses them with A", async ({ page }) => {
@@ -462,6 +479,44 @@ test.describe("with a gamepad", () => {
     // Back is in focus on the Controls screen.
     await tap(page, GAMEPAD.a, () => expect(controls).toBeHidden());
     await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
+  });
+
+  test("goes back with B from the screens the title screen opens, as Esc does", async ({ page }) => {
+    // Three screens, and a few frames each, drawn over the scene.
+    test.slow();
+    for (const name of ["Controls", "Settings", "Credits"]) {
+      await page.getByRole("button", { name, exact: true }).click();
+      const screen = page.getByRole("dialog", { name });
+      await expect(screen).toBeVisible();
+
+      await tap(page, GAMEPAD.b, () => expect(screen).toBeHidden());
+      await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
+    }
+  });
+
+  test("goes back to the race from the pause menu with B, which kicks only in the race", async ({ page }) => {
+    await startRacing(page);
+    await gamepad(page).press(GAMEPAD.start);
+    await play(page, 0.2);
+    await gamepad(page).release(GAMEPAD.start);
+    const menu = page.getByRole("dialog", { name: "Paused" });
+    await expect(menu).toBeVisible();
+
+    await gamepad(page).press(GAMEPAD.b);
+    await play(page, 0.2);
+    await gamepad(page).release(GAMEPAD.b);
+    await expect(menu).toBeHidden();
+    await play(page, 0.4);
+    // The press that went back to the race didn't kick in it...
+    expect(await hasAttacked(page)).toBe(false);
+
+    // ...but a press in the race does.
+    await gamepad(page).press(GAMEPAD.b);
+    await play(page, 0.2);
+    await gamepad(page).release(GAMEPAD.b);
+    await play(page, 0.2);
+    expect(await hasAttacked(page)).toBe(true);
+    await expect(menu).toBeHidden();
   });
 
   test("counts the press that shows a gamepad to the page, as a browser does with its first press", async ({ page }) => {
@@ -557,6 +612,7 @@ test("lists the keyboard and gamepad controls, from the title screen", async ({ 
     ["Punch, or swing a club", ["J", "Z"], ["X"]],
     ["Kick", ["K", "X"], ["B"]],
     ["Pause", ["Esc", "P"], ["Start"]],
+    ["Back, in menus", ["Esc"], ["B"]],
   ] as const;
   for (const [action, keys, buttons] of bindings) {
     const row = controls.getByRole("row").filter({ has: page.getByRole("rowheader", { name: action, exact: true }) });

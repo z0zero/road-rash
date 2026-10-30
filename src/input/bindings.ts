@@ -1,13 +1,13 @@
 /**
- * The controls the player rides and fights with, and the keys for each, with
- * their names on screen. There is no remapping: the keyboard reads its keys
- * from here, and the title and Controls screens name them from here, so the
- * three can't drift apart. (Esc also goes back from the screens over the
- * game, as it does on any web page's dialogs.)
+ * The controls the player rides and fights with, and goes back from the
+ * screens over the game with, and the keys for each, with their names on
+ * screen. There is no remapping: the keyboard and the screens read their keys
+ * from here, and the title and Controls screens name them from here, so they
+ * can't drift apart.
  */
 
 /** Something the player does with the keyboard or a gamepad. */
-export type Control = "throttle" | "brake" | "steer" | "punch" | "kick" | "pause";
+export type Control = "throttle" | "brake" | "steer" | "punch" | "kick" | "pause" | "back";
 
 /** Every control, as the Controls screen lists it, with what it calls it. */
 export const CONTROLS: readonly { readonly control: Control; readonly label: string }[] = [
@@ -17,6 +17,7 @@ export const CONTROLS: readonly { readonly control: Control; readonly label: str
   { control: "punch", label: "Punch, or swing a club" },
   { control: "kick", label: "Kick" },
   { control: "pause", label: "Pause" },
+  { control: "back", label: "Back, in menus" },
 ];
 
 /** A key, by its place on the keyboard (`KeyboardEvent.code`), and its name on screen. */
@@ -76,6 +77,8 @@ export const KEYS: { readonly [C in Control]: C extends "steer" ? readonly KeyPa
     { code: "Escape", name: "Esc" },
     { code: "KeyP", name: "P" },
   ],
+  // As on any web page's dialogs. On the pause menu, Esc is a pause key, and resuming is going back.
+  back: [{ code: "Escape", name: "Esc" }],
 };
 
 /** The keys' codes, for matching key presses. */
