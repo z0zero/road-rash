@@ -62,6 +62,8 @@ function remembered<T>(make: (seed: number) => T): (seed: number) => T {
 const winningRace = remembered((seed) => rideToTheFinish(seed, Infinity));
 /** A race ridden to the finish at up to 45 m/s, too slowly to qualify. */
 const slowRace = remembered((seed) => rideToTheFinish(seed, 45));
+/** Seeds in which nobody knocks the player off near a cop on the slow ride, which would get them busted. */
+const SLOW_SEEDS = [2, 4, 5];
 const wreckedRace = remembered(rideToAWreck);
 
 /** Who a remark comes from, as the standings name them. */
@@ -90,7 +92,7 @@ describe("the remark on the results", () => {
   });
 
   it("comes from an opponent who beat the player, when the player finished without qualifying", () => {
-    for (const seed of [1, 2, 3]) {
+    for (const seed of SLOW_SEEDS) {
       const results = slowRace(seed);
 
       expect(results).toMatchObject({ outcome: "finished", qualified: false });
@@ -123,7 +125,7 @@ describe("the remark on the results", () => {
   it("is chosen with the race's seed: the same race gives the same remark, other races others", () => {
     expect(rideToAWreck(1).remark).toEqual(wreckedRace(1).remark);
 
-    const remarks = [1, 2, 3].flatMap((seed) => [wreckedRace(seed).remark, slowRace(seed).remark]);
+    const remarks = [1, 2, 3].flatMap((seed, index) => [wreckedRace(seed).remark, slowRace(SLOW_SEEDS[index]).remark]);
     expect(new Set(remarks.map(({ name, line }) => `${name}: ${line}`)).size).toBeGreaterThan(3);
   });
 });
