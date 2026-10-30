@@ -4,6 +4,7 @@ import { liveryOf } from "@/renderer/liveries";
 import type { PersonalBest } from "@/save-data/save-data";
 import { Button } from "./Button";
 import { formatPosition, formatRaceTime } from "./format";
+import { RaceSeed } from "./RaceSeed";
 
 const BANNERS: Record<RaceOutcome, string> = { finished: "Finished", wrecked: "Wrecked", busted: "Busted" };
 
@@ -20,6 +21,7 @@ export function ResultsScreen({
   personalBest,
   newBestTime,
   newBestPosition,
+  seed,
   onRestart,
   onTitle,
 }: {
@@ -27,6 +29,8 @@ export function ResultsScreen({
   personalBest: PersonalBest;
   newBestTime: boolean;
   newBestPosition: boolean;
+  /** The race's seed, shown for a bug report. */
+  seed: number;
   onRestart: () => void;
   onTitle: () => void;
 }) {
@@ -85,6 +89,7 @@ export function ResultsScreen({
             </Button>
             <Button onClick={onTitle}>Back to title</Button>
           </div>
+          <RaceSeed seed={seed} />
         </div>
         <Standings standings={results.standings} />
       </div>

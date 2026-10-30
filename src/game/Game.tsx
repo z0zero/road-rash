@@ -111,7 +111,7 @@ export default function Game() {
       {state.screen === "credits" && <CreditsScreen onBack={session.closeCredits} />}
       {(state.screen === "racing" || state.screen === "paused") && <Hud session={session} reduceMotion={reduceMotion} />}
       {state.screen === "paused" && (
-        <PauseMenu onResume={session.resume} onRestart={restart} onQuit={session.quitToTitle} />
+        <PauseMenu seed={state.seed} onResume={session.resume} onRestart={restart} onQuit={session.quitToTitle} />
       )}
       {state.screen === "results" && state.results && (
         <ResultsScreen
@@ -119,6 +119,7 @@ export default function Game() {
           personalBest={state.personalBest}
           newBestTime={state.newBestTime}
           newBestPosition={state.newBestPosition}
+          seed={state.seed}
           onRestart={restart}
           onTitle={session.quitToTitle}
         />

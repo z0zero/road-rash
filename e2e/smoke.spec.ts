@@ -134,6 +134,15 @@ test("pauses on Esc, offering resume, restart and quit to title", async ({ page 
   await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
 });
 
+test("shows the race's seed on the pause menu, and races the seed the page's address asks for", async ({ page }) => {
+  await page.goto("/?seed=1234");
+  await startRacing(page);
+
+  await page.keyboard.press("Escape");
+
+  await expect(page.getByRole("dialog", { name: "Paused" }).getByTestId("race-seed")).toHaveText(/^Race seed 1234$/i);
+});
+
 test("pauses by itself when the browser tab is hidden", async ({ page }) => {
   await startRacing(page);
 
