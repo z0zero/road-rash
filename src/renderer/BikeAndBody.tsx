@@ -1,6 +1,6 @@
 import { useFrame } from "@react-three/fiber";
 import { useEffect, useMemo } from "react";
-import { Group, Quaternion, Vector3 } from "three";
+import { type Camera, Group, type Object3D, Quaternion, Vector3 } from "three";
 import type { GameSession } from "@/game/session";
 import type { Livery } from "./liveries";
 import { createBikeModel, flashLightBar, type BikeModel, WHEEL_RADIUS } from "./bike-model";
@@ -21,6 +21,16 @@ const TUCKED_SPEED = 55;
 const LYING = Math.PI / 2 - 0.2;
 /** ...and rests this high on its side (metres). */
 const LYING_HEIGHT = 0.24;
+/**
+ * A bike, or a body off it, is left undrawn while its middle, this high above
+ * where it is (metres)...
+ */
+const MIDDLE_HEIGHT = 1;
+/**
+ * ...is nearer the camera than this (metres): passing right beside the camera,
+ * it would fill a corner of the screen, cut by the near plane into flat shapes.
+ */
+const CAMERA_CLEARANCE = 3;
 
 /**
  * One bike and the body on it, a rider's or a cop's, in their own livery: the
@@ -50,12 +60,15 @@ export function BikeAndBody({
   const offTheBike = useMemo(() => ({ group: new Group(), seat: model.body.position.clone() }), [model]);
   useEffect(() => () => model.dispose(), [model]);
 
-  useFrame((_, delta) => {
+  useFrame(({ camera }, delta) => {
     motion.update(session.view, delta, WHEEL_RADIUS);
     restJoints(model);
     if (motion.crash) poseCrashed(model, offTheBike, motion);
     else poseRiding(model, offTheBike, motion);
     if (model.lightBar) flashLightBar(model.lightBar, motion.lightsFlashing, session.view.current.clock);
+    // The camera is where it was last frame, which is near enough.
+    drawIfClearOf(camera, model.root);
+    drawIfClearOf(camera, offTheBike.group);
   }, -2);
 
   return (
@@ -68,6 +81,14 @@ export function BikeAndBody({
 
 const ACROSS = new Vector3(1, 0, 0);
 const tuck = new Quaternion();
+const middle = new Vector3();
+
+/** Draws `object`, a bike or the body off it, only while it is clear of `camera` (see `CAMERA_CLEARANCE`). */
+function drawIfClearOf(camera: Camera, object: Object3D) {
+  middle.copy(object.position);
+  middle.y += MIDDLE_HEIGHT;
+  object.visible = middle.distanceToSquared(camera.position) > CAMERA_CLEARANCE * CAMERA_CLEARANCE;
+}
 
 /** Puts the model where the motion says, leaning, with its wheels turned, the body on it hanging off and attacking. */
 function poseRiding(model: BikeModel, offTheBike: { group: Group; seat: Vector3 }, motion: BikeMotion) {

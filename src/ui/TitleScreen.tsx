@@ -4,6 +4,12 @@ import { Button } from "./Button";
 import { formatPosition, formatRaceTime } from "./format";
 import { nameOn, useKeyboardLabels } from "./key-names";
 
+/**
+ * A line of text straight over the scene, such as the start gantry's beam or a
+ * passing car: on a band of shade of its own, so that it reads over anything.
+ */
+const OVER_THE_SCENE = "rounded-full bg-night/55 px-4 py-1 drop-shadow";
+
 export function TitleScreen({
   personalBest,
   onStart,
@@ -28,7 +34,7 @@ export function TitleScreen({
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 bg-gradient-to-b from-night/75 via-dusk/35 to-transparent px-6 text-center">
       <GameTitle />
-      <p className="text-lg text-sand/90 drop-shadow">Race the coastal cliff road at sunset. Don&apos;t wreck it.</p>
+      <p className={`text-lg text-sand ${OVER_THE_SCENE}`}>Race the coastal cliff road at sunset. Don&apos;t wreck it.</p>
       <div className="flex flex-col gap-3">
         <Button autoFocus onClick={onStart}>
           Start Race
@@ -37,7 +43,7 @@ export function TitleScreen({
         <Button onClick={onSettings}>Settings</Button>
         <Button onClick={onCredits}>Credits</Button>
       </div>
-      <p className="text-sm text-sand/85 drop-shadow">
+      <p className={`text-sm text-sand/90 ${OVER_THE_SCENE}`}>
         {ridingKeys} to ride &middot; {namesOf(KEYS.punch)} to punch, or swing a club &middot;{" "}
         {namesOf(KEYS.kick)} to kick &middot; {namesOf(KEYS.pause)} to pause
       </p>
