@@ -34,6 +34,10 @@ _Avoid_: Won, passed
 A one-line comment on how the player's race went, from an opponent or a cop, shown with the results.
 _Avoid_: Quote, quip, taunt, banter
 
+**Difficulty**:
+How hard the opponents make a race: Easy, Normal or Hard, chosen on the title screen. On Easy they ride a little slower, attack the player less often, give them longer breathers and lose patience sooner, and catch-up holds them nearer the player; on Hard they ride closer to the limit and fight more. Normal is the race v1.0.0 had. The track, the traffic and the cops are the same on every difficulty, and each keeps its own personal best.
+_Avoid_: Level, mode, skill
+
 ### Riders
 
 **Rider**:
@@ -49,7 +53,7 @@ A rider controlled by the game's AI.
 _Avoid_: Enemy, bot, NPC
 
 **Catch-up**:
-Opponents far behind the player riding a little faster than their usual pace, and those far ahead a little slower, so the field stays near the player.
+Opponents far behind the player riding a little faster than their usual pace, and those far ahead a little slower, so the field stays near the player: up to 8%, from 75 m away to its most at 400 m, and on Easy from 25 m to its most at 150 m.
 _Avoid_: Rubber-banding
 
 **Temperament**:
@@ -69,7 +73,7 @@ What an opponent is riding for at the moment: just racing, riding up alongside a
 _Avoid_: AI state, mode, goal
 
 **Patience**:
-How long a brawler or bully keeps riding alongside a player who rides well below its own pace, or who doesn't hit back. It wears thin while the player rides slowly beside it and builds back up while they keep up, and it runs out at once when three of its hits in a row have landed on a player who isn't fighting it back. Once it runs out, the opponent gives up on the player and just races, attacking them only if they hit it, until its patience is whole again.
+How long a brawler or bully keeps riding alongside a player who rides well below its own pace, or who doesn't hit back. It wears thin while the player rides slowly beside it and builds back up while they keep up, and it runs out at once when three of its hits in a row (two on Easy, four on Hard) have landed on a player who isn't fighting it back. Once it runs out, the opponent gives up on the player and just races, attacking them only if they hit it, until its patience is whole again.
 _Avoid_: Tolerance, temper
 
 **Bike**:
@@ -143,7 +147,7 @@ A brawler's or bully's go at fighting the player. One at a time rides alongside 
 _Avoid_: Queue, slot
 
 **Breather**:
-The 3 s an opponent whose hit has just landed on the player gives them before it attacks them again, unless the player is fighting it back: has hit it in the last 5 s.
+The 3 s (5 s on Easy, 2 s on Hard) an opponent whose hit has just landed on the player gives them before it attacks them again, unless the player is fighting it back: has hit it in the last 5 s.
 _Avoid_: Cooldown, grace period
 
 **Weapon**:
