@@ -79,22 +79,19 @@ export abstract class BikeMotion {
   lightsFlashing = false;
   /** Where they and their bike were drawn last frame, so the wheels, tumble and stride turn with the ground covered. */
   private readonly last = { distance: 0, offset: 0, bikeDistance: 0 };
-  /** Picks them out of a snapshot. */
-  private readonly whom = (snapshot: RaceSnapshot) => this.of(snapshot);
-
   /** Their entry in a snapshot. */
-  protected abstract of(snapshot: RaceSnapshot): OnABike;
+  protected abstract readonly entryIn: (snapshot: RaceSnapshot) => OnABike;
 
   /** Moves on to this frame's view, `delta` seconds after the last. */
   update(view: RaceView, delta: number, wheelRadius: number) {
-    const snapshot = this.of(view.current);
+    const snapshot = this.entryIn(view.current);
     const phaseBefore = this.crash;
     this.crash = snapshot.crash;
     this.attack = snapshot.attack;
     this.weapon = snapshot.weapon;
     if (snapshot.attack?.kind === "club-swing") this.clubHand = snapshot.attack.side;
-    const body = poseOf(view, this.whom, this.pose);
-    const bike = bikePoseOf(view, this.whom, this.bikePose);
+    const body = poseOf(view, this.entryIn, this.pose);
+    const bike = bikePoseOf(view, this.entryIn, this.bikePose);
     // Ground covered since the last frame: none while the race is paused.
     const travelled = travel(bike.distance - this.last.bikeDistance);
     const ran = travel(Math.hypot(body.distance - this.last.distance, body.offset - this.last.offset));
@@ -161,9 +158,7 @@ export class RiderMotion extends BikeMotion {
     super();
   }
 
-  protected of(snapshot: RaceSnapshot) {
-    return snapshot.riders[this.rider];
-  }
+  protected readonly entryIn = (snapshot: RaceSnapshot) => snapshot.riders[this.rider];
 }
 
 /** How one cop is drawn this frame, with the lights on their bike flashing while they ride in the race. */
@@ -172,9 +167,7 @@ export class CopMotion extends BikeMotion {
     super();
   }
 
-  protected of(snapshot: RaceSnapshot) {
-    return snapshot.cops[this.cop];
-  }
+  protected readonly entryIn = (snapshot: RaceSnapshot) => snapshot.cops[this.cop];
 
   update(view: RaceView, delta: number, wheelRadius: number) {
     super.update(view, delta, wheelRadius);
