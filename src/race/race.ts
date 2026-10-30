@@ -801,7 +801,7 @@ export function createRace(options: RaceOptions): Race {
           ...opponents.map(({ id, distance, offset }) => ({ who: { kind: "rider", id } as const, distance, offset })),
           ...copsInTheRace().map((cop) => ({ who: who(cop), distance: cop.motion.distance, offset: cop.motion.offset })),
         ]),
-        warnings: warningsFor(player, opponents),
+        warnings: warningsFor(player, [...opponents, ...copsInTheRace().map(({ motion }) => motion)]),
         traffic: traffic.cars.map(({ id, kind, oncoming, distance, offset, speed, length, width }) => ({
           id,
           kind,

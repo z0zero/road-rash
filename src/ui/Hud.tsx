@@ -291,11 +291,11 @@ function calloutFor(event: RaceEvent, { riders, cops }: RaceSnapshot): string | 
 /**
  * What the player is doing, if they are off their bike: tumbling after a
  * crash, or after a car `knockedDown` them, then on foot, with a cop riding
- * to bust them if `copComing`.
+ * to bust them from the moment it sets off if `copComing`.
  */
 function statusOf(player: RiderSnapshot, knockedDown: boolean, copComing: boolean): string {
   if (player.status !== "racing") return "";
-  if (player.crash === "tumbling") return knockedDown ? "Knocked down!" : "Crash!";
+  if (player.crash === "tumbling") return `${knockedDown ? "Knocked down!" : "Crash!"}${copComing ? " Cop coming!" : ""}`;
   if (player.crash === "on-foot") return copComing ? "Cop coming! Back to your bike!" : "Back to your bike!";
   return "";
 }
