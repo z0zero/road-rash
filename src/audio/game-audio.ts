@@ -1,7 +1,6 @@
 import type { GameSession, RaceView, Screen, SessionState } from "@/game/session";
-import { clamp, smoothstep } from "@/math";
+import { clamp } from "@/math";
 import {
-  COP_ALERT_RANGE,
   isPlayer,
   PLAYER,
   STEP_SECONDS,
@@ -56,10 +55,8 @@ const SPEED_OF_SOUND = 343;
 const HALF_LOUDNESS_METRES = 10;
 /** The nearest opponent's or cop's engine is heard at half strength this many metres from the player. */
 const ENGINE_HALF_LOUDNESS_METRES = 8;
-/** A cop's siren is heard at half strength this many metres from the player... */
+/** A cop's siren is heard at half strength this many metres from the player, and still heard at the cop alert's edge. */
 const SIREN_HALF_LOUDNESS_METRES = 60;
-/** ...and fades out over the outer half of the cop alert's range, to silence at its edge. */
-const SIREN_FADES_FROM = 0.5 * COP_ALERT_RANGE;
 
 /** Sounds fainter than this aren't worth playing. */
 const FAINTEST = 0.02;
@@ -306,8 +303,10 @@ class Sound {
     const skid = racing && onBike && !player.offRoad ? skidding(player.speed, -this.acceleration) : 0;
     this.skid.setIntensity(skid);
     this.gravel.setIntensity(racing && onBike && player.offRoad ? player.speed / LOUDEST_GRAVEL_SPEED : 0);
-    // The siren sounds from the nearest cop near the player, while the race is on.
-    const siren = racing ? sirenOf(current) : null;
+    // The siren sounds from the nearest cop near the player while the race is ridden. Paused, it fades
+    // out behind the muted effects, so that none of it is left to sound over a race restarted from the
+    // pause menu, or over the title.
+    const siren = this.screen === "racing" ? sirenOf(current) : null;
     this.siren.follow(siren?.loudness ?? 0, siren?.pan, siren?.doppler);
 
     if (!isSameOne(nearest, this.nearest)) this.opponentEngine.reset();
@@ -369,9 +368,9 @@ function hearingOf(race: RaceSnapshot, subject: RiderOrCop, other: RiderOrCop | 
 
 /**
  * How the player hears the siren of the nearest cop near them in `race`, from
- * where the cop is: louder as it closes, from its side, its pitch shifted as
- * it comes up or drops back, and fading out towards the edge of the cop
- * alert's range. Null when no cop is near.
+ * where the cop is: louder as it closes, from its side, and its pitch shifted
+ * as it comes up or drops back. It is faint at the edge of the cop alert's
+ * range, but heard wherever the HUD shows the alert. Null when no cop is near.
  */
 function sirenOf(race: RaceSnapshot): (Hearing & { readonly doppler: number }) | null {
   const player = race.riders[PLAYER];
@@ -383,9 +382,8 @@ function sirenOf(race: RaceSnapshot): (Hearing & { readonly doppler: number }) |
   if (!nearest) return null;
   const along = nearest.distance - player.distance;
   const across = nearest.offset - player.offset;
-  const fade = 1 - smoothstep(SIREN_FADES_FROM, COP_ALERT_RANGE, apart(nearest));
   return {
-    loudness: loudnessAt(along, across, SIREN_HALF_LOUDNESS_METRES) * fade,
+    loudness: loudnessAt(along, across, SIREN_HALF_LOUDNESS_METRES),
     pan: panFor(along, across),
     doppler: dopplerOf(along, nearest.speed, player.speed),
   };
