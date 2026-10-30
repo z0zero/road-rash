@@ -168,12 +168,18 @@ export function playFinish(kit: Kit, out: AudioNode) {
 /** The two tones of the siren, hertz, and how long each sounds before the other, seconds. */
 const SIREN_TONES_HZ = [960, 770];
 const SIREN_TONE_SECONDS = 0.55;
-const SIREN_LOUDNESS = 0.16;
+/** How loud the siren is from a cop right beside the player. */
+const SIREN_LOUDNESS = 0.22;
+/** The siren sounds duller the further off it is: the cutoff of its low-pass beside the player, and at its faintest (hertz). */
+const SIREN_BRIGHT_HZ = 2600;
+const SIREN_DULL_HZ = 1100;
 
-/** A cop's two-tone siren, alternating between its tones for as long as it's on. */
+/** A cop's two-tone siren, alternating between its tones, heard from wherever the cop is. */
 export class Siren {
+  private readonly voice: OscillatorNode;
+  private readonly tone: BiquadFilterNode;
   private readonly level: GainNode;
-  private on = false;
+  private readonly pan: StereoPannerNode;
 
   constructor(
     private readonly kit: Kit,
@@ -181,21 +187,30 @@ export class Siren {
   ) {
     const now = kit.context.currentTime;
     const [high, low] = SIREN_TONES_HZ;
-    const voice = tone(kit, "sawtooth", (high + low) / 2, now);
+    this.voice = tone(kit, "sawtooth", (high + low) / 2, now);
     // A slow square wave flips the pitch between the two tones; a low-pass softens each change.
     const flip = tone(kit, "square", 1 / (2 * SIREN_TONE_SECONDS), now);
     flip
       .connect(amplify(kit, (high - low) / 2))
       .connect(filter(kit, "lowpass", 25, 0.7))
-      .connect(voice.frequency);
+      .connect(this.voice.frequency);
+    this.tone = filter(kit, "lowpass", SIREN_BRIGHT_HZ);
     this.level = amplify(kit, 0);
-    voice.connect(filter(kit, "lowpass", 2600)).connect(this.level).connect(out);
+    this.pan = kit.context.createStereoPanner();
+    this.voice.connect(this.tone).connect(this.level).connect(this.pan).connect(out);
   }
 
-  setOn(on: boolean) {
-    if (on === this.on) return;
-    this.on = on;
-    glide(this.kit, this.level.gain, on ? SIREN_LOUDNESS : 0, on ? 0.08 : 0.25);
+  /**
+   * Sounds the siren as the player hears it: at `loudness`, from 0 (silent,
+   * with no cop near) to 1 (a cop right beside them), from `pan` (-1 left to
+   * 1 right), its pitch shifted by `doppler` (1 for none).
+   */
+  follow(loudness: number, pan = 0, doppler = 1) {
+    const heard = clamp(loudness, 0, 1);
+    glide(this.kit, this.level.gain, SIREN_LOUDNESS * heard, heard > 0 ? 0.08 : 0.25);
+    glide(this.kit, this.pan.pan, clamp(pan, -1, 1), 0.05);
+    glide(this.kit, this.tone.frequency, SIREN_DULL_HZ + (SIREN_BRIGHT_HZ - SIREN_DULL_HZ) * heard, 0.1);
+    if (doppler > 0) glide(this.kit, this.voice.detune, 1200 * Math.log2(doppler), 0.05);
   }
 }
 
