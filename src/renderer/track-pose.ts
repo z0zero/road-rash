@@ -1,11 +1,8 @@
 import type { RaceView } from "@/game/session";
-import { STEP_SECONDS, type RaceSnapshot, type RiderSnapshot } from "@/race";
+import { STEP_SECONDS, type CopSnapshot, type RaceSnapshot, type RiderSnapshot } from "@/race";
 
-/** Someone on the road as a snapshot shows them, a rider or a cop: where they are, on their bike or off it, and their bike. */
-export type OnTheRoad = Pick<RiderSnapshot, "distance" | "offset" | "speed" | "bike">;
-
-/** Where a rider or cop is drawn this frame, between the last two snapshots. */
-export interface RiderPose {
+/** Where a rider or cop, or their bike, is drawn this frame in track space, between the last two snapshots. */
+export interface TrackPose {
   distance: number;
   offset: number;
   /** Metres per second along the track. */
@@ -14,7 +11,7 @@ export interface RiderPose {
   sideways: number;
 }
 
-export function createPose(): RiderPose {
+export function createTrackPose(): TrackPose {
   return { distance: 0, offset: 0, speed: 0, sideways: 0 };
 }
 
@@ -23,18 +20,26 @@ export function createPose(): RiderPose {
  * whose entry `entryIn` picks out of a snapshot: where they are, on their
  * bike or off it after a crash. Reuses `pose` to spare the garbage collector.
  */
-export function poseOf(view: RaceView, entryIn: (snapshot: RaceSnapshot) => OnTheRoad, pose: RiderPose): RiderPose {
+export function poseOf(
+  view: RaceView,
+  entryIn: (snapshot: RaceSnapshot) => RiderSnapshot | CopSnapshot,
+  pose: TrackPose,
+): TrackPose {
   return between(entryIn(view.previous), entryIn(view.current), view.alpha, pose);
 }
 
 /** Fills `pose` with where the bike of the rider or cop whose entry `entryIn` picks out is drawn this frame: under them, or wherever it slid to. */
-export function bikePoseOf(view: RaceView, entryIn: (snapshot: RaceSnapshot) => OnTheRoad, pose: RiderPose): RiderPose {
+export function bikePoseOf(
+  view: RaceView,
+  entryIn: (snapshot: RaceSnapshot) => RiderSnapshot | CopSnapshot,
+  pose: TrackPose,
+): TrackPose {
   return between(entryIn(view.previous).bike, entryIn(view.current).bike, view.alpha, pose);
 }
 
-type TrackPosition = Pick<RiderPose, "distance" | "offset" | "speed">;
+type TrackPosition = Pick<TrackPose, "distance" | "offset" | "speed">;
 
-function between(before: TrackPosition, after: TrackPosition, t: number, pose: RiderPose): RiderPose {
+function between(before: TrackPosition, after: TrackPosition, t: number, pose: TrackPose): TrackPose {
   pose.distance = before.distance + (after.distance - before.distance) * t;
   pose.offset = before.offset + (after.offset - before.offset) * t;
   pose.speed = before.speed + (after.speed - before.speed) * t;

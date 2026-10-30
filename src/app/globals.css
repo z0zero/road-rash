@@ -7,12 +7,12 @@
   --color-sun: #ffc94d;
   --color-sand: #fff1dc;
   --color-sea: #1f5f7a;
-  /* A cop's lights, the same red and blue as the lamps on a cop's light bar (rider-model.ts). */
+  /* A cop's lights, the same red and blue as the lamps on a cop's light bar (bike-model.ts). */
   --color-cop-red: #ff2a3d;
   --color-cop-blue: #2a7dff;
   --font-sans: ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-display: "Impact", "Haettenschweiler", "Arial Narrow Bold", ui-sans-serif, system-ui, sans-serif;
-  /* A cop's lights: red and blue taking turns, each lit for 0.3 s, as on a cop's light bar (rider-model.ts). */
+  /* A cop's lights: red and blue taking turns, each lit for 0.3 s, as on a cop's light bar (bike-model.ts). */
   --animate-cop-red: cop-red 0.6s steps(1, end) infinite;
   --animate-cop-blue: cop-blue 0.6s steps(1, end) infinite;
 

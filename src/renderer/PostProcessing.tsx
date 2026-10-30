@@ -6,7 +6,7 @@ import type { GameSession } from "@/game/session";
 import { smoothstep } from "@/math";
 import { TOP_SPEED } from "@/race";
 import { ColorGradeEffect, SpeedBlurEffect, SpeedLinesEffect } from "./effects";
-import type { RiderMotion } from "./rider-motion";
+import type { RiderMotion } from "./bike-motion";
 
 /** Metres per second: speed lines start to show at about 160 km/h... */
 const SPEED_LINES_FROM = 44;
