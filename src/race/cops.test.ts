@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createRace, PLAYER, type PlayerInput, type Race, type RaceEvent, type RiderId } from ".";
+import { createRace, NO_INPUT, PLAYER, type PlayerInput, type Race, type RaceEvent, type RiderId } from ".";
 import {
   alongsideARacer,
   alongsideTheFirstCop,
@@ -12,6 +12,7 @@ import {
   player,
   secondsUntil,
   startedRace,
+  STEPS_PER_SECOND,
 } from "./test-helpers";
 
 const ME = { kind: "rider", id: PLAYER } as const;
@@ -52,6 +53,68 @@ function alongsideARacerNearingTheFirstCop(before: number, seed = 1) {
 function knockOffWhen(race: Race, target: RiderId, input: () => PlayerInput, when: () => boolean) {
   const punching = () => ({ ...input(), punch: race.snapshot().riders[target].stamina > 0 || when() });
   return eventsUntil(race, punching, (event) => event.type === "crash" && event.rider === target, 45);
+}
+
+/**
+ * A started race in which the player, riding alongside a racer, has beaten it
+ * down on the way to the first cop and knocked it off just past the cop, as it
+ * pulls out to join the race: the cop is close behind the racer.
+ */
+function racerKnockedOffJustPastTheFirstCop(seed = 1) {
+  const alongside = alongsideARacerNearingTheFirstCop(150, seed);
+  const { race, target, input } = alongside;
+  const cop = () => race.snapshot().cops[0];
+  const them = () => race.snapshot().riders[target];
+  const events = knockOffWhen(race, target, input, () => them().distance - cop().distance > 2);
+  return { ...alongside, cop, them, events };
+}
+
+/**
+ * A started race in which the player, riding alongside a racer past the first
+ * cop, has knocked it off with the cop following them at speed at its usual
+ * gap, about 1.5 s behind them at their speed, and within 80 m.
+ */
+function racerKnockedOffAheadOfTheFollowingCop(seed = 2) {
+  const alongside = alongsideARacerPastTheFirstCop(seed);
+  const { race, target, input } = alongside;
+  const cop = () => race.snapshot().cops[0];
+  const them = () => race.snapshot().riders[target];
+  const gap = () => them().distance - cop().distance;
+  let speed = NaN;
+  let behind = NaN;
+  knockOffWhen(race, target, input, () => {
+    [speed, behind] = [them().speed, gap()];
+    return behind >= 1.4 * speed && behind < 80 && cop().speed > 20;
+  });
+  return { ...alongside, cop, them, speed, behind };
+}
+
+/**
+ * A started race in traffic in which the first cop has joined the race and
+ * followed the player for 8 s, and the player, riding at 54 m/s or more, has
+ * ridden flat out into the back of a car going their way. Returns how far the
+ * cop was behind their bike when they crashed.
+ */
+function crashedAtSpeedAheadOfTheFollowingCop(seed: number) {
+  const race = startedRace(seed);
+  const pilot = autopilot(race);
+  const cop = () => race.snapshot().cops[0];
+  secondsUntil(race, pilot, () => player(race).distance >= cop().distance, 150);
+  const joined = race.snapshot().clock;
+  const carAhead = () =>
+    race
+      .snapshot()
+      .traffic.filter((car) => !car.oncoming && car.distance - player(race).distance > 60 && car.distance - player(race).distance < 200)
+      .sort((a, b) => a.distance - b.distance)[0];
+  secondsUntil(race, pilot, () => race.snapshot().clock > joined + 8 && player(race).speed >= 55 && carAhead() !== undefined, 100);
+  const { id } = carAhead();
+  const flatOutInto = (): PlayerInput => {
+    const car = race.snapshot().traffic.find((each) => each.id === id);
+    return { ...NO_INPUT, throttle: 1, steer: car ? Math.max(-1, Math.min(1, 1.5 * (car.offset - player(race).offset))) : 0 };
+  };
+  let speed = NaN;
+  eventsUntil(race, () => ((speed = player(race).speed), flatOutInto()), (event) => event.type === "crash" && event.rider === PLAYER, 20);
+  return { race, cop, speed, behind: player(race).bike.distance - cop().distance };
 }
 
 /**
@@ -207,18 +270,20 @@ describe("the cop alert", () => {
     const near = new Set<number>();
     const waitingAt = cop().distance;
 
-    // Passing the first cop, which joins the race.
-    const passing = rideWatchingTheCops(race, input, () => player(race).distance >= waitingAt + 20, 120, near);
-    // Knocking the racer off with the cop close behind, so that it busts the racer and stays with it a while, as the
-    // player rides on flat out; then the cop chases the player back down, faster than any bike.
-    const punching = () => ({ ...input(), punch: them().stamina > 0 || them().distance - cop().distance > 5 });
-    rideWatchingTheCops(race, punching, () => them().crash !== null, 30, near);
+    // Riding up to the first cop, waiting on the shoulder: no alert yet.
+    const before = rideWatchingTheCops(race, input, () => player(race).distance >= waitingAt - 150, 120, near);
+    // Beating the racer down on the way, and knocking it off just past the cop as it joins the race, so that it busts
+    // the racer and stays with it a while, as the player rides on flat out; then the cop chases the player back down,
+    // faster than any bike.
+    const punching = () => ({ ...input(), punch: them().stamina > 0 || them().distance - cop().distance > 2 });
+    const passing = rideWatchingTheCops(race, punching, () => them().crash !== null, 30, near);
     const ridingOn: RaceEvent[] = [];
     const pilot = autopilot(race);
     let fastest = 0;
     const chased = () => ((fastest = Math.max(fastest, cop().speed)), pilot());
     rideWatchingTheCops(race, chased, () => ridingOn.length >= 2, 90, near, ridingOn);
 
+    expect(before).toEqual([]);
     expect(passing).toEqual([{ type: "cop-near", cop: 0 }]);
     expect(them().status).toBe("busted");
     expect(ridingOn).toEqual([
@@ -231,38 +296,48 @@ describe("the cop alert", () => {
 });
 
 describe("busting", () => {
-  it("is what a cop does to a rider who crashes within 80 m of it, riding to them before they get back on their bike", () => {
-    const { race, target, input } = alongsideARacerPastTheFirstCop();
-    const cop = () => race.snapshot().cops[0];
-    const them = () => race.snapshot().riders[target];
-    // Knocked off with the cop close behind.
-    knockOffWhen(race, target, input, () => them().distance - cop().distance > 5);
-    expect(apart(cop(), them())).toBeLessThan(80);
-
-    const events = eventsUntil(race, input, (event) => event.type === "busted", 10);
-
-    expect(events.at(-1)).toEqual({ type: "busted", rider: target, cop: 0 });
-    expect(events).not.toContainEqual({ type: "remounted", rider: target });
-    expect(apart(cop(), them())).toBeLessThan(3);
-  });
-
-  it("catches a rider who crashes within 15 m of a cop, but only once they are on their feet, never while they tumble", () => {
-    const { race, target, input } = alongsideARacerNearingTheFirstCop(150);
-    const cop = () => race.snapshot().cops[0];
-    const them = () => race.snapshot().riders[target];
-    // Knocked off just past the cop, as it pulls out to join the race.
-    knockOffWhen(race, target, input, () => them().distance - cop().distance > 2);
+  it("is what a cop does to a rider who crashes close in front of it: it rides to them and catches them before they get back on their bike, once they are on their feet, never while they tumble", () => {
+    const { race, target, input, cop, them } = racerKnockedOffJustPastTheFirstCop();
     expect(apart(cop(), them())).toBeLessThan(15);
+    expect(cop().busting).toBe(target);
     const crashedAt = race.snapshot().clock;
 
     const events = eventsUntil(race, input, (event) => event.type === "busted", 10);
 
     expect(events.at(-1)).toEqual({ type: "busted", rider: target, cop: 0 });
     expect(events).not.toContainEqual({ type: "remounted", rider: target });
+    expect(apart(cop(), them())).toBeLessThan(3);
     // Caught as they got to their feet, the tumble over.
     expect(them().crash).toBe("on-foot");
     // At least 1.2 s, to the step: the clock adds up steps, so it can fall a hair short of a whole number of them.
     expect(race.snapshot().clock - crashedAt).toBeGreaterThan(1.2 - 1e-9);
+  });
+
+  it("has the cop ride to a crashed rider at an arrest pace: braked down to 8 m/s within 2.5 s of the crash, and no faster after", () => {
+    const { race, input, cop, target } = racerKnockedOffAheadOfTheFollowingCop();
+    expect(cop().busting).toBe(target);
+
+    const speeds: number[] = [];
+    secondsUntil(race, () => (speeds.push(cop().speed), input()), () => cop().busting === null, 20);
+
+    // Braking from at most 66 m/s takes about 2 s; a tenth of a metre per second allows for easing into the pace.
+    expect(speeds.length).toBeGreaterThan(2.5 * STEPS_PER_SECOND);
+    expect(Math.max(...speeds.slice(2.5 * STEPS_PER_SECOND))).toBeLessThanOrEqual(8.1);
+  });
+
+  it("is a race a rider can win: knocked off with the cop following at its usual gap, 1.5 s behind them, they run straight back to their bike and get away", () => {
+    const { race, target, input, cop, them, speed, behind } = racerKnockedOffAheadOfTheFollowingCop();
+    expect(cop().busting).toBe(target);
+    // At V m/s the cop is 1.5 V behind. The rider tumbles about 0.6 V on and runs back at 6 m/s to their bike, which
+    // slides about V² / 160 m: back on it within about 3.5 s. The cop needs longer: braking down to 8 m/s takes it
+    // under V² / 60 m nearer, and it covers the rest of the 1.5 V at 8 m/s.
+    expect(behind).toBeGreaterThanOrEqual(1.4 * speed);
+
+    const events = eventsUntil(race, input, (event) => (event.type === "remounted" && event.rider === target) || event.type === "busted", 15);
+
+    expect(events.at(-1)).toEqual({ type: "remounted", rider: target });
+    expect(them()).toMatchObject({ status: "racing", crash: null });
+    expect(apart(cop(), them())).toBeGreaterThan(2.5);
   });
 
   it("lets a rider go who crashes with the cop over 60 m off and runs straight back to their bike: the cop closes in at an arrest pace", () => {
@@ -283,6 +358,28 @@ describe("busting", () => {
     eventsDuring(race, 1, input);
     expect(cop().busting).toBeNull();
     expect(them().status).toBe("racing");
+  });
+
+  it("leaves alone a rider who crashes more than 80 m from it: a cop following the player then pulls over until they are back on their bike", () => {
+    // Following 1.5 s behind a player riding 54 m/s or more, the cop is over 80 m behind them.
+    const { race, cop, speed, behind } = crashedAtSpeedAheadOfTheFollowingCop(4);
+    expect(speed).toBeGreaterThanOrEqual(54);
+    expect(behind).toBeGreaterThan(80);
+    expect(cop().busting).toBeNull();
+    const crashedAt = race.snapshot().clock;
+    const moving: number[] = [];
+    const watching = () => {
+      if (race.snapshot().clock - crashedAt > 3 && cop().speed > 0.5) moving.push(cop().speed);
+      return NO_INPUT;
+    };
+
+    const events = eventsUntil(race, watching, (event) => event.type === "remounted" && event.rider === PLAYER, 20);
+
+    expect(events.filter((event) => event.type === "busted")).toEqual([]);
+    expect(race.snapshot().clock - crashedAt).toBeGreaterThan(3);
+    // Stopped within 3 s of the crash, it stayed put while they ran back to their bike, and never rode up to them.
+    expect(moving).toEqual([]);
+    expect(player(race).distance - cop().distance).toBeGreaterThan(10);
   });
 
   it("ends the player's race as Busted, which the results say", () => {
@@ -307,10 +404,7 @@ describe("busting", () => {
   });
 
   it("takes a busted opponent out of the race for good, with no position", () => {
-    const { race, target, input } = alongsideARacerPastTheFirstCop();
-    const cop = () => race.snapshot().cops[0];
-    const them = () => race.snapshot().riders[target];
-    knockOffWhen(race, target, input, () => them().distance - cop().distance > 5);
+    const { race, target, input, them } = racerKnockedOffJustPastTheFirstCop();
     eventsUntil(race, input, (event) => event.type === "busted", 10);
 
     expect(them()).toMatchObject({ status: "busted", position: null });
