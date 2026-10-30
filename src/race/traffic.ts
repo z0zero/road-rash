@@ -51,6 +51,8 @@ const LANE_CHANGE_EVERY = [4, 10] as const;
 const LANE_CHANGE_SPEED = 1.8;
 /** A lane has room for a car to change into it when no car in it is nearer than this along the road (metres), and the riders give it room. */
 const LANE_CHANGE_ROOM = 30;
+/** A rider or cop on a bike going slower than this (m/s) is standing still. */
+const STANDING_STILL = 0.5;
 
 /** A car changes lanes to get round a fallen rock in its lane once it is this many metres from it, if there is room... */
 const ROCK_SIGHT = 150;
@@ -255,7 +257,12 @@ export function createTraffic(track: Track, random: Random, player: Around, clea
         Math.abs(them.distance - car.distance) >= LANE_CHANGE_ROOM ||
         Math.abs(them.offset - other) >= (them.width + car.width) / 2,
     );
-    if (!carsGiveRoom || !ridersGiveRoom(riders, car.distance, other, velocityOf(car))) return;
+    // A bike standing still behind it, clear of its back, isn't coming up to it: it can pull out in front of it.
+    const behindIt = (rider: RiderOrCopOnTheRoad) => (car.oncoming ? rider.distance - car.distance : car.distance - rider.distance);
+    const standingBehind = (rider: RiderOrCopOnTheRoad) =>
+      rider.onTheirBike && rider.speed < STANDING_STILL && behindIt(rider) >= (car.length + BIKE_LENGTH) / 2;
+    const comingUp = riders.filter((rider) => !standingBehind(rider));
+    if (!carsGiveRoom || !ridersGiveRoom(comingUp, car.distance, other, velocityOf(car))) return;
     car.lane = other;
     if (car.laneChangeIn !== Infinity) car.laneChangeIn = stepsBetween(LANE_CHANGE_EVERY);
   };
