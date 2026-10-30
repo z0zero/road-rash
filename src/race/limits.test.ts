@@ -9,6 +9,7 @@ import {
   QUALIFYING_POSITION,
   TOP_SPEED,
   TRAFFIC_AHEAD,
+  TRAFFIC_BEHIND,
   type Race,
 } from ".";
 import { autopilot, kmh, NO_COPS, startedRace, STEPS_PER_SECOND, WHOLE_RACES } from "./test-helpers";
@@ -47,6 +48,21 @@ describe("the race's limits, which the game shows", () => {
 
     expect(furthest).toBeGreaterThan(TRAFFIC_AHEAD - 20);
     expect(furthest).toBeLessThanOrEqual(TRAFFIC_AHEAD + 1e-6);
+  });
+
+  it("are how far behind the player cars leave the road, and come onto it behind a slower player: 150 m", () => {
+    expect(TRAFFIC_BEHIND).toBe(150);
+    const race = startedRace(1, NO_COPS);
+    const pilot = autopilot(race);
+    let furthestBack = 0;
+    for (let step = 0; step < 60 * STEPS_PER_SECOND; step++) {
+      race.step(pilot());
+      const { riders, traffic } = race.snapshot();
+      for (const car of traffic) furthestBack = Math.max(furthestBack, riders[0].distance - car.distance);
+    }
+
+    expect(furthestBack).toBeGreaterThan(TRAFFIC_BEHIND - 20);
+    expect(furthestBack).toBeLessThanOrEqual(TRAFFIC_BEHIND + 1e-6);
   });
 
   /** The most cars on the road at once over `seconds` of riding with `input`. */
