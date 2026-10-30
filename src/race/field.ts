@@ -1,5 +1,10 @@
+import { wholePatience } from "./opponent-fighting";
+import { paceFor } from "./opponent-riding";
+import { OPPONENTS, PLAYER_NAME } from "./opponents";
 import type { Random } from "./random";
+import { PLAYER, type Rider } from "./riders";
 import type { Track } from "./track";
+import { TUNING } from "./tuning";
 
 /** Where a rider lines up for the start, in track space. */
 export interface StartSlot {
@@ -40,6 +45,52 @@ export function lineUpOpponents(track: Track, count: number, random: Random): St
     }
   });
   return shuffle(slots, random);
+}
+
+/**
+ * Every rider lined up on the start grid, the player first: the player on the
+ * start line, between the two lanes that run in the race direction, on a bike
+ * in `playerCondition`, and the opponents strung out ahead of them, their
+ * order drawn from `random`.
+ */
+export function lineUpRiders(track: Track, random: Random, playerCondition: number = TUNING.fullCondition): Rider[] {
+  const riders: Rider[] = [
+    {
+      ...lineUp({ id: PLAYER, name: PLAYER_NAME, temperament: null, riding: null }, track.startDistance, track.laneWidth),
+      condition: Math.min(TUNING.fullCondition, playerCondition),
+    },
+  ];
+  lineUpOpponents(track, OPPONENTS.length, random).forEach(({ distance, offset }, index) => {
+    const { name, temperament, skill } = OPPONENTS[index];
+    const riding = { pace: paceFor(skill), lane: offset };
+    riders.push(lineUp({ id: PLAYER + 1 + index, name, temperament, riding }, distance, offset));
+  });
+  return riders;
+}
+
+/**
+ * A rider on the grid: fresh, on a bike in perfect condition, standing at
+ * `distance` and `offset`. Bullies start the race with a club.
+ */
+function lineUp(rider: Pick<Rider, "id" | "name" | "temperament" | "riding">, distance: number, offset: number): Rider {
+  return {
+    ...rider,
+    kind: "rider",
+    motion: { distance, offset, speed: 0, steering: 0, shove: 0, kickShove: 0 },
+    status: "racing",
+    finishTime: null,
+    finishOrder: null,
+    stamina: TUNING.fullStamina,
+    condition: TUNING.fullCondition,
+    stepsSinceHit: Infinity,
+    attack: null,
+    weapon: rider.temperament === "bully" ? "club" : null,
+    crash: null,
+    droppingBack: false,
+    patience: wholePatience(),
+    stepsSinceThePlayerHitIt: Infinity,
+    breatherSteps: 0,
+  };
 }
 
 /** Splits `count` riders into groups of two or three, front to back. */
