@@ -147,7 +147,9 @@ export function opponentControls(
   const apexShift = clamp(bendAhead * APEX_SHIFT_PER_CURVATURE, -MAX_APEX_SHIFT, MAX_APEX_SHIFT);
   const racingLine = clamp(riding.lane + apexShift, -edge, edge);
   const level = intent.alongside ? levelWith(motion, intent.alongside, edge) : null;
-  const { line, holdBehind, evading } = lineAround(motion, level ? level.line : racingLine, field, carsAndObstacles, edge);
+  // Squeezing past something at walking pace, it may go as far out as the shoulder takes its bike.
+  const shoulderEdge = track.roadHalfWidth + track.shoulderWidth - BIKE_HALF_WIDTH;
+  const { line, holdBehind, evading } = lineAround(motion, level ? level.line : racingLine, field, carsAndObstacles, edge, shoulderEdge);
 
   const safe = safeSpeedAt(track, motion.distance + motion.speed * BRAKING_LEAD);
   let wanted = Math.min(riding.pace * intent.paceShare * catchUp * Math.min(TUNING.topSpeed, safe), holdBehind);
@@ -225,7 +227,10 @@ interface Room {
  * over to, and an opponent looks further ahead for the cars coming towards it.
  * When a rider it is about to reach is in the way, it holds back to their
  * speed; a slower car or an obstacle in the way, it slows for in time to ride
- * no faster than it when it gets there. Cops find their way around the same way.
+ * no faster than it when it gets there; but if its line takes it clear past
+ * either, it rolls on at walking pace at least. Crawling, with no clear line,
+ * it squeezes past through the nearest gap its bike fits through, out to
+ * `squeezeEdge`. Cops find their way around the same way.
  */
 export function lineAround(
   me: Readonly<Motion>,
@@ -233,22 +238,29 @@ export function lineAround(
   field: readonly Readonly<Motion>[],
   carsAndObstacles: readonly Footprint[],
   edge: number,
+  squeezeEdge = edge,
 ) {
   const blocked: Stretch[] = [];
-  let holdBehind = Infinity;
+  /** The same, but no more than a bike's width from the riders: where a bike can squeeze past them. */
+  const squeezed: Stretch[] = [];
+  /** The riders it is about to reach, in its way. */
+  const inTheWay: Readonly<Motion>[] = [];
   for (const other of field) {
     if (other === me) continue;
     const ahead = other.distance - me.distance;
     const closing = Math.max(0, me.speed - other.speed);
-    if (Math.abs(ahead) < ALONGSIDE) {
+    // Crawling up to a rider in its path, it is behind them, however close, not alongside them.
+    const inFront = me.speed <= CRAWLING && ahead > 0 && Math.abs(other.offset - me.offset) < BIKE_WIDTH;
+    if (Math.abs(ahead) < ALONGSIDE && !inFront) {
       const onTheRight = other.offset > me.offset || (other.offset === me.offset && ahead > 0);
-      blocked.push(onTheRight ? [other.offset - PASSING_CLEARANCE, Infinity] : [-Infinity, other.offset + PASSING_CLEARANCE]);
+      const beyond = (room: number): Stretch => (onTheRight ? [other.offset - room, Infinity] : [-Infinity, other.offset + room]);
+      blocked.push(beyond(PASSING_CLEARANCE));
+      squeezed.push(beyond(BIKE_WIDTH));
     } else if (ahead > 0 && ahead < ALONGSIDE + 2 + closing * PASSING_LOOK_AHEAD) {
       blocked.push([other.offset - PASSING_CLEARANCE, other.offset + PASSING_CLEARANCE]);
+      squeezed.push([other.offset - BIKE_WIDTH, other.offset + BIKE_WIDTH]);
     }
-    if (ahead > 0 && ahead < ALONGSIDE + closing * HOLD_BACK_TIME && Math.abs(other.offset - me.offset) < IN_THE_WAY) {
-      holdBehind = Math.min(holdBehind, other.speed - 0.5);
-    }
+    if (ahead > 0 && ahead < ALONGSIDE + closing * HOLD_BACK_TIME && Math.abs(other.offset - me.offset) < IN_THE_WAY) inTheWay.push(other);
   }
   // Where the cars and obstacles it is alongside or coming up to leave it no room.
   const unsafe: Room[] = [];
@@ -275,7 +287,16 @@ export function lineAround(
     unsafe.push({ keepClear, body: around(thing.halfWidth + BIKE_HALF_WIDTH), reachedIn, close, dodgeSideways });
     if (thing.velocity < 0 && me.offset > keepClear[0] && me.offset < keepClear[1]) headOn = true;
   }
-  const line = nearestClearLine(racingLine, me.offset, blocked, unsafe, edge);
+  // Crawling, it can squeeze through a gap where it would otherwise stay put.
+  const squeeze = me.speed <= CRAWLING ? { bodies: [...squeezed, ...unsafe.map(({ body }) => body)], edge: squeezeEdge } : null;
+  const line = nearestClearLine(racingLine, me.offset, blocked, unsafe, edge, squeeze);
+  // It holds back to the speed of a rider in its way; but if its line takes it clear past them, it rolls on at walking
+  // pace at least, so that it never stands for good behind one who has stopped.
+  let holdBehind = Infinity;
+  for (const other of inTheWay) {
+    const clearPast = Math.abs(line - other.offset) >= BIKE_WIDTH;
+    holdBehind = Math.min(holdBehind, clearPast ? Math.max(other.speed - 0.5, WALKING_PACE) : other.speed - 0.5);
+  }
   // Boxed in, with a car coming at it: it brakes hard, to drop back behind whoever is boxing it in and get out of the way.
   if (headOn && line === me.offset) holdBehind = 0;
   for (const thing of carsAndObstacles) {
@@ -305,12 +326,19 @@ export function lineAround(
  * it can on its side of them. In the way of one, it gets out of its path on
  * a side it can get to before it gets there, or else the nearer side. If no
  * end is within reach, it stays where it is, to hold back behind whatever is
- * in its way; but in the path of a car that holding back won't get it out of
- * the way of, it squeezes into the nearest gap between the cars and
- * obstacles, clear of the riders, that it can get to, down its middle, if
- * there is one.
+ * in its way, or, crawling, it squeezes past it (see `squeezeThrough`); but
+ * in the path of a car that holding back won't get it out of the way of, it
+ * squeezes into the nearest gap between the cars and obstacles, clear of the
+ * riders, that it can get to, down its middle, if there is one.
  */
-function nearestClearLine(racingLine: number, current: number, blocked: readonly Stretch[], unsafe: readonly Room[], edge: number) {
+function nearestClearLine(
+  racingLine: number,
+  current: number,
+  blocked: readonly Stretch[],
+  unsafe: readonly Room[],
+  edge: number,
+  squeeze: Squeeze | null,
+) {
   if (blocked.length === 0 && unsafe.length === 0) return clamp(racingLine, -edge, edge);
   const inside = (at: number, [from, to]: Stretch) => at > from && at < to;
   const close = unsafe.filter((room) => room.close);
@@ -346,7 +374,9 @@ function nearestClearLine(racingLine: number, current: number, blocked: readonly
   const around = inThePath ? [covering, stretches.find((stretch) => inside(current, stretch))] : [covering];
   const ends = around.flatMap((stretch) => stretch ?? []).filter(reachable);
   if (ends.length > 0) return nearest(ends);
-  if (!unsafe.some(({ body, dodgeSideways }) => dodgeSideways && inside(current, body))) return current;
+  if (!unsafe.some(({ body, dodgeSideways }) => dodgeSideways && inside(current, body))) {
+    return squeeze ? squeezeThrough(current, squeeze) : current;
+  }
   // Boxed in, in the path of a car: down the middle of the nearest gap between the cars and obstacles, and clear of the riders.
   const gaps: number[] = [];
   let from = -edge;
@@ -357,6 +387,34 @@ function nearestClearLine(racingLine: number, current: number, blocked: readonly
   if (from < edge) gaps.push((from + edge) / 2);
   const reachableGaps = gaps.filter(reachable);
   return reachableGaps.length > 0 ? nearest(reachableGaps) : current;
+}
+
+/** Where a crawling bike can squeeze through: what the riders' bikes and the cars and obstacles take up, out to `edge`. */
+interface Squeeze {
+  readonly bodies: readonly Stretch[];
+  readonly edge: number;
+}
+
+/**
+ * Where a crawling bike at `current`, with no clear line, squeezes past what
+ * keeps it there: on where it is, if nothing takes that up (`bodies`), or
+ * else down the middle of the nearest gap between them that it fits through,
+ * out to the `edge` (beyond the road's, on the shoulder); where it is, if
+ * there is none.
+ */
+function squeezeThrough(current: number, { bodies, edge }: Squeeze): number {
+  const gaps: Stretch[] = [];
+  let from = -edge;
+  for (const [start, end] of merge(bodies)) {
+    if (start > from) gaps.push([from, Math.min(start, edge)]);
+    from = Math.max(from, end);
+  }
+  if (from < edge) gaps.push([from, edge]);
+  const fits = gaps.filter(([start, end]) => end > start);
+  if (fits.some(([start, end]) => current >= start && current <= end)) return current;
+  const away = ([start, end]: Stretch) => (current < start ? start - current : current - end);
+  const nearest = fits.reduce<Stretch | null>((best, gap) => (best === null || away(gap) < away(best) ? gap : best), null);
+  return nearest ? (nearest[0] + nearest[1]) / 2 : current;
 }
 
 /**

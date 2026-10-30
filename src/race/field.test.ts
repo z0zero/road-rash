@@ -20,7 +20,10 @@ import {
   player,
   rideAlongside,
   secondsUntil,
+  setUpRace,
   startedRace,
+  stepFor,
+  steerOnto,
   steerTowards,
   STEPS_PER_SECOND,
   type TestSetup,
@@ -59,6 +62,33 @@ function raceWithoutThePlayer(
     for (const event of events) if (event.type === "rider-finished") finished.push(event);
   }
   return { race, finished };
+}
+
+/**
+ * A started race on a closed road with no cops, set up besides as `setup`
+ * says, in which the player has kicked the racer who lined up nearest them off
+ * the road, ahead of a sign on the shoulder, and ridden beside it on its
+ * inside, so that it can't come back onto the road, until it has stopped
+ * behind the sign, or behind whatever stands there; the player is beside it,
+ * all but stopped too.
+ */
+function pinnedBehindASign(setup: TestSetup = {}) {
+  const race = startedRace(8, { ...CLOSED_ROAD, ...NO_COPS, ...setup });
+  const target = nearestOpponent(race, "racer");
+  const them = () => race.snapshot().riders[target];
+  const alongside = rideAlongside(race, target);
+  secondsUntil(race, alongside, () => nearestWithinReach(race.snapshot().riders, player(race)) === target, 60);
+  const signAhead = () =>
+    race.track.obstacles.find(({ kind, offset, distance }) => kind === "sign" && offset > 6.5 && distance - them().distance > 80 && distance - them().distance < 200);
+  secondsUntil(race, alongside, () => signAhead() !== undefined, 60);
+  const sign = signAhead();
+  if (!sign) throw new Error("no sign on the shoulder ahead");
+  secondsUntil(race, () => ({ ...alongside(), kick: player(race).attack === null }), () => them().offset > 7, 10);
+  secondsUntil(race, rideAlongside(race, target, { across: 3.5 }), () => them().speed < 0.5, 30);
+  expect(them()).toMatchObject({ status: "racing", crash: null });
+  expect(them().offset).toBeGreaterThan(race.track.roadHalfWidth);
+  expect(sign.distance - them().distance).toBeLessThan(5);
+  return { race, them, sign };
 }
 
 /**
@@ -245,27 +275,49 @@ describe("the opponents", () => {
   });
 
   it("get going again from a standstill behind a roadside sign on the shoulder, once nobody rides beside them", () => {
-    // The player kicks the racer who lined up nearest them off the road, ahead of a sign on the shoulder, and rides beside
-    // it on its inside, so that it can't come back onto the road, until it stops behind the sign; then the player rides on.
-    const race = startedRace(8, { ...CLOSED_ROAD, ...NO_COPS });
-    const target = nearestOpponent(race, "racer");
-    const them = () => race.snapshot().riders[target];
-    const alongside = rideAlongside(race, target);
-    secondsUntil(race, alongside, () => nearestWithinReach(race.snapshot().riders, player(race)) === target, 60);
-    const signAhead = () =>
-      race.track.obstacles.find(({ kind, offset, distance }) => kind === "sign" && offset > 6.5 && distance - them().distance > 80 && distance - them().distance < 200);
-    secondsUntil(race, alongside, () => signAhead() !== undefined, 60);
-    const sign = signAhead();
-    secondsUntil(race, () => ({ ...alongside(), kick: player(race).attack === null }), () => them().offset > 7, 10);
-    secondsUntil(race, rideAlongside(race, target, { across: 3.5 }), () => them().speed < 0.5, 30);
-    expect(them()).toMatchObject({ status: "racing", crash: null });
-    expect(them().offset).toBeGreaterThan(race.track.roadHalfWidth);
-    expect((sign?.distance ?? NaN) - them().distance).toBeLessThan(5);
+    const { race, them } = pinnedBehindASign();
 
     const pilot = autopilot(race, { lane: 1.5 });
     const seconds = secondsUntil(race, pilot, () => them().speed > 5 && them().offset < race.track.roadHalfWidth, 20);
 
     expect(seconds).toBeLessThan(10);
+  });
+
+  it("squeeze past a rider who stands beside them from a standstill behind a roadside sign on the shoulder, at walking pace", () => {
+    const { race, them, sign } = pinnedBehindASign();
+    const besideThem = player(race);
+
+    // The player stands still beside the racer, on its inside.
+    const seconds = secondsUntil(race, { ...NO_INPUT, brake: 1 }, () => them().distance > sign.distance + 2 && them().speed > 5, 20);
+
+    expect(seconds).toBeLessThan(5);
+    expect(player(race).distance).toBeCloseTo(besideThem.distance, 1);
+    expect(them()).toMatchObject({ status: "racing", crash: null });
+  });
+
+  it("get round a player who stops dead in their lane in front of them as they get going again from a standstill on the shoulder", () => {
+    // A car pulled over onto the shoulder beside the sign the racer is pinned behind, so that it can't squeeze past it
+    // while the player stands beside it.
+    const { obstacles, startDistance } = setUpRace({ seed: 8 }, CLOSED_ROAD).track;
+    const sign = obstacles.find(({ kind, offset, distance }) => kind === "sign" && offset > 6.5 && distance > startDistance + 800);
+    const { race, them } = pinnedBehindASign({ parkedCars: [{ distance: sign?.distance ?? NaN, offset: 7.8 }] });
+    stepFor(race, 1, { ...NO_INPUT, brake: 1 });
+    // The player rolls on, out of the racer's reach, and stops dead in the outer lane, in the racer's way back onto the road.
+    let lastOffset = player(race).offset;
+    const rollingOn = (): PlayerInput => {
+      const me = player(race);
+      const sideways = (me.offset - lastOffset) * STEPS_PER_SECOND;
+      lastOffset = me.offset;
+      const far = me.distance - them().distance >= 4;
+      return far ? { ...steerOnto(me, 5.5, 0, sideways), throttle: 0, brake: 1 } : steerOnto(me, 5.5, 2, sideways);
+    };
+    secondsUntil(race, rollingOn, () => player(race).speed === 0 && player(race).distance - them().distance >= 4, 10);
+    const stoppedAt = player(race);
+
+    const seconds = secondsUntil(race, { ...NO_INPUT, brake: 1 }, () => them().distance > player(race).distance + 3 && them().speed > 5, 20);
+
+    expect(seconds).toBeLessThan(5);
+    expect(Math.abs(player(race).distance - stoppedAt.distance)).toBeLessThan(0.5);
   });
 
   it("ride at their own pace, so faster riders pass slower ones", () => {
