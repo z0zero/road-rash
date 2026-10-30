@@ -1,5 +1,6 @@
 import type { RaceView } from "@/game/session";
 import type { AttackSnapshot, CopId, CrashPhase, RaceSnapshot, RiderId, RiderSnapshot, Weapon } from "@/race";
+import { Vector3 } from "three";
 import { bikePoseOf, createPose, poseOf, type RiderPose } from "./rider-pose";
 
 const GRAVITY = 9.81;
@@ -38,10 +39,8 @@ export abstract class BikeMotion {
   readonly pose: RiderPose = createPose();
   /** Where their bike is. */
   readonly bikePose: RiderPose = createPose();
-  /** The bike: metres, on the road's surface. */
-  x = 0;
-  y = 0;
-  z = 0;
+  /** Where the bike is, on the road's surface: world coordinates, metres. */
+  readonly bikeAt = new Vector3();
   /** Radians about the vertical, as three.js turns an object: facing along the road, turned towards its sideways motion. */
   yaw = 0;
   /** Radians the road climbs ahead of the bike. */
@@ -68,10 +67,8 @@ export abstract class BikeMotion {
   fallen = 0;
   /** The side the crashed bike lies on: 1 its right, -1 its left. */
   fallSide: -1 | 1 = 1;
-  /** Off their bike: metres, on the road's surface. */
-  bodyX = 0;
-  bodyY = 0;
-  bodyZ = 0;
+  /** Where they are off their bike, on the road's surface: world coordinates, metres. */
+  readonly bodyAt = new Vector3();
   /** Radians about the vertical: the way they face off their bike. */
   bodyYaw = 0;
   /** Radians a tumbling body has turned over since the crash. */
@@ -113,9 +110,7 @@ export abstract class BikeMotion {
 
     const road = view.track.sampleAt(bike.distance);
     const at = view.track.pointAt(bike.distance, bike.offset);
-    this.x = at.x;
-    this.y = at.y;
-    this.z = at.z;
+    this.bikeAt.set(at.x, at.y, at.z);
     this.pitch = along * Math.atan(road.grade);
     this.bank = along * road.bank;
     this.wheelTurn = (this.wheelTurn + (along * travelled) / wheelRadius) % (Math.PI * 2);
@@ -145,9 +140,7 @@ export abstract class BikeMotion {
     this.lean -= this.lean * (1 - Math.exp(-LEAN_RESPONSE * delta));
 
     const ground = view.track.pointAt(body.distance, body.offset);
-    this.bodyX = ground.x;
-    this.bodyY = ground.y;
-    this.bodyZ = ground.z;
+    this.bodyAt.set(ground.x, ground.y, ground.z);
     if (this.crash === "tumbling") {
       // Knocked down by a car while on foot, they tumble afresh.
       if (phaseBefore === "on-foot") this.tumble = 0;

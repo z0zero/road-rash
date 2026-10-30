@@ -55,11 +55,7 @@ export function Sunlight({
 }
 
 function followPlayer(light: DirectionalLight, direction: Vector3, player: RiderMotion) {
-  light.target.position.set(player.x, player.y, player.z);
-  light.position.set(
-    player.x + direction.x * LIGHT_DISTANCE,
-    player.y + direction.y * LIGHT_DISTANCE,
-    player.z + direction.z * LIGHT_DISTANCE,
-  );
+  light.target.position.copy(player.bikeAt);
+  light.position.copy(player.bikeAt).addScaledVector(direction, LIGHT_DISTANCE);
   light.target.updateMatrixWorld();
 }
