@@ -10,6 +10,7 @@ import {
   NO_COPS,
   player,
   secondsUntil,
+  setUpRace,
   startedRace,
   stepFor,
   STEPS_PER_SECOND,
@@ -66,7 +67,7 @@ describe("riding", () => {
 
   it("reaches a top speed of 225 km/h and never goes faster", () => {
     // On a closed road, so that no car holds the bike up on the straights.
-    const race = startedRace(1, { traffic: false });
+    const race = startedRace(1, CLOSED_ROAD);
     const pilot = autopilot(race);
     let fastest = 0;
 
@@ -279,7 +280,7 @@ describe("the finish", () => {
 
 /** A started race in which the player, on a bike with next to no condition left, has wrecked it in the first seconds by riding into the opponent nearest them. */
 function wreckedEarly(seed = 1) {
-  const race = createRace({ seed, playerCondition: 1 });
+  const race = setUpRace({ seed }, { playerCondition: 1 });
   stepFor(race, 3);
   secondsUntil(race, chase(race, nearestOpponent(race), 12), () => player(race).status === "wrecked", 30);
   return race;

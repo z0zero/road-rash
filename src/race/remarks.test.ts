@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createRace, PLAYER, type RaceEvent, type RaceResults, type Remark } from ".";
+import { PLAYER, type RaceEvent, type RaceResults, type Remark } from ".";
 import {
   alongsideTheFirstCop,
   autopilot,
@@ -9,6 +9,7 @@ import {
   nearestOpponent,
   player,
   secondsUntil,
+  setUpRace,
   startedRace,
   stepFor,
 } from "./test-helpers";
@@ -26,7 +27,7 @@ function rideToTheFinish(seed: number, targetSpeed: number): RaceResults {
  * wrecked it.
  */
 function rideToAWreck(seed: number): RaceResults {
-  const race = createRace({ seed, playerCondition: 1 });
+  const race = setUpRace({ seed }, { playerCondition: 1 });
   stepFor(race, 3);
   const target = nearestOpponent(race);
   secondsUntil(race, chase(race, target, 12), () => player(race).status !== "racing", 120);

@@ -11,7 +11,7 @@ import {
   TRAFFIC_AHEAD,
   type Race,
 } from ".";
-import { autopilot, kmh, startedRace, STEPS_PER_SECOND } from "./test-helpers";
+import { autopilot, kmh, NO_COPS, startedRace, STEPS_PER_SECOND } from "./test-helpers";
 
 describe("the race's limits, which the game shows", () => {
   it("are a bike's top speed: 225 km/h", () => {
@@ -36,7 +36,7 @@ describe("the race's limits, which the game shows", () => {
 
   it("are how far ahead of the player cars come onto the road, and leave it: 600 m", () => {
     expect(TRAFFIC_AHEAD).toBe(600);
-    const race = startedRace(1, { cops: false });
+    const race = startedRace(1, NO_COPS);
     const pilot = autopilot(race);
     let furthest = 0;
     for (let step = 0; step < 60 * STEPS_PER_SECOND; step++) {
@@ -60,8 +60,8 @@ describe("the race's limits, which the game shows", () => {
   }
 
   it("are the most cars the road ever holds at once, whether the player rides flat out or stands still", () => {
-    const flatOut = startedRace(1, { cops: false });
-    const standingStill = startedRace(2, { cops: false });
+    const flatOut = startedRace(1, NO_COPS);
+    const standingStill = startedRace(2, NO_COPS);
 
     const mostFlatOut = mostCarsWhile(flatOut, autopilot(flatOut), 120);
     const mostStandingStill = mostCarsWhile(standingStill, () => ({ ...NO_INPUT, brake: 1 }), 120);
