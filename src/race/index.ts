@@ -9,7 +9,8 @@
  *   race.fastForward();        // once the player's race is over: final results
  *   race.track;                // the road's geometry and placements
  */
-export { createRace, NO_INPUT, PLAYER } from "./race";
+export { createRace, NO_INPUT } from "./race";
+export { PLAYER } from "./riders";
 export { COP_FULL_STAMINA } from "./cops";
 export { COP_ALERT_RANGE, FULL_CONDITION, FULL_STAMINA, QUALIFYING_POSITION, TOP_SPEED } from "./limits";
 export { AHEAD as TRAFFIC_AHEAD, MOST_CARS } from "./traffic";
@@ -25,9 +26,9 @@ export type {
   RaceResults,
   RaceSnapshot,
   RiderSnapshot,
-  RiderStatus,
   Standing,
 } from "./race";
+export type { RiderStatus } from "./riders";
 export type { Track, TrackSample, WorldPoint } from "./track";
 export type { CarKind } from "./traffic";
 export type { CrashPhase } from "./crashing";
