@@ -42,7 +42,7 @@ export interface Track {
   readonly obstacles: readonly ObstaclePlacement[];
 }
 
-/** Where something is in track space. */
+/** Where something is in track space; not a rider's position in the race, which is their rank. */
 export interface TrackPosition {
   /** Metres along the centreline. */
   readonly distance: number;
