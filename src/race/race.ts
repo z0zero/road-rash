@@ -38,6 +38,7 @@ import {
   type Weapon,
 } from "./fighting";
 import { footprintOfCar, footprintOfObstacle, type Footprint } from "./footprint";
+import { QUALIFYING_POSITION } from "./limits";
 import { isDroppingBack, opponentAttack, opponentIntent } from "./opponent-fighting";
 import { catchUpFor, opponentControls, paceFor, type OpponentRiding } from "./opponent-riding";
 import { OPPONENTS, PLAYER_NAME, type Temperament } from "./opponents";
@@ -69,9 +70,6 @@ const KMH_PER_METRE_PER_SECOND = 3.6;
 
 /** Fast-forwarding races the rest of the field for at most three extra simulated minutes. */
 const FAST_FORWARD_STEPS = 180 * STEPS_PER_SECOND;
-
-/** Finishing in this position or better qualifies. */
-const QUALIFYING_POSITION = 3;
 
 /** At the start, cars in the race direction keep at least this many metres ahead of the riders lined up for it. */
 const CLEAR_OF_THE_GRID = 60;
