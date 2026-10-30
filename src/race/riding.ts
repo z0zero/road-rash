@@ -17,6 +17,11 @@ export interface Motion {
   kickShove: number;
 }
 
+/** A rider on a bike takes up about this many metres along the track... */
+export const BIKE_LENGTH = 2;
+/** ...and this many across it. */
+export const BIKE_WIDTH = 0.8;
+
 export interface Controls {
   readonly throttle: number;
   readonly brake: number;

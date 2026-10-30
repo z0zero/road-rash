@@ -66,8 +66,6 @@ const RUN_STRAIGHT_BACK: OnFootControls = { steer: 0, brake: 0 };
 /** A rider whose race is over stays where they are once they are on their feet. */
 const STAND_STILL: OnFootControls = { steer: 0, brake: 1 };
 
-const KMH_PER_METRE_PER_SECOND = 3.6;
-
 /** Fast-forwarding races the rest of the field for at most three extra simulated minutes. */
 const FAST_FORWARD_STEPS = 180 * STEPS_PER_SECOND;
 
@@ -407,6 +405,8 @@ export function createRace(options: RaceOptions): Race {
 
   /** Riders still racing on their bikes: the ones who ride, bump and fight. */
   const onTheirBikes = () => riders.filter((rider) => rider.status === "racing" && !rider.crash);
+  /** Where the riders still racing are on the road, on their bikes or off them. */
+  const ridersOnTheRoad = () => riders.filter((rider) => rider.status === "racing").map(whereIs);
   const edge = track.roadHalfWidth + track.shoulderWidth;
 
   /** Cops riding in the race: the ones who patrol, bust riders and fight. */
@@ -555,7 +555,7 @@ export function createRace(options: RaceOptions): Race {
     rider.attack = null;
     rider.weapon = null;
     rider.crash = throwOff(rider.motion);
-    const loss = TUNING.crashConditionLoss + TUNING.crashConditionLossPerKmh * impactSpeed * KMH_PER_METRE_PER_SECOND;
+    const loss = TUNING.crashConditionLoss + TUNING.crashConditionLossPerImpactSpeed * impactSpeed;
     rider.condition = Math.max(0, rider.condition - loss);
     if (rider.condition === 0) {
       rider.status = "wrecked";
@@ -738,7 +738,7 @@ export function createRace(options: RaceOptions): Race {
     track,
     step(input) {
       // The traffic drives on whatever the riders do, even while they wait for the countdown.
-      if (stepsTaken < COUNTDOWN_STEPS) traffic.step(whereIs(riders[PLAYER]));
+      if (stepsTaken < COUNTDOWN_STEPS) traffic.step(whereIs(riders[PLAYER]), ridersOnTheRoad());
       else {
         const clockBefore = clock();
         // Everyone decides what to do from where things stand, then everyone moves.
@@ -797,7 +797,7 @@ export function createRace(options: RaceOptions): Race {
             carryOn(cop.crash, cop.motion, STAND_STILL, edge);
           }
         });
-        traffic.step(whereIs(player));
+        traffic.step(whereIs(player), ridersOnTheRoad());
         bustTheCaught();
         joinThePlayer();
         // Riders on their bikes bump each other and the cops' bikes, or run into them and crash; a cop never crashes.
