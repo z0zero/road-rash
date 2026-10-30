@@ -1,8 +1,7 @@
-import { type BufferGeometry, Color } from "three";
+import { BufferGeometry, Color, Float32BufferAttribute } from "three";
 import { clamp, smoothstep } from "@/math";
 import { createGroundGrid, type Side, type Track, type WorldPoint } from "@/race";
 import { groundDirection, seaward } from "./geography";
-import { geometryFrom } from "./low-poly";
 import { hash, smoothNoise } from "./noise";
 
 /**
@@ -36,6 +35,12 @@ const SKIRT_DEPTH = -30;
  * stands higher, over up to this many metres before the line between them.
  */
 const MEETING_SLOPE = 120;
+/**
+ * Inside a bend, a point's height is evened out with those of the same point
+ * of up to this many sections either way, wherever they stand closer to it
+ * than the sections' spacing (see `evenOut`).
+ */
+const EVENING_OUT_SECTIONS = 30;
 
 const terrains = new WeakMap<Track, Terrain>();
 
@@ -201,6 +206,47 @@ function createTerrain(track: Track): Terrain {
     for (let k = 3; k < POINTS - 1; k++) height[s][base + k] -= drop * smoothstep(from, end, lateral[s][base + k]);
   }
 
+  /**
+   * Inside a bend, the sections close in on its centre, so the same point of
+   * neighbouring sections stands closer together than the sections' spacing,
+   * the closer the further out; but the heights, set section by section, still
+   * change from one to the next as much as on a straight. The narrow faces
+   * between them would tilt this way and that, and read as a fan of stripes.
+   * There each point's height is evened out with those of the same point of
+   * the sections around, as much as they stand closer to it than the spacing;
+   * where they stand a full spacing apart, as on a straight, nothing changes.
+   */
+  function evenOut() {
+    // Where the same point of every section stands, and its height evened out.
+    const px = new Float64Array(count);
+    const pz = new Float64Array(count);
+    const evened = new Float64Array(count);
+    for (let s = 0; s < 2; s++) {
+      const side = s === 0 ? -1 : 1;
+      for (let k = 2; k < POINTS - 1; k++) {
+        for (let i = 0; i < count; i++) {
+          const l = lateral[s][i * POINTS + k];
+          px[i] = xs[i] + side * rightX[i] * l;
+          pz[i] = zs[i] + side * rightZ[i] * l;
+        }
+        for (let i = 0; i < count; i++) {
+          let total = height[s][i * POINTS + k];
+          let weights = 1;
+          for (let j = Math.max(0, i - EVENING_OUT_SECTIONS); j <= Math.min(count - 1, i + EVENING_OUT_SECTIONS); j++) {
+            const apart = Math.sqrt((px[j] - px[i]) ** 2 + (pz[j] - pz[i]) ** 2);
+            if (j === i || apart >= SPACING) continue;
+            const weight = (1 - apart / SPACING) ** 2;
+            total += weight * height[s][j * POINTS + k];
+            weights += weight;
+          }
+          evened[i] = total / weights;
+        }
+        for (let i = 0; i < count; i++) height[s][i * POINTS + k] = evened[i];
+      }
+    }
+  }
+  evenOut();
+
   return {
     groundAt,
 
@@ -216,8 +262,7 @@ function createTerrain(track: Track): Terrain {
     buildGeometry(fromDistance, toDistance) {
       const first = Math.max(0, Math.floor(fromDistance / SPACING));
       const last = Math.min(count - 1, Math.ceil(toDistance / SPACING));
-      const positions: number[] = [];
-      const colors: number[] = [];
+      const faces: Faces = { positions: [], colors: [], normals: [] };
       const point = (s: number, i: number, k: number): WorldPoint => {
         const side = s === 0 ? -1 : 1;
         const l = lateral[s][i * POINTS + k];
@@ -232,11 +277,16 @@ function createTerrain(track: Track): Terrain {
             const farOut = point(s, i + 1, k + 1);
             // Counter-clockwise seen from above: left to right across the race direction, near before far.
             const quad: Quad = s === 1 ? [nearIn, nearOut, farOut, farIn] : [nearOut, nearIn, farIn, farOut];
-            pushQuad(positions, colors, quad, (i * POINTS + k) * 2 + s, k === POINTS - 2);
+            // How far apart its ends are along the road, at the narrower one, as a share of the sections' spacing.
+            const spread = Math.min(1, apartOnTheGround(nearIn, farIn) / SPACING, apartOnTheGround(nearOut, farOut) / SPACING);
+            pushQuad(faces, quad, (i * POINTS + k) * 2 + s, k === POINTS - 2, spread);
           }
         }
       }
-      const geometry = geometryFrom(positions, colors);
+      const geometry = new BufferGeometry();
+      geometry.setAttribute("position", new Float32BufferAttribute(faces.positions, 3));
+      geometry.setAttribute("color", new Float32BufferAttribute(faces.colors, 3));
+      geometry.setAttribute("normal", new Float32BufferAttribute(faces.normals, 3));
       geometry.computeBoundingSphere();
       return geometry;
     },
@@ -244,6 +294,18 @@ function createTerrain(track: Track): Terrain {
 }
 
 type Quad = [WorldPoint, WorldPoint, WorldPoint, WorldPoint];
+
+/** The land's faces as they are built: every triangle's corners, with its colour and normal at each. */
+interface Faces {
+  readonly positions: number[];
+  readonly colors: number[];
+  readonly normals: number[];
+}
+
+/** How far apart two points are on the ground, in metres. */
+function apartOnTheGround(a: WorldPoint, b: WorldPoint): number {
+  return Math.hypot(a.x - b.x, a.z - b.z);
+}
 
 /** Metres of coast per step when tracing the coastline. */
 const COAST_STEP = 10;
@@ -403,12 +465,26 @@ const GRASS = [new Color("#8c8a48"), new Color("#76803f"), new Color("#9c8f50")]
 const SAND = new Color("#cdb088");
 const scratch = new Color();
 
-/** Adds a quad as two triangles, each coloured by its slope and height: rock, scrub, grass or the shore. */
-function pushQuad(positions: number[], colors: number[], [a, b, c, d]: Quad, seed: number, skirt: boolean) {
+/**
+ * Adds a quad as two flat-shaded triangles, each coloured by its slope and
+ * height: rock, scrub, grass or the shore, a little lighter or darker. A quad
+ * whose `spread` (see `buildGeometry`) is less than 1, inside a bend, is a
+ * wedge, and twisted as a rule: its triangles, which would be shaded and
+ * coloured each its own way, take on the quad's own slope and height, and
+ * keep less of their lighter or darker touch, the narrower it is the more, so
+ * that the wedges of a bend read as one hillside rather than as a fan of
+ * stripes.
+ */
+function pushQuad(faces: Faces, [a, b, c, d]: Quad, seed: number, skirt: boolean, spread: number) {
   const triangles: [WorldPoint, WorldPoint, WorldPoint][] = [
     [a, b, c],
     [a, c, d],
   ];
+  // The quad's own normal, across its diagonals, and the height of its middle.
+  const across = { x: c.x - a.x, y: c.y - a.y, z: c.z - a.z };
+  const over = { x: d.x - b.x, y: d.y - b.y, z: d.z - b.z };
+  const quadNormal = unit(across.y * over.z - across.z * over.y, across.z * over.x - across.x * over.z, across.x * over.y - across.y * over.x);
+  const quadMiddle = (a.y + b.y + c.y + d.y) / 4;
   triangles.forEach(([p, q, r], index) => {
     // How much the triangle faces up: the y part of its unit normal.
     const ux = q.x - p.x;
@@ -425,8 +501,13 @@ function pushQuad(positions: number[], colors: number[], [a, b, c, d]: Quad, see
     // not a number.
     const twiceArea = Math.hypot(nx, ny, nz);
     if (twiceArea < 1e-6) return;
-    const up = ny / twiceArea;
-    const middle = (p.y + q.y + r.y) / 3;
+    const normal = unit(
+      (nx / twiceArea) * spread + quadNormal.x * (1 - spread),
+      (ny / twiceArea) * spread + quadNormal.y * (1 - spread),
+      (nz / twiceArea) * spread + quadNormal.z * (1 - spread),
+    );
+    const up = normal.y;
+    const middle = ((p.y + q.y + r.y) / 3) * spread + quadMiddle * (1 - spread);
     // Patches a few tens of metres across, so neighbouring faces mostly share a colour.
     const patch = smoothNoise((p.x + p.z * 0.7) / 23, 30);
     if (skirt) scratch.copy(DARK_ROCK);
@@ -437,10 +518,17 @@ function pushQuad(positions: number[], colors: number[], [a, b, c, d]: Quad, see
       scratch.copy(ROCK[Math.floor(hash(stratum * 977) * ROCK.length)]);
     } else if (up < 0.85) scratch.copy(SCRUB[patch < 0.5 ? 0 : 1]);
     else scratch.copy(GRASS[Math.min(GRASS.length - 1, Math.floor(patch * GRASS.length))]);
-    scratch.multiplyScalar(0.93 + 0.12 * hash(seed * 2 + index));
+    scratch.multiplyScalar(0.99 + 0.12 * (hash(seed * 2 + index) - 0.5) * spread);
     for (const point of [p, q, r]) {
-      positions.push(point.x, point.y, point.z);
-      colors.push(scratch.r, scratch.g, scratch.b);
+      faces.positions.push(point.x, point.y, point.z);
+      faces.colors.push(scratch.r, scratch.g, scratch.b);
+      faces.normals.push(normal.x, normal.y, normal.z);
     }
   });
+}
+
+/** The unit vector along (x, y, z); straight up for none. */
+function unit(x: number, y: number, z: number): { x: number; y: number; z: number } {
+  const length = Math.hypot(x, y, z);
+  return length < 1e-9 ? { x: 0, y: 1, z: 0 } : { x: x / length, y: y / length, z: z / length };
 }
