@@ -1,7 +1,8 @@
-import { KEYS, namesOf } from "@/input/bindings";
+import { KEYS, type Key } from "@/input/bindings";
 import type { PersonalBest } from "@/save-data/save-data";
 import { Button } from "./Button";
 import { formatPosition, formatRaceTime } from "./format";
+import { nameOn, useKeyboardLabels } from "./key-names";
 
 export function TitleScreen({
   personalBest,
@@ -16,6 +17,11 @@ export function TitleScreen({
   onSettings: () => void;
   onCredits: () => void;
 }) {
+  const labels = useKeyboardLabels();
+  /** The keys, by their names on the player's keyboard, as a sentence says them: "J or Z". */
+  const namesOf = (keys: readonly Key[]) => keys.map((key) => nameOn(labels, key)).join(" or ");
+  // The letter keys to ride with, "W/A/S/D": the first key for each way, the arrow keys being the others.
+  const ridingLetters = [KEYS.throttle, KEYS.steerLeft, KEYS.brake, KEYS.steerRight].map((keys) => nameOn(labels, keys[0])).join("/");
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 bg-gradient-to-b from-night/75 via-dusk/35 to-transparent px-6 text-center">
       <GameTitle />
@@ -29,7 +35,7 @@ export function TitleScreen({
         <Button onClick={onCredits}>Credits</Button>
       </div>
       <p className="text-sm text-sand/85 drop-shadow">
-        {RIDING_LETTERS} or the arrow keys to ride &middot; {namesOf(KEYS.punch)} to punch, or swing a club &middot;{" "}
+        {ridingLetters} or the arrow keys to ride &middot; {namesOf(KEYS.punch)} to punch, or swing a club &middot;{" "}
         {namesOf(KEYS.kick)} to kick &middot; {namesOf(KEYS.pause)} to pause
       </p>
       {personalBest.time !== null && (
@@ -41,9 +47,6 @@ export function TitleScreen({
     </div>
   );
 }
-
-/** The letter keys to ride with, "W/A/S/D": the first key for each way, the arrow keys being the others. */
-const RIDING_LETTERS = [KEYS.throttle, KEYS.steerLeft, KEYS.brake, KEYS.steerRight].map((keys) => keys[0].name).join("/");
 
 export function GameTitle() {
   return (
