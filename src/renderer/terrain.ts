@@ -1,7 +1,8 @@
-import { BufferGeometry, Color, Float32BufferAttribute } from "three";
+import { type BufferGeometry, Color } from "three";
 import { smoothstep } from "@/math";
-import type { Track } from "@/race";
+import type { Track, WorldPoint } from "@/race";
 import { groundDirection, seaward } from "./geography";
+import { geometryFrom } from "./low-poly";
 import { hash, smoothNoise } from "./noise";
 
 /**
@@ -184,7 +185,7 @@ function createTerrain(track: Track): Terrain {
       const last = Math.min(count - 1, Math.ceil(toDistance / SPACING));
       const positions: number[] = [];
       const colors: number[] = [];
-      const point = (s: number, i: number, k: number): Point => {
+      const point = (s: number, i: number, k: number): WorldPoint => {
         const side = s === 0 ? -1 : 1;
         const l = lateral[s][i * POINTS + k];
         return { x: xs[i] + side * rightX[i] * l, y: height[s][i * POINTS + k], z: zs[i] + side * rightZ[i] * l };
@@ -202,22 +203,14 @@ function createTerrain(track: Track): Terrain {
           }
         }
       }
-      const geometry = new BufferGeometry();
-      geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
-      geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
-      geometry.computeVertexNormals();
+      const geometry = geometryFrom(positions, colors);
       geometry.computeBoundingSphere();
       return geometry;
     },
   };
 }
 
-interface Point {
-  x: number;
-  y: number;
-  z: number;
-}
-type Quad = [Point, Point, Point, Point];
+type Quad = [WorldPoint, WorldPoint, WorldPoint, WorldPoint];
 
 /** Metres of coast per step when tracing the coastline. */
 const COAST_STEP = 10;
@@ -367,7 +360,7 @@ const scratch = new Color();
 
 /** Adds a quad as two triangles, each coloured by its slope and height: rock, scrub, grass or the shore. */
 function pushQuad(positions: number[], colors: number[], [a, b, c, d]: Quad, seed: number, skirt: boolean) {
-  const triangles: [Point, Point, Point][] = [
+  const triangles: [WorldPoint, WorldPoint, WorldPoint][] = [
     [a, b, c],
     [a, c, d],
   ];
