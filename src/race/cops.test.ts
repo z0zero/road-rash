@@ -698,6 +698,29 @@ describe("a cop moving across the road", () => {
   });
 });
 
+describe("cars", () => {
+  it("slow down for a cop slower than them in their lane, as for a slower rider: none runs into one and carries it along", WHOLE_RACES, () => {
+    // The player rides at 18 m/s in the inner lane, where cars come up behind them and the cops near them.
+    const carried: string[] = [];
+    for (const seed of [1, 4]) {
+      const race = startedRace(seed);
+      const pilot = autopilot(race, { targetSpeed: 18, lane: 1.5 });
+      let speeds = race.snapshot().cops.map((cop) => cop.speed);
+      for (let step = 0; step < 150 * STEPS_PER_SECOND && player(race).status === "racing"; step++) {
+        race.step(pilot());
+        const { clock, cops } = race.snapshot();
+        // A cop speeds up by at most 14 m/s² of its own, a quarter of a metre per second in a step.
+        for (const cop of cops) {
+          if (cop.status === "riding" && cop.speed - speeds[cop.id] > 2) carried.push(`seed ${seed} at ${clock.toFixed(1)} s: ${cop.name}`);
+        }
+        speeds = cops.map((cop) => cop.speed);
+      }
+    }
+
+    expect(carried).toEqual([]);
+  });
+});
+
 describe("the cop alert, over a whole race", () => {
   it("is on for well under half the race once the first cop has joined, for a player who rides it without incident", () => {
     const race = startedRace(1, CLOSED_ROAD);
