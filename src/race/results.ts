@@ -3,7 +3,7 @@ import { QUALIFYING_POSITION } from "./limits";
 import type { RaceState } from "./race-state";
 import { createRandom } from "./random";
 import { remarkOn, type Ending, type Remark } from "./remarks";
-import { PLAYER, whereIs, type Rider, type RiderStatus } from "./riders";
+import { isPlayer, PLAYER, whereIs, type Rider, type RiderStatus } from "./riders";
 import { STEP_SECONDS } from "./steps";
 
 /** Mixed into the race's seed for choosing the remark on the results, so the choice never changes the race. */
@@ -62,7 +62,7 @@ export function finishCrossings(race: RaceState, distancesBefore: readonly numbe
     rider.status = "finished";
     rider.finishOrder = ++race.finishers;
     race.events.push({ type: "rider-finished", rider: rider.id, time, position: rider.finishOrder });
-    if (rider.id === PLAYER) race.events.push({ type: "player-race-over", outcome: "finished" });
+    if (isPlayer(rider)) race.events.push({ type: "player-race-over", outcome: "finished" });
   }
 }
 
@@ -107,8 +107,8 @@ export function resultsOf(race: RaceState, outcome: RaceOutcome, complete: boole
   const position = standings.find((entry) => entry.rider === PLAYER)?.position ?? null;
   const qualified = outcome === "finished" && position !== null && position <= QUALIFYING_POSITION;
   const opponents = standings.flatMap(({ rider, name, position }) => {
-    const { temperament } = riders[rider];
-    return temperament ? [{ id: rider, name, temperament, position }] : [];
+    const them = riders[rider];
+    return isPlayer(them) ? [] : [{ id: rider, name, temperament: them.temperament, position }];
   });
   const remark = complete
     ? remarkOn(endingFor(race, outcome, position, qualified), opponents, createRandom(race.seed ^ REMARK_SEED))

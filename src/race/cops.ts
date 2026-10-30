@@ -16,7 +16,7 @@ import { copsInTheRace, type RaceState } from "./race-state";
 import { PLAYER, whereIs } from "./riders";
 import { BIKE_WIDTH, clamp, maxSidewaysSpeed, type Motion } from "./riding";
 import { STEP_SECONDS, stepsIn } from "./steps";
-import { apart, type Track } from "./track";
+import { apart, type Moving, type Track } from "./track";
 import { TUNING } from "./tuning";
 
 /** Where a cop is in the race: waiting on the shoulder for the player to pass, riding in the race, or knocked off and out of it. */
@@ -98,16 +98,6 @@ export interface CopIntent {
   readonly hurrying?: boolean;
 }
 
-/** Where someone is and how fast they are going along the track. */
-export interface Place {
-  /** Metres along the centreline. */
-  readonly distance: number;
-  /** Metres right of the centreline. */
-  readonly offset: number;
-  /** Metres per second along the track. */
-  readonly speed: number;
-}
-
 /** Cops ride in the inner of the two lanes that run in the race direction, this many metres right of the centreline. */
 const PATROL_LINE = 1.5;
 /** Cops ride a faster bike than the riders', and hold their line through bends with little steering to spare. */
@@ -152,7 +142,7 @@ const ARREST_PACE = TUNING.cops.arrestPace;
  */
 export function patrolIntent(
   me: Readonly<Motion>,
-  player: Place,
+  player: Moving,
   following: boolean,
   track: Track,
   field: readonly Readonly<Motion>[],
@@ -181,7 +171,7 @@ export function patrolIntent(
  */
 export function bustingIntent(
   me: Readonly<Motion>,
-  rider: Place,
+  rider: Moving,
   field: readonly Readonly<Motion>[],
   carsAndObstacles: readonly Footprint[],
   edge: number,
@@ -207,7 +197,7 @@ export const COP_ATTACK_EVERY_SECONDS = 1;
  */
 export function fightingBackIntent(
   me: Readonly<Motion>,
-  rider: Place,
+  rider: Moving,
   track: Track,
   field: readonly Readonly<Motion>[],
   carsAndObstacles: readonly Footprint[],
@@ -278,7 +268,7 @@ export interface Rota {
  * follow them. The first cop to join the race follows them at once; others
  * hold back while it does, or during a break.
  */
-export function takeTurns(cops: readonly Cop[], rota: Rota, player: Place, busy: (cop: Cop) => boolean): void {
+export function takeTurns(cops: readonly Cop[], rota: Rota, player: Moving, busy: (cop: Cop) => boolean): void {
   for (const cop of cops) {
     if (!cop.following) continue;
     if (cop.status !== "riding") cop.following = false;

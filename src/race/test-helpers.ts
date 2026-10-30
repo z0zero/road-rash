@@ -16,7 +16,9 @@ import {
   type RaceEvent,
   type RiderId,
   type RiderSnapshot,
+  type Side,
   type Temperament,
+  type TrackPosition,
 } from ".";
 import { setUpRace, type TestSetup } from "./race";
 
@@ -154,7 +156,7 @@ interface KeepOut {
   readonly stretch: Stretch;
   /** Seconds until it is reached; 0 when alongside. */
   readonly urgency: number;
-  readonly side: -1 | 1;
+  readonly side: Side;
 }
 
 /**
@@ -414,8 +416,7 @@ export function chase(race: Race, target: RiderId, closing: number) {
 }
 
 /** Metres between two things in track space: along the track and across it. */
-export const apart = (a: { distance: number; offset: number }, b: { distance: number; offset: number }) =>
-  Math.hypot(a.distance - b.distance, a.offset - b.offset);
+export const apart = (a: TrackPosition, b: TrackPosition) => Math.hypot(a.distance - b.distance, a.offset - b.offset);
 
 /**
  * Scripted input that rides the player up alongside the first cop, 1.4 m to

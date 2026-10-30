@@ -42,6 +42,23 @@ export interface Track {
   readonly obstacles: readonly ObstaclePlacement[];
 }
 
+/** Where something is in track space. */
+export interface TrackPosition {
+  /** Metres along the centreline. */
+  readonly distance: number;
+  /** Metres sideways from the centreline; positive is right of the race direction. */
+  readonly offset: number;
+}
+
+/** Where something is in track space, and how fast it goes along the track. */
+export interface Moving extends TrackPosition {
+  /** Metres per second along the track; negative when going back down it. */
+  readonly speed: number;
+}
+
+/** A side of the road, or of someone on it: -1 the left and 1 the right, facing the race direction. */
+export type Side = -1 | 1;
+
 /** A point in world coordinates, in metres. */
 export interface WorldPoint {
   readonly x: number;
@@ -218,7 +235,7 @@ function lerp(from: number, to: number, t: number) {
   return from + (to - from) * t;
 }
 
-/** Metres between two places in track space (straight-line). */
-export function apart(a: { readonly distance: number; readonly offset: number }, b: { readonly distance: number; readonly offset: number }): number {
+/** Metres between two positions in track space (straight-line). */
+export function apart(a: TrackPosition, b: TrackPosition): number {
   return Math.hypot(a.distance - b.distance, a.offset - b.offset);
 }

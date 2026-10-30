@@ -1,6 +1,6 @@
 import { type BufferGeometry, Color } from "three";
 import { clamp, smoothstep } from "@/math";
-import type { Track, WorldPoint } from "@/race";
+import type { Side, Track, WorldPoint } from "@/race";
 import { groundDirection, seaward } from "./geography";
 import { geometryFrom } from "./low-poly";
 import { hash, smoothNoise } from "./noise";
@@ -86,7 +86,7 @@ function createTerrain(track: Track): Terrain {
    * point q is nearer once l > |q - c|² / 2 n·(q - c); the same rule stops the inside of a bend
    * at its centre.
    */
-  function reachOf(i: number, side: -1 | 1) {
+  function reachOf(i: number, side: Side) {
     const nx = side * rightX[i];
     const nz = side * rightZ[i];
     let best = MAX_REACH;
@@ -106,7 +106,7 @@ function createTerrain(track: Track): Terrain {
    * along the road, as a share of the sections' spacing: 1 on a straight and on the outside of a
    * bend, less on the inside, where the sections close in on the bend's centre, and 0 there and beyond.
    */
-  function spreadAt(i: number, side: -1 | 1, l: number) {
+  function spreadAt(i: number, side: Side, l: number) {
     const before = Math.max(0, i - 1);
     const after = Math.min(count - 1, i + 1);
     // Forward is a quarter turn anticlockwise from the right.
@@ -296,7 +296,7 @@ function coastlineOf(track: Track, xs: Float64Array, zs: Float64Array) {
 function crossSection(
   track: Track,
   i: number,
-  side: -1 | 1,
+  side: Side,
   reach: number,
   spread: (lateral: number) => number,
   shape: { lateral: Float64Array; height: Float64Array },

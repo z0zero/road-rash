@@ -1,15 +1,11 @@
 import type { Random } from "./random";
-import type { Track, WorldPoint } from "./track";
+import type { Track, TrackPosition, WorldPoint } from "./track";
 
 export type SceneryKind = "palm" | "pine" | "rock" | "house" | "sign" | "guard-rail";
 
 /** Something beside the road that nobody can hit: it stands beyond the shoulders of every stretch of road. */
-export interface SceneryPlacement {
+export interface SceneryPlacement extends TrackPosition {
   readonly kind: SceneryKind;
-  /** Metres along the centreline. */
-  readonly distance: number;
-  /** Metres sideways from the centreline; positive is right. */
-  readonly offset: number;
   /** Radians turned about the vertical, relative to the road's heading at `distance`. */
   readonly yaw: number;
   /** Size relative to the kind's usual size. */
@@ -19,12 +15,8 @@ export interface SceneryPlacement {
 export type ObstacleKind = "rock" | "sign" | "post" | "fallen-rock";
 
 /** A fixed object that makes a rider who runs into it crash. */
-export interface ObstaclePlacement {
+export interface ObstaclePlacement extends TrackPosition {
   readonly kind: ObstacleKind;
-  /** Metres along the centreline. */
-  readonly distance: number;
-  /** Metres sideways from the centreline; positive is right. */
-  readonly offset: number;
   /** Metres from its centre within which a rider hits it. */
   readonly radius: number;
 }

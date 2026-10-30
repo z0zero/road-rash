@@ -1,5 +1,5 @@
 import type { RaceView } from "@/game/session";
-import type { AttackSnapshot, CopId, CopSnapshot, CrashPhase, RaceSnapshot, RiderId, RiderSnapshot, Weapon } from "@/race";
+import type { AttackSnapshot, CopId, CopSnapshot, CrashPhase, RaceSnapshot, RiderId, RiderSnapshot, Side, Weapon } from "@/race";
 import { Vector3 } from "three";
 import { bikePoseOf, createTrackPose, poseOf, type TrackPose } from "./track-pose";
 
@@ -57,11 +57,11 @@ export abstract class BikeMotion {
   /** The weapon they hold, or null. */
   weapon: Weapon | null = null;
   /** The hand a held club is in: 1 the right, -1 the left. It moves to the side of each swing and stays there. */
-  clubHand: -1 | 1 = 1;
+  clubHand: Side = 1;
   /** After a crash: 0 while the bike is upright, 1 once it lies on its side. */
   fallen = 0;
   /** The side the crashed bike lies on: 1 its right, -1 its left. */
-  fallSide: -1 | 1 = 1;
+  fallSide: Side = 1;
   /** Where they are off their bike, on the road's surface: world coordinates, metres. */
   readonly bodyAt = new Vector3();
   /** Radians about the vertical: the way they face off their bike. */
