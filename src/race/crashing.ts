@@ -1,3 +1,7 @@
+import { sendCopsTo } from "./busting";
+import type { CrashCause } from "./events";
+import type { RaceState } from "./race-state";
+import { PLAYER, type Rider } from "./riders";
 import { clamp, type Motion } from "./riding";
 import { STEP_SECONDS, stepsIn } from "./steps";
 import { TUNING } from "./tuning";
@@ -71,6 +75,12 @@ export interface OnFootControls {
   readonly brake: number;
 }
 
+/** Opponents on foot run straight back to their bikes. */
+const RUN_STRAIGHT_BACK: OnFootControls = { steer: 0, brake: 0 };
+
+/** A rider whose race is over stays where they are once they are on their feet. */
+export const STAND_STILL: OnFootControls = { steer: 0, brake: 1 };
+
 const TUMBLE_STEPS = stepsIn(TUNING.tumbleSeconds);
 
 /** Whether a crashed rider is on foot and close enough to their bike to get back on. */
@@ -122,4 +132,48 @@ function run(body: Body, bike: Readonly<Motion>, { steer, brake }: OnFootControl
 function move(body: Body, edge: number) {
   body.distance += body.speed * STEP_SECONDS;
   body.offset = clamp(body.offset + body.sideways * STEP_SECONDS, -edge, edge);
+}
+
+/**
+ * Throws a rider off their bike, which loses condition; a bike whose
+ * condition runs out is wrecked, and so is the rider's race. A rider who
+ * crashes drops their club, which is lost.
+ */
+export function crash(race: RaceState, rider: Rider, cause: CrashCause, impactSpeed: number) {
+  race.events.push({ type: "crash", rider: rider.id, cause, impactSpeed });
+  rider.attack = null;
+  rider.weapon = null;
+  rider.crash = throwOff(rider.motion);
+  const loss = TUNING.crashConditionLoss + TUNING.crashConditionLossPerImpactSpeed * impactSpeed;
+  rider.condition = Math.max(0, rider.condition - loss);
+  if (rider.condition === 0) {
+    rider.status = "wrecked";
+    race.events.push({ type: "wrecked", rider: rider.id });
+    if (rider.id === PLAYER) race.events.push({ type: "player-race-over", outcome: "wrecked" });
+  } else {
+    sendCopsTo(race, rider);
+  }
+}
+
+/**
+ * Moves a crashed rider on by a step: their bike slides on by itself while
+ * they tumble, then run back to it, steered by the player's `input` for the
+ * player, straight back for an opponent, and get back on once they reach it.
+ * A rider whose race is over stands still once on their feet.
+ */
+export function runBack(race: RaceState, rider: Rider, input: OnFootControls): void {
+  if (!rider.crash) return;
+  const { edge } = race;
+  slide(rider.motion, edge);
+  const onFoot = rider.status !== "racing" ? STAND_STILL : rider.riding ? RUN_STRAIGHT_BACK : input;
+  carryOn(rider.crash, rider.motion, onFoot, edge);
+  if (rider.status === "racing" && canRemount(rider.crash, rider.motion)) getBackOn(race, rider);
+}
+
+/** A rider on foot who has reached their bike rides off on it again, with at least some stamina. */
+function getBackOn(race: RaceState, rider: Rider) {
+  rider.crash = null;
+  remount(rider.motion);
+  rider.stamina = Math.max(rider.stamina, TUNING.remountStamina);
+  race.events.push({ type: "remounted", rider: rider.id });
 }

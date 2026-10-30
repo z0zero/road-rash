@@ -1,5 +1,8 @@
-import { knockDown, type Body, type Crash } from "./crashing";
+import { crash, knockDown, type Body, type Crash } from "./crashing";
+import type { Fighter } from "./fighting";
 import type { Footprint } from "./footprint";
+import { copsInTheRace, onTheirBikes, type RaceState } from "./race-state";
+import type { Rider } from "./riders";
 import { BIKE_LENGTH, BIKE_WIDTH, clamp, type Motion } from "./riding";
 import { TUNING } from "./tuning";
 
@@ -211,5 +214,44 @@ function bump(a: Motion, b: Motion, edge: number) {
     const shared = (behind.speed + ahead.speed) / 2;
     behind.speed = shared;
     ahead.speed = shared;
+  }
+}
+
+/**
+ * Riders on their bikes (`riding`) bump each other and the cops' bikes, or
+ * run into them and crash; a cop never crashes.
+ */
+export function runIntoEachOther(race: RaceState, riding: readonly Rider[]) {
+  const bikes: Fighter[] = [...riding, ...race.cops.filter((cop) => cop.status !== "knocked-off")];
+  for (const { rider, into, speedDifference } of settleContact(bikes, race.edge, (bike) => bike.kind === "rider")) {
+    if (rider.kind === "rider") crash(race, rider, into.kind === "cop" ? "cop" : "rider", speedDifference);
+  }
+}
+
+/**
+ * Riders on their bikes who run into the `cars` (by their footprints) or
+ * obstacles crash, or bump off them at a small speed difference. Cops in the
+ * race only ever bump off cars and obstacles.
+ */
+export function runIntoCarsAndObstacles(race: RaceState, cars: readonly Footprint[]) {
+  const { edge } = race;
+  for (const [footprints, cause] of [
+    [cars, "traffic"],
+    [race.obstacles, "obstacle"],
+  ] as const) {
+    for (const { rider, footprint, speedDifference } of settleImpacts(onTheirBikes(race), footprints, edge)) {
+      crash(race, rider, cause, speedDifference);
+      if (rider.crash) throwClearOf(footprint, rider.motion, rider.crash.body, edge);
+    }
+    settleImpacts(copsInTheRace(race), footprints, edge, () => false);
+  }
+}
+
+/** A car (one of `cars`, by their footprints) that runs into a rider on foot knocks them down. */
+export function knockDownRidersOnFoot(race: RaceState, cars: readonly Footprint[]) {
+  for (const rider of race.riders) {
+    if (rider.status !== "racing" || rider.crash?.phase !== "on-foot") continue;
+    const car = carRunningInto(rider.crash.body, cars);
+    if (car) race.events.push({ type: "knocked-down", rider: rider.id, impactSpeed: knockDownBy(car, rider.crash) });
   }
 }
