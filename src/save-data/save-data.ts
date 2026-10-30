@@ -13,6 +13,8 @@ export interface Settings {
   readonly effectsVolume: number;
   /** null until the player chooses; until then the game follows the operating system's reduced-motion preference. */
   readonly reduceMotion: boolean | null;
+  /** Whether the player has ever attacked in a race: until they have, the HUD shows them the hit-back prompt. */
+  readonly hasAttacked: boolean;
 }
 
 export interface PersonalBest {
@@ -28,7 +30,7 @@ export interface SaveData {
 }
 
 export const DEFAULT_SAVE_DATA: SaveData = {
-  settings: { masterVolume: 1, musicVolume: 0.7, effectsVolume: 1, reduceMotion: null },
+  settings: { masterVolume: 1, musicVolume: 0.7, effectsVolume: 1, reduceMotion: null, hasAttacked: false },
   personalBest: { time: null, position: null },
 };
 
@@ -60,6 +62,7 @@ export function loadSaveData(storage: SaveStorage | undefined): SaveData {
       musicVolume: isVolume(settings.musicVolume) ? settings.musicVolume : defaults.musicVolume,
       effectsVolume: isVolume(settings.effectsVolume) ? settings.effectsVolume : defaults.effectsVolume,
       reduceMotion: typeof settings.reduceMotion === "boolean" ? settings.reduceMotion : defaults.reduceMotion,
+      hasAttacked: typeof settings.hasAttacked === "boolean" ? settings.hasAttacked : defaults.hasAttacked,
     },
     personalBest: {
       time: isTime(personalBest.time) ? personalBest.time : null,
