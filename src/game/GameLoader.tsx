@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useState, useSyncExternalStore } from "react";
+import { RECENT_BROWSERS, SUNSET_BACKDROP } from "@/ui/panel";
 import { GameTitle } from "@/ui/TitleScreen";
 import { MadeForDesktopScreen, NewerBrowserScreen } from "@/ui/UnsupportedScreens";
 import { isTouchOnly, subscribeToPointers, supportsWebGL2 } from "./browser-support";
@@ -42,13 +43,13 @@ export function GameLoader() {
  */
 function Loading({ hintIfStuck = false }: { hintIfStuck?: boolean }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-6 bg-gradient-to-b from-night via-dusk to-sunset px-6 text-center">
+    <div className={`flex h-full flex-col items-center justify-center gap-6 px-6 text-center ${SUNSET_BACKDROP}`}>
       <GameTitle />
       <p className="text-lg text-sand/90">Loading&hellip;</p>
       {hintIfStuck && (
         <p className="still-loading max-w-md text-sand/85">
-          Still loading? Rev &amp; Wreck needs a recent browser with JavaScript and WebGL 2, such as the latest
-          Chrome, Edge, Firefox or Safari.
+          Still loading? Rev &amp; Wreck needs a recent browser with JavaScript and WebGL 2, such as{" "}
+          {RECENT_BROWSERS}.
         </p>
       )}
     </div>
