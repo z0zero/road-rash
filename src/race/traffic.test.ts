@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createRace, NO_INPUT, PLAYER, STEP_SECONDS, type CarSnapshot, type PlayerInput, type Race, type RaceEvent } from ".";
 import {
   autopilot,
+  carsAndObstacles,
   CLOSED_ROAD,
   eventsDuring,
   eventsUntil,
@@ -425,34 +426,6 @@ describe("a rider on foot", () => {
   });
 });
 
-/** A car or an obstacle, as something on the road a rider can run into: its middle, and half its length and width (metres). */
-interface Thing {
-  readonly key: string;
-  readonly distance: number;
-  readonly offset: number;
-  readonly halfLength: number;
-  readonly halfWidth: number;
-}
-
-function thingsOn(race: Race): Thing[] {
-  return [
-    ...race.snapshot().traffic.map((car) => ({
-      key: `car ${car.id}`,
-      distance: car.distance,
-      offset: car.offset,
-      halfLength: car.length / 2,
-      halfWidth: car.width / 2,
-    })),
-    ...race.track.obstacles.map((obstacle, index) => ({
-      key: `obstacle ${index}`,
-      distance: obstacle.distance,
-      offset: obstacle.offset,
-      halfLength: obstacle.radius,
-      halfWidth: obstacle.radius,
-    })),
-  ];
-}
-
 /** Whether a car and a rider are coming together: the one behind is faster than the one in front. Returns the seconds until they meet, or Infinity. */
 function secondsUntilTheyMeet(car: CarSnapshot, rider: { readonly distance: number; readonly speed: number }) {
   const velocity = car.oncoming ? -car.speed : car.speed;
@@ -528,7 +501,7 @@ describe("riding with the pack in traffic", () => {
           }
         }
       }
-      const things = thingsOn(race);
+      const things = carsAndObstacles(race.track, race.snapshot().traffic);
       for (const rider of riders) {
         if (rider.id === PLAYER || rider.status !== "racing" || rider.crash !== null) continue;
         for (const thing of things) {
