@@ -122,10 +122,13 @@ function contactWith(bike: Motion, footprint: Footprint): Contact | null {
 }
 
 function bumpOff(bike: Motion, footprint: Footprint, { along, across, overlapAlong, overlapAcross }: Contact, edge: number) {
-  // Which way the bike is pushed: away from what it touched, to the right when dead behind it.
-  const side = across !== 0 ? -Math.sign(across) : 1;
+  // Which way the bike is pushed: away from what it touched, to the right when dead behind it; but the other way if a
+  // bike has no room to pass it on that side, between it and the edge.
+  const away = across !== 0 ? -Math.sign(across) : 1;
+  const room = (side: number) => edge - side * footprint.offset - footprint.halfWidth >= BIKE_WIDTH;
+  const side = room(away) || !room(-away) ? away : -away;
   if (overlapAcross <= overlapAlong) {
-    bike.offset = clamp(bike.offset + side * overlapAcross, -edge, edge);
+    bike.offset = clamp(footprint.offset + side * (footprint.halfWidth + BIKE_HALF_WIDTH), -edge, edge);
   } else if (along > 0) {
     bike.distance -= overlapAlong;
     bike.speed = Math.max(0, Math.min(bike.speed, footprint.velocity));
