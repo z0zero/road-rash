@@ -1,5 +1,4 @@
-import { type ReactNode, useId } from "react";
-import { Button } from "./Button";
+import { type ReactNode, useEffect, useId } from "react";
 import { PANEL, PANEL_TITLE, RECENT_BROWSERS, SUNSET_BACKDROP } from "./panel";
 import { GameTitle } from "./TitleScreen";
 
@@ -22,19 +21,49 @@ export function NewerBrowserScreen() {
 /**
  * Instead of the game, on a phone or tablet that can only be touched: the game
  * is played with a keyboard or a gamepad. Someone who has one connected there
- * can play anyway.
+ * plays anyway by pressing any key or gamepad button, which shows they can: a
+ * touch can't, so nobody is let into a race they can't ride, pause or leave.
  */
 export function MadeForDesktopScreen({ onPlayAnyway }: { onPlayAnyway: () => void }) {
+  useEffect(() => {
+    let frame = 0;
+    // In once a key is let go of, so the key does nothing more on the title screen.
+    const keyUp = () => onPlayAnyway();
+    // A gamepad shows itself to the page with its first button press: in once every button is let go of again.
+    const untilLetGo = () => {
+      if (gamepadButtonHeld()) frame = requestAnimationFrame(untilLetGo);
+      else onPlayAnyway();
+    };
+    const gamepadConnected = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(untilLetGo);
+    };
+    window.addEventListener("keyup", keyUp);
+    window.addEventListener("gamepadconnected", gamepadConnected);
+    return () => {
+      window.removeEventListener("keyup", keyUp);
+      window.removeEventListener("gamepadconnected", gamepadConnected);
+      cancelAnimationFrame(frame);
+    };
+  }, [onPlayAnyway]);
   return (
     <UnsupportedScreen heading="Rev & Wreck is made for desktop">
       <p>
         It&apos;s played with a keyboard or a gamepad, and has no touch controls yet. Come back on a computer, or
         connect a keyboard or gamepad here.
       </p>
-      <p className="text-base text-sand/80">Got a keyboard or gamepad connected?</p>
-      <Button onClick={onPlayAnyway}>Play anyway</Button>
+      <p className="text-base text-sand/80">Got a keyboard or gamepad connected? Press any key or button to play.</p>
     </UnsupportedScreen>
   );
+}
+
+/** Whether any button of any gamepad the page can see is held down. */
+function gamepadButtonHeld(): boolean {
+  try {
+    return navigator.getGamepads().some((pad) => pad?.buttons.some((button) => button.pressed) ?? false);
+  } catch {
+    return false;
+  }
 }
 
 /** The game's title, then why the game can't be played here, over the sunset. */
