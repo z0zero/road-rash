@@ -746,7 +746,7 @@ export function createRace(options: RaceOptions): Race {
           const nearest = nearestWithinReach(opponent.motion, targetsFor(opponent), punchOf(opponent));
           // Opponents leave the cops alone.
           if (nearest?.kind !== "rider") continue;
-          const kind = opponentAttack(opponent.temperament, nearest.id === PLAYER, random);
+          const kind = opponentAttack(opponent.temperament, nearest.id === PLAYER, isMidSwing(nearest.attack), random);
           // A club reaches further than a kick: a club holder swings at a rider its kick can't reach.
           if (kind) throwAttack(opponent, kind === "kick" && !withinReach(opponent.motion, nearest.motion, kind) ? "punch" : kind);
         }
