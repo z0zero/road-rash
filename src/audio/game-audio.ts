@@ -1,6 +1,7 @@
 import type { GameSession, RaceView, Screen, SessionState } from "@/game/session";
-import { clamp } from "@/math";
+import { clamp, smoothstep } from "@/math";
 import {
+  COP_ALERT_RANGE,
   PLAYER,
   STEP_SECONDS,
   type CopSnapshot,
@@ -54,6 +55,10 @@ const SPEED_OF_SOUND = 343;
 const HALF_LOUDNESS_METRES = 10;
 /** The nearest opponent's or cop's engine is heard at half strength this many metres from the player. */
 const ENGINE_HALF_LOUDNESS_METRES = 8;
+/** A cop's siren is heard at half strength this many metres from the player... */
+const SIREN_HALF_LOUDNESS_METRES = 60;
+/** ...and fades out over the outer half of the cop alert's range, to silence at its edge. */
+const SIREN_FADES_FROM = 0.5 * COP_ALERT_RANGE;
 
 /** Sounds fainter than this aren't worth playing. */
 const FAINTEST = 0.02;
@@ -177,8 +182,6 @@ class Sound {
   private countdownCall: number | null = null;
   private lastCountdown = 0;
   private lastClock = 0;
-  /** The cops near the player, whose siren sounds. */
-  private readonly copsNear = new Set<number>();
 
   private constructor(readonly context: AudioContext) {
     this.mixer = createMixer(context);
@@ -266,18 +269,10 @@ class Sound {
       case "rider-finished":
         if (event.rider === PLAYER) playFinish(this.kit, this.mixer.effects);
         break;
-      case "cop-near":
-        this.copsNear.add(event.cop);
-        this.siren.setOn(true);
-        break;
-      case "cop-gone":
-        this.copsNear.delete(event.cop);
-        this.siren.setOn(this.copsNear.size > 0);
-        break;
     }
   }
 
-  /** Follows the race as it is drawn: the countdown, the engines, skids and gravel. */
+  /** Follows the race as it is drawn: the countdown, the engines, skids and gravel, and the siren. */
   frame({ previous, current }: RaceView) {
     const racing = this.screen === "racing" || this.screen === "paused";
     // A race begins afresh when its countdown or clock goes back; with no race on, there's nothing to hear.
@@ -310,6 +305,9 @@ class Sound {
     const skid = racing && onBike && !player.offRoad ? skidding(player.speed, -this.acceleration) : 0;
     this.skid.setIntensity(skid);
     this.gravel.setIntensity(racing && onBike && player.offRoad ? player.speed / LOUDEST_GRAVEL_SPEED : 0);
+    // The siren sounds from the nearest cop near the player, while the race is on.
+    const siren = racing ? sirenOf(current) : null;
+    this.siren.follow(siren?.loudness ?? 0, siren?.pan, siren?.doppler);
 
     if (!isSameOne(nearest, this.nearest)) this.opponentEngine.reset();
     this.nearest = nearest;
@@ -319,10 +317,8 @@ class Sound {
     }
     const along = opponent.distance - player.distance;
     const across = opponent.offset - player.offset;
-    // Higher while it comes up on the player, lower as it pulls away.
-    const closing = -Math.sign(along) * (opponent.speed - player.speed);
-    const doppler = 1 + clamp(closing / SPEED_OF_SOUND, -0.08, 0.08);
     const loudness = loudnessAt(along, across, ENGINE_HALF_LOUDNESS_METRES);
+    const doppler = dopplerOf(along, opponent.speed, player.speed);
     this.opponentEngine.follow(opponent.speed, this.opponentAcceleration, loudness, panFor(along, across), doppler);
   }
 
@@ -345,13 +341,9 @@ class Sound {
     sound(panner, hearing.loudness);
   }
 
-  /** Forgets the race that was on: its countdown and its cops. */
+  /** Forgets the race that was on: its countdown. */
   private forgetRace() {
     this.countdownCall = null;
-    if (this.copsNear.size > 0) {
-      this.copsNear.clear();
-      this.siren.setOn(false);
-    }
   }
 }
 
@@ -375,6 +367,30 @@ function hearingOf(race: RaceSnapshot, subject: RiderOrCop, other: RiderOrCop | 
   return { loudness: loudnessAt(along, across, HALF_LOUDNESS_METRES), pan: panFor(along, across) };
 }
 
+/**
+ * How the player hears the siren of the nearest cop near them in `race`, from
+ * where the cop is: louder as it closes, from its side, its pitch shifted as
+ * it comes up or drops back, and fading out towards the edge of the cop
+ * alert's range. Null when no cop is near.
+ */
+function sirenOf(race: RaceSnapshot): (Hearing & { readonly doppler: number }) | null {
+  const player = race.riders[PLAYER];
+  const apart = (cop: CopSnapshot) => Math.hypot(cop.distance - player.distance, cop.offset - player.offset);
+  let nearest: CopSnapshot | null = null;
+  for (const cop of race.cops) {
+    if (cop.near && (!nearest || apart(cop) < apart(nearest))) nearest = cop;
+  }
+  if (!nearest) return null;
+  const along = nearest.distance - player.distance;
+  const across = nearest.offset - player.offset;
+  const fade = 1 - smoothstep(SIREN_FADES_FROM, COP_ALERT_RANGE, apart(nearest));
+  return {
+    loudness: loudnessAt(along, across, SIREN_HALF_LOUDNESS_METRES) * fade,
+    pan: panFor(along, across),
+    doppler: dopplerOf(along, nearest.speed, player.speed),
+  };
+}
+
 /** The rider or cop `who` in `race`, if there is one. */
 function whereIs(race: RaceSnapshot, who: RiderOrCop | null): RiderSnapshot | CopSnapshot | undefined {
   if (who === null) return undefined;
@@ -393,6 +409,16 @@ function isSameOne(a: RiderOrCop | null, b: RiderOrCop | null): boolean {
  */
 function loudnessAt(along: number, across: number, halfLoudnessMetres: number): number {
   return 1 / (1 + (Math.hypot(along, across) / halfLoudnessMetres) ** 2);
+}
+
+/**
+ * How much higher something `along` metres ahead of the player (behind, if
+ * negative), going at `speed` (m/s) to their `playerSpeed`, sounds: higher
+ * while it comes up on the player, lower as it pulls away (1 for neither).
+ */
+function dopplerOf(along: number, speed: number, playerSpeed: number): number {
+  const closing = -Math.sign(along) * (speed - playerSpeed);
+  return 1 + clamp(closing / SPEED_OF_SOUND, -0.08, 0.08);
 }
 
 /** How fast the bike of the rider or cop `who` gained speed over the last step, m/s². */
