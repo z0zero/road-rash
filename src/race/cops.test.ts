@@ -455,9 +455,11 @@ describe("busting", () => {
     expect(cop().busting).toBeNull();
     const crashedAt = race.snapshot().clock;
     const moving: number[] = [];
+    // The player waits on foot for 4 s, watching the cop, then runs back to their bike.
     const watching = () => {
-      if (race.snapshot().clock - crashedAt > 3 && cop().speed > 0.5) moving.push(cop().speed);
-      return NO_INPUT;
+      const since = race.snapshot().clock - crashedAt;
+      if (since > 3 && cop().speed > 0.5) moving.push(cop().speed);
+      return since < 4 ? { ...NO_INPUT, brake: 1 } : NO_INPUT;
     };
 
     const events = eventsUntil(race, watching, (event) => event.type === "remounted" && event.rider === PLAYER, 20);

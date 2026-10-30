@@ -424,7 +424,8 @@ export function createRace(options: RaceOptions): Race {
   /** Riders still racing on their bikes: the ones who ride, bump and fight. */
   const onTheirBikes = () => riders.filter((rider) => rider.status === "racing" && !rider.crash);
   /** Where the riders still racing are on the road, on their bikes or off them. */
-  const ridersOnTheRoad = () => riders.filter((rider) => rider.status === "racing").map(whereIs);
+  const ridersOnTheRoad = () =>
+    riders.filter((rider) => rider.status === "racing").map((rider) => ({ ...whereIs(rider), onTheirBike: !rider.crash }));
   const edge = track.roadHalfWidth + track.shoulderWidth;
 
   /** Cops riding in the race: the ones who patrol, bust riders and fight. */
