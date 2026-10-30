@@ -13,12 +13,9 @@ import {
   Vector3,
 } from "three";
 import type { GameSession, RaceView } from "@/game/session";
-import { STEP_SECONDS, type CarKind, type CarSnapshot } from "@/race";
+import { MOST_CARS, STEP_SECONDS, type CarKind, type CarSnapshot } from "@/race";
 import { CAR_MODELS, isCarKind, paintOf } from "./car-models";
 import { InstancedMeshes } from "./InstancedMeshes";
-
-/** At most this many cars of one kind are drawn at a time: more than the road around the player ever holds. */
-const MOST_OF_A_KIND = 32;
 
 /** The cars of one kind, drawn with instancing: one instance per car of that kind on the road. */
 interface CarsOfAKind {
@@ -55,7 +52,8 @@ function buildFleet() {
   // Unlit: the lamps glow, as bright as their colours, which are brighter than white.
   const lamps = new MeshBasicMaterial({ vertexColors: true });
   const instanced = (geometry: BufferGeometry, material: Material, shadows: boolean) => {
-    const mesh = new InstancedMesh(geometry, material, MOST_OF_A_KIND);
+    // Room for every car on the road, which could all be of one kind.
+    const mesh = new InstancedMesh(geometry, material, MOST_CARS);
     mesh.count = 0;
     mesh.visible = false;
     // The cars move every frame, so their instances are never where a bounding sphere last put them.
@@ -70,7 +68,7 @@ function buildFleet() {
     const model = CAR_MODELS[kind]();
     const body = instanced(model.body, paint, true);
     // Every car's paint, given before the first frame so the material is built to take it.
-    for (let i = 0; i < MOST_OF_A_KIND; i++) body.setColorAt(i, WHITE);
+    for (let i = 0; i < MOST_CARS; i++) body.setColorAt(i, WHITE);
     const parts = { body, trim: instanced(model.trim, trim, true), lamps: instanced(model.lamps, lamps, false) };
     kinds.set(kind, {
       ...parts,
@@ -95,7 +93,7 @@ function placeCars(kinds: ReadonlyMap<CarKind, CarsOfAKind>, { track, previous, 
   for (const cars of kinds.values()) cars.drawn = 0;
   for (const car of current.traffic) {
     const cars = kinds.get(car.kind);
-    if (!cars || cars.drawn >= MOST_OF_A_KIND) continue;
+    if (!cars || cars.drawn >= MOST_CARS) continue;
     // A car that has only just come onto the road is drawn where it came on.
     const before = sameCar(previous.traffic, car.id) ?? car;
     const distance = before.distance + (car.distance - before.distance) * alpha;

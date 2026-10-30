@@ -1,4 +1,5 @@
 import { clamp } from "@/math";
+import { TOP_SPEED } from "@/race";
 import { amplify, filter, glide, noise, roughen, tone, type Kit } from "./synth";
 
 /**
@@ -10,8 +11,11 @@ import { amplify, filter, glide, noise, roughen, tone, type Kit } from "./synth"
  * the bike sounds, not how it rides: the race decides the speed.
  */
 
-/** Speed at the redline in each gear, metres per second (top gear tops out past the bike's 62.5 m/s). */
-const GEAR_TOP_SPEEDS = [15, 25, 35, 45, 55, 66];
+/**
+ * Speed at the redline in each gear, metres per second: 24% of the bike's top
+ * speed in first gear, and so on up to sixth, which tops out a little past it.
+ */
+const GEAR_TOP_SPEEDS = [0.24, 0.4, 0.56, 0.72, 0.88, 1.056].map((share) => share * TOP_SPEED);
 const IDLE_RPM = 1500;
 const REDLINE_RPM = 12500;
 const CHANGE_UP_RPM = 11500;
