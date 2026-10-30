@@ -111,7 +111,7 @@ describe("holding a club", () => {
   it("lasts while the player keeps swinging it: opponents seldom throw a hit into a swing, so a holding usually lasts 10 s or more", () => {
     // Whole races in which the player rides on autopilot and mashes the punch button whenever anyone is within reach.
     const holdings: { seconds: number; stolen: boolean }[] = [];
-    for (const seed of [1, 2, 3, 4, 5, 6]) {
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
       const race = startedRace(seed);
       const riding = autopilot(race);
       let heldFrom: number | null = null;
