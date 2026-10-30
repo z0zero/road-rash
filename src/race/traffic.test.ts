@@ -59,6 +59,8 @@ describe("traffic", () => {
     const pilot = autopilot(race);
     const { roadHalfWidth } = race.track;
     const seen = { oncoming: 0, raceDirection: 0 };
+    /** The fastest each car in the race direction drove. */
+    const fastest = new Map<number, number>();
     let before: readonly CarSnapshot[] = race.snapshot().traffic;
 
     for (let step = 0; step < 60 * STEPS_PER_SECOND; step++) {
@@ -80,7 +82,8 @@ describe("traffic", () => {
           seen.raceDirection++;
           expect(car.offset - car.width / 2).toBeGreaterThanOrEqual(0);
           expect(car.offset + car.width / 2).toBeLessThanOrEqual(roadHalfWidth);
-          expect(moved).toBeGreaterThanOrEqual(15 - 1e-9);
+          // It may slow down behind a slower rider, but never drives faster than its own speed.
+          fastest.set(car.id, Math.max(fastest.get(car.id) ?? 0, moved));
           expect(moved).toBeLessThanOrEqual(25 + 1e-9);
           expect(car.speed).toBeCloseTo(moved, 6);
         }
@@ -90,6 +93,7 @@ describe("traffic", () => {
 
     expect(seen.oncoming).toBeGreaterThan(1000);
     expect(seen.raceDirection).toBeGreaterThan(1000);
+    for (const speed of fastest.values()) expect(speed).toBeGreaterThanOrEqual(15 - 1e-9);
     expect(player(race).distance).toBeGreaterThan(race.track.startDistance + 1000);
   });
 
@@ -122,6 +126,28 @@ describe("traffic", () => {
     for (const direction of [counts.oncoming, counts.raceDirection]) {
       expect(mean(direction)).toBeGreaterThan(5);
       expect(mean(direction)).toBeLessThan(7.5);
+    }
+  });
+
+  it("keeps both directions busy around a player who rides slowly or stands still: cars going their way come up from behind", () => {
+    const mean = (values: readonly number[]) => values.reduce((total, value) => total + value, 0) / values.length;
+    for (const targetSpeed of [12, 0]) {
+      // Under way first, then slowly, or standing still, for two minutes.
+      const race = startedRace(1, NO_COPS);
+      secondsUntil(race, autopilot(race), () => player(race).distance > race.track.startDistance + 1000, 60);
+      const riding = autopilot(race, { targetSpeed });
+      const counts = { oncoming: [] as number[], raceDirection: [] as number[] };
+      for (let step = 0; step < 120 * STEPS_PER_SECOND; step++) {
+        race.step(riding());
+        const { traffic } = race.snapshot();
+        if (step % STEPS_PER_SECOND === 0 && step >= 30 * STEPS_PER_SECOND) {
+          counts.oncoming.push(traffic.filter((car) => car.oncoming).length);
+          counts.raceDirection.push(traffic.filter((car) => !car.oncoming).length);
+        }
+      }
+      // 750 m of road at one car per 120 m: about six cars in each direction.
+      expect(mean(counts.oncoming), `at ${targetSpeed} m/s`).toBeGreaterThan(4.5);
+      expect(mean(counts.raceDirection), `at ${targetSpeed} m/s`).toBeGreaterThan(4.5);
     }
   });
 
@@ -314,7 +340,7 @@ function standIn(race: Race, where: () => number) {
 
 describe("a rider on foot", () => {
   it("is knocked down by a car that runs into them: they tumble again, at no cost to their bike", () => {
-    const { race, car } = behindACar();
+    const { race, car } = behindACar(4);
     eventsUntil(race, chaseCar(race, car, 12), playerCrashed);
     secondsUntil(race, { ...NO_INPUT, brake: 1 }, () => player(race).crash === "on-foot", 3);
     const condition = player(race).condition;

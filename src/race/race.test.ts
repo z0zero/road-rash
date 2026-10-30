@@ -3,6 +3,7 @@ import { createRace, NO_INPUT, PLAYER, STEP_SECONDS, type PlayerInput, type Race
 import {
   autopilot,
   chase,
+  CLOSED_ROAD,
   FULL_THROTTLE,
   kmh,
   nearestOpponent,
@@ -174,8 +175,9 @@ describe("riding", () => {
    * second, then measures how fast the bike drifts sideways.
    */
   function driftOnCurve(distance: number, speed: number) {
-    const race = startedRace();
-    // Let the field ride off first, so no rider bumps or kicks the bike while it is measured.
+    // On a closed road, so that no car holds the bike up; and with the field let ride off first, so that no rider bumps
+    // or kicks it while it is measured.
+    const race = startedRace(1, CLOSED_ROAD);
     stepFor(race, 30, NO_INPUT);
     const pilot = autopilot(race, { targetSpeed: speed });
     secondsUntil(race, pilot, () => player(race).distance >= distance - speed / 2);
