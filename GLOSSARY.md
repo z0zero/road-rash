@@ -177,7 +177,7 @@ A fixed object on or beside the road, such as a rock or a sign, that makes a rid
 _Avoid_: Hazard, barrier
 
 **Footprint**:
-Where a car or an obstacle is on the road, how much of it it covers, how fast it moves along it and, for a car changing lanes, the lane it is moving over to: what riders steer around and run into.
+Where a car or an obstacle is on the road, how much of it it covers, how fast it moves along it and, for a car changing lanes, the lane it is moving over to: what riders steer around and run into. Opponents see a cop's bike the same way, slowing down in time for a slower one in their path.
 _Avoid_: Hitbox, bounds
 
 **Scenery**:
@@ -189,11 +189,11 @@ A police officer on a motorcycle who rides among the riders and busts anyone who
 _Avoid_: Police, officer
 
 **Patrol**:
-What a cop in the race does when nobody needs busting: riding near the player, the cops taking turns to follow them about 1.5 s behind while the other holds well back. A cop following the player pulls over while they are down after a crash it isn't riding to.
+What a cop in the race does when nobody needs busting: riding near the player, the cops taking turns to follow them about 1.5 s behind while the other holds well back. While the player is down after a crash it isn't riding to, a cop on patrol pulls over onto the shoulder.
 _Avoid_: Chase, pursuit
 
 **Standing by**:
-A cop staying beside a rider it has busted for a few seconds before riding on.
+A cop staying by a rider it has busted for a few seconds, pulled over onto the shoulder, before riding on.
 _Avoid_: Waiting, idling
 
 **Cop alert**:
