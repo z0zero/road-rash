@@ -14,6 +14,7 @@ A browser motorcycle combat racing game inspired by Road Rash on the SEGA Genesi
 | Punch, or swing a club | J or Z | X |
 | Kick | K or X | B |
 | Pause | Esc or P | Start |
+| Back, in menus | Esc | B |
 
 - You start last. Ride hard, and fight anyone who rides up beside you.
 - To take a rider's club, throw a hit at them while they wind up a swing.

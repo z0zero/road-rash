@@ -16,7 +16,7 @@ export function PauseMenu({
 }) {
   return (
     <Dialog title="Paused" panelClassName="gap-4 px-10 [&>h2]:mb-2">
-      <Button autoFocus onClick={onResume}>
+      <Button data-back autoFocus onClick={onResume}>
         Resume
       </Button>
       <Button onClick={onRestart}>Restart</Button>
