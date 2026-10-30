@@ -76,6 +76,8 @@ const FOOTPRINT_CLEARANCE = 1;
 const FOOTPRINT_LOOK_AHEAD = 1.5;
 /** ...and slow down for one closer than this to their middle, sideways, beyond its side (metres). */
 const FOOTPRINT_IN_THE_WAY = 0.7;
+/** An opponent shoved sideways by a kick faster than this (m/s) rides the kick out before it steers back to its line. */
+const RIDING_OUT_A_KICK = 1;
 /** Getting out of the way of a car or an obstacle, an opponent steers this much more quickly to its line (1/s)... */
 const EVASIVE_RESPONSE = 4;
 /** ...at up to this many metres per second sideways. */
@@ -139,7 +141,9 @@ export function opponentControls(
   const push = -TUNING.curvePush * motion.speed * motion.speed * track.sampleAt(motion.distance).curvature;
   // Out of the way of a car or an obstacle, briskly.
   const [response, most] = evading ? [EVASIVE_RESPONSE, EVASIVE_SPEED] : [LINE_RESPONSE, LINE_CHANGE_SPEED];
-  const sideways = clamp(response * (line - motion.offset), -most, most);
+  let sideways = clamp(response * (line - motion.offset), -most, most);
+  // Kicked off its line, it lets the kick carry it, holding only against the curve, until the shove dies down.
+  if (Math.abs(motion.kickShove) > RIDING_OUT_A_KICK && sideways * motion.kickShove < 0) sideways = 0;
   const reach = maxSidewaysSpeed(motion.speed);
   const steer = reach > 0 ? clamp((sideways - push) / reach, -1, 1) : 0;
   return { throttle, brake, steer };
