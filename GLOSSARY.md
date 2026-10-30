@@ -150,6 +150,10 @@ _Avoid_: Item, power-up, tool
 The attack a rider holding a club makes instead of a punch.
 _Avoid_: Weapon swing, swipe, bash
 
+**Hit-back prompt**:
+The HUD's reminder of the keys or gamepad buttons to punch and kick with, shown for a few seconds when an opponent's hit lands on a player who has never attacked in a race. It goes as soon as they attack, and once they have, it never shows again.
+_Avoid_: Tutorial, tip, hint
+
 ### The road
 
 **Lane**:
