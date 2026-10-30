@@ -1,4 +1,4 @@
-import type { AttackKind } from "./events";
+import type { AttackKind, RiderOrCop } from "./events";
 import type { Motion } from "./riding";
 import { stepsIn } from "./steps";
 import { TUNING } from "./tuning";
@@ -13,6 +13,12 @@ export interface Attack {
   steps: number;
   /** Which way the attack goes: 1 to the attacker's right, -1 to their left. */
   side: -1 | 1;
+  /**
+   * The club holder it was thrown at while they were winding up a swing, or
+   * null: if it lands on them, it takes their club, however late in the
+   * wind-up it was thrown.
+   */
+  readonly thrownMidSwingAt: RiderOrCop | null;
 }
 
 /** Where an attack is: winding up to its strike, or recovering after it, and how far through that (0 to 1). */
@@ -28,7 +34,7 @@ export function windUpSteps(kind: AttackKind): number {
   return stepsIn(TUNING.attacks[kind].windUp);
 }
 
-/** Whether an attack is a club swing still winding up to its strike: when a hit can take the club from its holder. */
+/** Whether an attack is a club swing still winding up to its strike: when a hit thrown at its holder can take their club. */
 export function isMidSwing(attack: Attack | null): boolean {
   return attack !== null && attack.kind === "club-swing" && attack.steps < windUpSteps(attack.kind);
 }

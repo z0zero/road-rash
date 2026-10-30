@@ -104,7 +104,7 @@ describe("clubs", () => {
 });
 
 describe("stealing a club", () => {
-  it("takes it from its holder with a hit landing in the middle of their swing, which then never lands", () => {
+  it("takes it from its holder with a hit thrown early in their swing's wind-up, which then never lands", () => {
     const { race, target, events } = punchedMidSwing();
 
     expect(events).toContainEqual({ type: "attack-landed", attacker: ME, target: rider(target), kind: "punch" });
@@ -114,7 +114,29 @@ describe("stealing a club", () => {
     expect(events.filter(isSwingLandingOn(PLAYER))).toEqual([]);
   });
 
-  it("doesn't happen with a hit landing after the swing has struck", () => {
+  it("takes it with a hit thrown at any moment of the wind-up, even late in it: the hit lands after the swing has struck", () => {
+    const { race, target, input } = alongsideAn("bully");
+    const lateInTheWindUp = () => {
+      const attack = race.snapshot().riders[target].attack;
+      return attack?.kind === "club-swing" && attack.stage === "wind-up" && attack.progress >= 0.8;
+    };
+    secondsUntil(race, input, lateInTheWindUp, 30);
+    race.drainEvents();
+
+    // Thrown about 0.25 s into the 0.3 s wind-up, a punch takes a little over 0.1 s to land, after the swing strikes.
+    race.step({ ...input(), punch: true });
+    const events = [...race.drainEvents(), ...eventsDuring(race, 0.25, input)];
+
+    const punchLanded = events.findIndex((event) => event.type === "attack-landed" && event.attacker.id === PLAYER);
+    const swingLanded = events.findIndex((event) => event.type === "attack-landed" && event.attacker.id === target);
+    expect(swingLanded).toBeGreaterThanOrEqual(0);
+    expect(punchLanded).toBeGreaterThan(swingLanded);
+    expect(events).toContainEqual({ type: "weapon-stolen", from: rider(target), by: ME });
+    expect(player(race).weapon).toBe("club");
+    expect(race.snapshot().riders[target].weapon).toBeNull();
+  });
+
+  it("doesn't happen with a hit thrown after the swing has struck", () => {
     const { race, target, input } = alongsideAn("bully");
     const swingJustStruck = () => {
       const attack = race.snapshot().riders[target].attack;

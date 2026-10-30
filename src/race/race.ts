@@ -423,7 +423,12 @@ export function createRace(options: RaceOptions): Race {
   function throwAttack(attacker: Fighter, thrown: AttackKind) {
     const kind = thrown === "punch" ? punchOf(attacker) : thrown;
     const target = nearestWithinReach(attacker.motion, targetsFor(attacker), kind);
-    attacker.attack = { kind, steps: 0, side: target ? awayFrom(attacker.motion, target.motion) : 1 };
+    attacker.attack = {
+      kind,
+      steps: 0,
+      side: target ? awayFrom(attacker.motion, target.motion) : 1,
+      thrownMidSwingAt: target && isMidSwing(target.attack) ? who(target) : null,
+    };
     events.push({ type: "attack-thrown", attacker: who(attacker), target: target && who(target), kind });
   }
 
@@ -437,17 +442,18 @@ export function createRace(options: RaceOptions): Race {
         const target = nearestWithinReach(attacker.motion, targetsFor(attacker), attack.kind);
         if (target) {
           attack.side = awayFrom(attacker.motion, target.motion);
-          land(attacker, target, attack.kind);
+          land(attacker, target, attack);
         }
       }
       if (attack.steps >= attackSteps(attack.kind)) attacker.attack = null;
     }
   }
 
-  function land(attacker: Fighter, target: Fighter, kind: AttackKind) {
+  function land(attacker: Fighter, target: Fighter, { kind, thrownMidSwingAt }: Attack) {
     events.push({ type: "attack-landed", attacker: who(attacker), target: who(target), kind });
-    // Any hit in the middle of a club swing takes the club from its holder, and their swing never lands.
-    if (isMidSwing(target.attack)) {
+    // Any hit thrown at a club holder winding up a swing takes their club, and the swing, if it hasn't struck, never does.
+    const stealing = thrownMidSwingAt?.kind === target.kind && thrownMidSwingAt.id === target.id;
+    if (stealing && target.weapon === "club") {
       target.weapon = null;
       target.attack = null;
       attacker.weapon = "club";

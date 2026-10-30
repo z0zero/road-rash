@@ -131,7 +131,7 @@ A badly beaten opponent easing off and keeping out of fights until it has recove
 _Avoid_: Retreating, fleeing
 
 **Weapon**:
-A club a rider swings instead of punching. A rider takes one by hitting its holder in the middle of a swing, and drops it in a crash.
+A club a rider swings instead of punching. A rider takes one with a hit thrown at its holder during the wind-up of a swing, and drops it in a crash.
 _Avoid_: Item, power-up, tool
 
 **Club swing**:
