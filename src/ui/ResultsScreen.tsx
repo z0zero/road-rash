@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { PLAYER, QUALIFYING_POSITION, type RaceOutcome, type RaceResults, type Remark, type Standing } from "@/race";
 import { liveryOf } from "@/renderer/liveries";
 import type { PersonalBest } from "@/save-data/save-data";
@@ -5,6 +6,14 @@ import { Button } from "./Button";
 import { formatPosition, formatRaceTime } from "./format";
 
 const BANNERS: Record<RaceOutcome, string> = { finished: "Finished", wrecked: "Wrecked", busted: "Busted" };
+
+/**
+ * Restart takes the focus only this long after the results come up
+ * (milliseconds). A gamepad's A presses the button in focus, and A is also a
+ * throttle, so a rider still pressing it as the race ends would otherwise
+ * restart the race before they had read the results.
+ */
+const FOCUS_RESTART_AFTER_MS = 1500;
 
 export function ResultsScreen({
   results,
@@ -22,6 +31,11 @@ export function ResultsScreen({
   onTitle: () => void;
 }) {
   const newBests = [newBestTime && "time", newBestPosition && "position"].filter(Boolean).join(" and ");
+  const restart = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const focusing = window.setTimeout(() => restart.current?.focus(), FOCUS_RESTART_AFTER_MS);
+    return () => window.clearTimeout(focusing);
+  }, []);
   return (
     <div
       role="dialog"
@@ -66,7 +80,7 @@ export function ResultsScreen({
             <p className="text-center font-display text-2xl uppercase italic text-sunset">New best {newBests}!</p>
           )}
           <div className="flex flex-col gap-3">
-            <Button autoFocus onClick={onRestart}>
+            <Button ref={restart} onClick={onRestart}>
               Restart
             </Button>
             <Button onClick={onTitle}>Back to title</Button>
