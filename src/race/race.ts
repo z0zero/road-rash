@@ -1,4 +1,4 @@
-import { bustTheCaught } from "./busting";
+import { bustRidersReached } from "./busting";
 import { getCoastalTrack } from "./coastal-track";
 import { knockDownRidersOnFoot, runIntoCarsAndObstacles, runIntoEachOther } from "./contact";
 import { alertThePlayer, decideCops, joinThePlayer, lineUpCops, moveCops } from "./cops";
@@ -138,7 +138,7 @@ function step(race: RaceState, input: PlayerInput) {
     moveCops(race, copIntents);
     traffic.step(whereIs(player), ridersOnTheRoad(race));
     // ...and then what they ran into, the hits and the finish line settle what happened.
-    bustTheCaught(race);
+    bustRidersReached(race);
     joinThePlayer(race);
     runIntoEachOther(race, riding);
     const cars = traffic.cars.map(footprintOfCar);
