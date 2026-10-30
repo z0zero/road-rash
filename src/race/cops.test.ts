@@ -96,7 +96,7 @@ describe("fighting a cop", () => {
     expect(race.snapshot().cops[0].stamina).toBe(126);
   });
 
-  it("makes the cop fight back with its club for about 10 s after it was last hit, then let it be", () => {
+  it("makes the cop fight back with its club, swinging it at the rider who hit it about once a second, each hit taking 30 stamina", () => {
     // In a race in which no opponent comes to join the fight.
     const { race, input } = alongsideTheFirstCop(3);
     const cop = () => race.snapshot().cops[0];
@@ -105,30 +105,47 @@ describe("fighting a cop", () => {
     const punch = eventsUntil(race, () => ({ ...input(), punch: true }), (event) => event.type === "attack-landed", 1);
     expect(punch).toContainEqual({ type: "attack-landed", attacker: ME, target: FIRST_COP, kind: "punch" });
     expect(punch).toContainEqual({ type: "cop-retaliating", cop: 0, target: PLAYER });
-    const hitAt = race.snapshot().clock;
-    const fights: { at: number; event: RaceEvent }[] = [];
+    const swings: number[] = [];
+    const hits: number[] = [];
+    let stamina = player(race).stamina;
     const watching = () => {
       for (const event of race.drainEvents()) {
-        if (event.type === "cop-retaliating" || ("attacker" in event && event.attacker.kind === "cop")) {
-          fights.push({ at: race.snapshot().clock - hitAt, event });
+        if (event.type === "attack-thrown" && event.attacker.kind === "cop") {
+          expect(event).toEqual({ type: "attack-thrown", attacker: FIRST_COP, target: ME, kind: "club-swing" });
+          swings.push(race.snapshot().clock);
+        }
+        if (event.type === "attack-landed" && event.attacker.kind === "cop") {
+          expect(event).toEqual({ type: "attack-landed", attacker: FIRST_COP, target: ME, kind: "club-swing" });
+          hits.push(stamina - player(race).stamina);
         }
       }
+      stamina = player(race).stamina;
       return input();
     };
 
-    secondsUntil(race, watching, () => race.snapshot().clock - hitAt >= 9.5, 10);
-    expect(cop().fightingBack).toBe(PLAYER);
-    secondsUntil(race, watching, () => race.snapshot().clock - hitAt >= 14, 5);
+    // Riding on beside it, the player is soon clubbed down and knocked off, and the cop busts them.
+    secondsUntil(race, watching, () => player(race).status !== "racing", 15);
 
-    expect(fights.filter(({ event }) => event.type === "cop-retaliating")).toEqual([]);
-    const swings = fights.filter(({ event }) => event.type === "attack-thrown");
-    const landed = fights.filter(({ event }) => event.type === "attack-landed");
-    for (const { event } of swings) expect(event).toEqual({ type: "attack-thrown", attacker: FIRST_COP, target: ME, kind: "club-swing" });
-    expect(swings.length).toBeGreaterThanOrEqual(3);
-    expect(landed.length).toBeGreaterThanOrEqual(2);
-    expect(Math.max(...swings.map(({ at }) => at))).toBeLessThan(10);
-    expect(cop().fightingBack).toBeNull();
-    expect(player(race)).toMatchObject({ status: "racing", crash: null });
+    expect(player(race).status).toBe("busted");
+    expect(swings.length).toBeGreaterThanOrEqual(4);
+    for (const [index, at] of swings.slice(1).entries()) expect(at - swings[index]).toBeCloseTo(1, 1);
+    expect(hits.slice(0, 3)).toEqual([30, 30, 30]);
+    expect(cop()).toMatchObject({ status: "riding", weapon: "club" });
+  });
+
+  it("makes beating a fresh cop costly: a player who mashes punch knocks it off but loses more than half their stamina, and its club stays its own", () => {
+    for (const seed of [1, 2, 3]) {
+      const { race, input } = alongsideTheFirstCop(seed);
+      const punching = () => ({ ...input(), punch: true });
+
+      const events = eventsUntil(race, punching, (event) => event.type === "cop-knocked-off" || event.type === "player-race-over", 15);
+
+      expect(events).toContainEqual(expect.objectContaining({ type: "cop-knocked-off", cop: 0 }));
+      expect(events.filter((event) => event.type === "weapon-stolen")).toEqual([]);
+      expect(events.filter((event) => event.type === "attack-landed" && event.attacker.kind === "cop").length).toBeGreaterThanOrEqual(2);
+      expect(player(race)).toMatchObject({ status: "racing", crash: null, weapon: null });
+      expect(player(race).stamina).toBeLessThan(50);
+    }
   });
 
   it("leaves a cop to recover its stamina as a rider does: at 6 per second from 2 s after it was last hit, up to 150", () => {
@@ -232,7 +249,7 @@ describe("busting", () => {
   });
 
   it("ends the player's race as Busted, which the results say", () => {
-    // The player hits the first cop and rides on beside it as it fights back; a brawler joins in and knocks them off.
+    // The player hits the first cop and rides on beside it as it fights back, until it knocks them off.
     const { race, input } = alongsideTheFirstCop();
     const events = eventsUntil(race, () => ({ ...input(), punch: race.snapshot().cops[0].stamina === 150 }), (event) => event.type === "player-race-over", 30);
 

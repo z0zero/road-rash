@@ -446,8 +446,9 @@ export function createRace(options: RaceOptions): Race {
 
   function land(attacker: Fighter, target: Fighter, kind: AttackKind) {
     events.push({ type: "attack-landed", attacker: who(attacker), target: who(target), kind });
-    // Any hit in the middle of a club swing takes the club from its holder, and their swing never lands.
-    if (isMidSwing(target.attack)) {
+    // Any hit by a rider in the middle of another rider's club swing takes the club, and the swing never lands. Cops
+    // neither take clubs nor lose them.
+    if (attacker.kind === "rider" && target.kind === "rider" && isMidSwing(target.attack)) {
       target.weapon = null;
       target.attack = null;
       attacker.weapon = "club";

@@ -176,8 +176,8 @@ export function bustingIntent(me: Readonly<Motion>, rider: Place, edge: number):
   return { speed, line: clamp(line, -edge, edge), hurrying: true };
 }
 
-/** A cop fighting back throws an attack at most once every this many seconds. */
-export const COP_ATTACK_EVERY_SECONDS = 2.5;
+/** A cop fighting back swings its club about once every this many seconds. */
+export const COP_ATTACK_EVERY_SECONDS = 1;
 /** A cop fighting back rides this many metres to the side of the rider it fights... */
 const FIGHTING_GAP = 1.4;
 /** ...closing in on them along the track at this many metres per second for every metre between them... */
