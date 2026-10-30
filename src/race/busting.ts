@@ -26,7 +26,7 @@ export function letGo(race: RaceState) {
  * A cop that has reached the crashed rider it was riding to busts them,
  * ending their race, once they are on their feet: never while they tumble.
  */
-export function bustTheCaught(race: RaceState) {
+export function bustRidersReached(race: RaceState) {
   for (const cop of race.cops) {
     const rider = cop.busting === null ? null : race.riders[cop.busting];
     if (rider?.crash?.phase !== "on-foot" || rider.status !== "racing") continue;

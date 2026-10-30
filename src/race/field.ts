@@ -21,7 +21,7 @@ const ACROSS: Record<number, readonly number[]> = { 2: [0.25, 0.75], 3: [1 / 6, 
  * three, riding side by side in the lanes that run in the race direction. The
  * order is drawn from `random`; slot `i` is for the i-th opponent.
  */
-export function lineUpOpponents(track: Track, count: number, random: Random): TrackPosition[] {
+function lineUpOpponents(track: Track, count: number, random: Random): TrackPosition[] {
   const sizes = groupSizes(count, random);
   const spacing = (FURTHEST_GROUP - NEAREST_GROUP) / Math.max(1, sizes.length - 1);
   const slots: TrackPosition[] = [];

@@ -17,6 +17,7 @@ import {
   player,
   secondsUntil,
   startedRace,
+  steerOnto,
   STEPS_PER_SECOND,
 } from "./test-helpers";
 
@@ -149,12 +150,7 @@ function rideIntoTheFirstCop(race: Race, speed: number) {
     const cop = race.snapshot().cops[0];
     const sideways = (me.offset - lastOffset) * STEPS_PER_SECOND;
     lastOffset = me.offset;
-    return {
-      ...NO_INPUT,
-      steer: Math.max(-1, Math.min(1, 0.8 * (cop.offset - me.offset) - 0.25 * sideways)),
-      throttle: me.speed < speed ? 1 : 0,
-      brake: me.speed > speed + 0.5 ? Math.min(1, (me.speed - speed) / 3) : 0,
-    };
+    return steerOnto(me, cop.offset, speed, sideways);
   };
 }
 

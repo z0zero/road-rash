@@ -1,7 +1,7 @@
 import { letGo } from "./busting";
-import { carryOn, slide, STAND_STILL, type Crash } from "./crashing";
+import { carryOn, slide, STAND_STILL } from "./crashing";
 import type { CopId, RiderId } from "./events";
-import { punchOf, throwAttack, withinReach, type Attack, type Weapon } from "./fighting";
+import { punchOf, throwAttack, withinReach, type FighterState } from "./fighting";
 import type { Footprint } from "./footprint";
 import {
   BRAKING_LEAD,
@@ -28,23 +28,12 @@ export const COP_FULL_STAMINA: number = TUNING.cops.fullStamina;
 /** The cops, in cop-id order: original names, none taken from Road Rash's rosters. */
 const COP_NAMES = ["Sergeant Pike", "Deputy Gale"];
 
-/** A cop on a motorcycle, in track space like the riders. */
-export interface Cop {
+/** A cop on a motorcycle, in track space like the riders. Every cop carries a club, and comes off their bike only when knocked off. */
+export interface Cop extends FighterState {
   readonly kind: "cop";
   readonly id: CopId;
   readonly name: string;
-  /** The bike's motion, which is the cop's too while they ride it. */
-  readonly motion: Motion;
   status: CopStatus;
-  stamina: number;
-  /** Steps since the cop was last hit (Infinity if never). */
-  stepsSinceHit: number;
-  /** The attack the cop is making, or null. */
-  attack: Attack | null;
-  /** The weapon the cop holds, or null: every cop carries a club. */
-  weapon: Weapon | null;
-  /** Null while the cop is on their bike; how they came off it once knocked off. */
-  crash: Crash | null;
   /** The rider the cop is fighting back against, for hitting it; null when it isn't fighting anyone. */
   fightingBack: RiderId | null;
   /** Steps the cop has still to fight back for, unless it is hit again. */
@@ -140,7 +129,7 @@ const ARREST_PACE = TUNING.cops.arrestPace;
  * bikes) and the cars and obstacles on it as opponents do, hurrying out of
  * the way of one it is about to run into.
  */
-export function patrolIntent(
+function patrolIntent(
   me: Readonly<Motion>,
   player: Moving,
   following: boolean,
@@ -169,7 +158,7 @@ export function patrolIntent(
  * motions of everyone on a bike) and the cars and obstacles on it as on
  * patrol. Offsets stay within `edge`.
  */
-export function bustingIntent(
+function bustingIntent(
   me: Readonly<Motion>,
   rider: Moving,
   field: readonly Readonly<Motion>[],
@@ -185,7 +174,7 @@ export function bustingIntent(
 }
 
 /** A cop fighting back swings its club about once every this many seconds. */
-export const COP_ATTACK_EVERY_SECONDS = 1;
+const COP_ATTACK_EVERY_SECONDS = 1;
 
 /**
  * Where a cop rides to fight back against the rider who hit it, who is at
@@ -195,7 +184,7 @@ export const COP_ATTACK_EVERY_SECONDS = 1;
  * motions of everyone on their bikes) and the cars and obstacles on it as on
  * patrol.
  */
-export function fightingBackIntent(
+function fightingBackIntent(
   me: Readonly<Motion>,
   rider: Moving,
   track: Track,
@@ -218,7 +207,7 @@ const CREEP = 3;
  * the field's way, braking at once and creeping across at `CREEP` if need be;
  * then it stops there.
  */
-export function pullingOverIntent(me: Readonly<Motion>, track: Track): CopIntent {
+function pullingOverIntent(me: Readonly<Motion>, track: Track): CopIntent {
   const side = me.offset >= 0 ? 1 : -1;
   const onTheShoulder = Math.abs(me.offset) >= track.roadHalfWidth + BIKE_WIDTH / 2;
   return { speed: onTheShoulder ? 0 : CREEP, line: side * (track.roadHalfWidth + BIKE_WIDTH), hurrying: true };
@@ -230,7 +219,7 @@ export function pullingOverIntent(me: Readonly<Motion>, track: Track): CopIntent
  * pace. Braking stops the bike before it can go the other way. Like any bike,
  * it can't move sideways while it stands still. Offsets stay within `edge`.
  */
-export function moveCop(motion: Motion, intent: CopIntent, edge: number): void {
+function moveCop(motion: Motion, intent: CopIntent, edge: number): void {
   const wanted = clamp(intent.speed, -ARREST_PACE, TUNING.cops.topSpeed);
   const change = (intent.hurrying ? HURRIED_SPEED_RESPONSE : SPEED_RESPONSE) * (wanted - motion.speed);
   const braking = motion.speed !== 0 && Math.sign(change) !== Math.sign(motion.speed);
@@ -268,7 +257,7 @@ export interface Rota {
  * follow them. The first cop to join the race follows them at once; others
  * hold back while it does, or during a break.
  */
-export function takeTurns(cops: readonly Cop[], rota: Rota, player: Moving, busy: (cop: Cop) => boolean): void {
+function takeTurns(cops: readonly Cop[], rota: Rota, player: Moving, busy: (cop: Cop) => boolean): void {
   for (const cop of cops) {
     if (!cop.following) continue;
     if (cop.status !== "riding") cop.following = false;
