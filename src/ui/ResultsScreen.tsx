@@ -4,6 +4,7 @@ import { liveryOf } from "@/renderer/liveries";
 import type { PersonalBest } from "@/save-data/save-data";
 import { Button } from "./Button";
 import { formatPosition, formatRaceTime } from "./format";
+import { PANEL, PANEL_TITLE } from "./panel";
 import { RaceSeed } from "./RaceSeed";
 
 const BANNERS: Record<RaceOutcome, string> = { finished: "Finished", wrecked: "Wrecked", busted: "Busted" };
@@ -50,9 +51,9 @@ export function ResultsScreen({
       aria-labelledby="results-title"
       className="absolute inset-0 flex items-center justify-center overflow-y-auto bg-night/55 p-4 backdrop-blur-[2px]"
     >
-      <div className="flex w-[min(52rem,94vw)] flex-col gap-6 rounded-xl border border-sun/40 bg-night/85 px-8 py-7 shadow-2xl md:flex-row md:gap-10">
+      <div className={`flex w-[min(52rem,94vw)] flex-col gap-6 px-8 py-7 md:flex-row md:gap-10 ${PANEL}`}>
         <div className="flex flex-col items-center gap-4 md:w-72 md:shrink-0">
-          <h2 id="results-title" className="font-display text-6xl uppercase italic tracking-wide text-sun">
+          <h2 id="results-title" className={`text-6xl ${PANEL_TITLE}`}>
             {BANNERS[results.outcome]}
           </h2>
           <p
