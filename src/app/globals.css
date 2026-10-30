@@ -33,6 +33,20 @@
       opacity: 1;
     }
   }
+
+  /* A prompt on the HUD coming up: rising into place as it fades in, unless motion is reduced. */
+  --animate-prompt-in: prompt-in 0.3s ease-out both;
+
+  @keyframes prompt-in {
+    from {
+      opacity: 0;
+      transform: translateY(1rem) scale(0.9);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
 }
 
 html,

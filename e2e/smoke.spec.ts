@@ -192,6 +192,73 @@ test("punches and kicks with J and K while riding", async ({ page }) => {
   expect(await hudSpeedKmh(page)).toBeGreaterThan(0);
 });
 
+/** Plays the race on a frame at a time until `happened` says so, for at most `seconds`; says whether it did. */
+async function playUntil(page: Page, seconds: number, happened: () => Promise<boolean>) {
+  const frames = Math.round((seconds * 1000) / FRAME_MS);
+  for (let frame = 0; frame < frames && !(await happened()); frame++) await page.clock.fastForward(FRAME_MS);
+  return happened();
+}
+
+/**
+ * A race in which an opponent rides up beside a player who just holds the
+ * throttle from the start and hits them in the first ten seconds, and nobody
+ * hits them again for a while. Any seed will do in which that is so.
+ */
+const HIT_EARLY = "/?seed=9";
+
+async function staminaNow(page: Page) {
+  return Number(await page.getByRole("meter", { name: "Stamina", exact: true }).getAttribute("aria-valuenow"));
+}
+
+test("prompts a player who has never attacked to hit back when an opponent's hit lands, for a few seconds", async ({
+  page,
+}) => {
+  // Ten seconds and more of racing, a frame at a time.
+  test.slow();
+  await page.goto(HIT_EARLY);
+  await startRacing(page);
+  const prompt = page.getByTestId("hit-back-prompt");
+  await expect(prompt).toBeHidden();
+  await page.keyboard.down("w");
+
+  expect(await playUntil(page, 15, () => prompt.isVisible())).toBe(true);
+  expect(await staminaNow(page)).toBeLessThan(100);
+  // It names the keys as the title and Controls screens do.
+  await expect(prompt).toContainText("Hit back!");
+  await expect(prompt.getByTestId("hit-back-keys").locator("kbd")).toHaveText(["J", "Z", "K", "X"]);
+  await expect(prompt.getByTestId("hit-back-buttons")).toBeHidden();
+
+  await play(page, 4.4);
+  await page.keyboard.up("w");
+  await expect(prompt).toBeHidden();
+});
+
+test("stops prompting the player to hit back as soon as they attack, and for good", async ({ page }) => {
+  // Ten seconds and more of racing, a frame at a time.
+  test.slow();
+  await page.goto(HIT_EARLY);
+  await startRacing(page);
+  const prompt = page.getByTestId("hit-back-prompt");
+  await page.keyboard.down("w");
+  expect(await playUntil(page, 15, () => prompt.isVisible())).toBe(true);
+
+  await page.keyboard.press("j");
+  await play(page, 0.2);
+  await expect(prompt).toBeHidden();
+  await page.keyboard.up("w");
+
+  // The same race again after a reload: the same hit lands, and this time nothing prompts the player.
+  await page.clock.resume();
+  await page.reload();
+  await page.clock.pauseAt(new Date(RACE_STARTS.getTime() + 60 * 60 * 1000));
+  await page.getByRole("button", { name: "Start Race" }).click();
+  await play(page, 3.6);
+  await page.keyboard.down("w");
+  expect(await playUntil(page, 15, async () => (await staminaNow(page)) < 100)).toBe(true);
+  await page.keyboard.up("w");
+  await expect(prompt).toBeHidden();
+});
+
 /** Buttons of the standard gamepad mapping, named as on an Xbox controller. */
 const GAMEPAD = { a: 0, b: 1, x: 2, leftTrigger: 6, rightTrigger: 7, start: 9, up: 12, down: 13, left: 14, right: 15 };
 
@@ -339,6 +406,20 @@ test.describe("with a gamepad", () => {
     await gamepad(page).release(button);
     await nextFrames(page);
   }
+
+  test("names the gamepad's buttons when prompting a player who rides with one to hit back", async ({ page }) => {
+    // Ten seconds and more of racing, a frame at a time.
+    test.slow();
+    await page.goto(HIT_EARLY);
+    await startRacing(page);
+    await gamepad(page).press(GAMEPAD.rightTrigger);
+
+    const prompt = page.getByTestId("hit-back-prompt");
+    expect(await playUntil(page, 15, () => prompt.isVisible())).toBe(true);
+    await expect(prompt.getByTestId("hit-back-buttons").locator("kbd")).toHaveText(["X", "B"]);
+    await expect(prompt.getByTestId("hit-back-keys")).toBeHidden();
+    await gamepad(page).release(GAMEPAD.rightTrigger);
+  });
 
   test("moves between menu buttons with the D-pad or the left stick, and presses them with A", async ({ page }) => {
     await expect(page.getByRole("button", { name: "Start Race" })).toBeFocused();
