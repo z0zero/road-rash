@@ -69,7 +69,7 @@ export function secondsUntil(
 /**
  * Scripted input that rides the bike along the track near `lane` (an offset
  * from the centreline) at up to `targetSpeed`, braking for the bends ahead
- * and, like any careful rider, keeping clear of the riders, cars and
+ * and, like any careful rider, keeping clear of the riders, cops, cars and
  * obstacles on the road: it never steers across anything it is about to
  * reach or is alongside, gets out of the way of what comes at it, and
  * follows a slower rider or car in its path until it has a clear way past.
@@ -156,13 +156,17 @@ interface KeepOut {
 
 /**
  * The other riders' bikes (ridden, or lying where they slid to, to be got back
- * on any moment), the cars and the obstacles: where they are, how fast they
- * go along the track (m/s), and half their size.
+ * on any moment), the cops' bikes, the cars and the obstacles: where they
+ * are, how fast they go along the track (m/s), and half their size.
  */
 function thingsOnTheRoad(race: Race, riders: readonly RiderSnapshot[], traffic: readonly CarSnapshot[]) {
   return [
     ...riders
       .filter((rider) => rider.id !== PLAYER && rider.status === "racing")
+      .map(({ bike: { distance, offset, speed } }) => ({ distance, offset, velocity: speed, halfLength: 1, halfWidth: 0.4 })),
+    ...race
+      .snapshot()
+      .cops.filter((cop) => cop.status !== "knocked-off")
       .map(({ bike: { distance, offset, speed } }) => ({ distance, offset, velocity: speed, halfLength: 1, halfWidth: 0.4 })),
     ...traffic.map((car) => ({
       distance: car.distance,
@@ -397,7 +401,9 @@ export const apart = (a: { distance: number; offset: number }, b: { distance: nu
 /**
  * Scripted input that rides the player up alongside the first cop, 1.4 m to
  * its side (towards the middle of the road) and level with it, and holds them
- * there. It closes in on the cop at no more than 5 m/s.
+ * there. It closes in on the cop at no more than 5 m/s, but keeps rolling
+ * until it is in its lane: a cop on patrol holds back behind a rider in its
+ * way, and a stopped bike can't steer.
  */
 function rideAlongsideTheFirstCop(race: Race) {
   let lastOffset = player(race).offset;
@@ -408,7 +414,7 @@ function rideAlongsideTheFirstCop(race: Race) {
     lastOffset = me.offset;
     const lane = cop.offset + (cop.offset > 0 ? -1.4 : 1.4);
     const closing = Math.max(-5, Math.min(5, 0.8 * (cop.distance - me.distance)));
-    const wanted = Math.max(0, cop.speed + closing);
+    const wanted = Math.max(Math.abs(lane - me.offset) > 0.3 ? 2 : 0, cop.speed + closing);
     return {
       ...NO_INPUT,
       steer: Math.max(-1, Math.min(1, 0.8 * (lane - me.offset) - 0.25 * sideways)),
