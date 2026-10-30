@@ -79,15 +79,38 @@ export const STOP_NAN_GLSL = /* glsl */ `
   if (any(equal(floatBitsToUint(gl_FragColor.rgb) & 0x7f800000u, uvec3(0x7f800000u)))) gl_FragColor.rgb = vec3(0.0);
 `;
 
+/**
+ * GLSL for `sunsetHaze` (see `sunsetHazeGlsl`) and for `vec3 sunsetSky(vec3
+ * direction)`: the bare sky seen looking along a world-space `direction`, from
+ * deep violet overhead down through the sunset to the haze at the horizon,
+ * glowing towards the sun, without its clouds, hills or the sun itself.
+ */
+export function sunsetSkyGlsl(sun: Vector3): string {
+  return /* glsl */ `
+    ${sunsetHazeGlsl(sun)}
+    vec3 sunsetSky(vec3 direction) {
+      vec3 towards = normalize(direction);
+      float up = towards.y;
+      vec3 sky = mix(${rgb(SUNSET.lowerSky)}, ${rgb(SUNSET.upperSky)}, smoothstep(0.03, 0.32, up));
+      sky = mix(sky, ${rgb(SUNSET.zenith)}, smoothstep(0.3, 0.95, up));
+      sky = sunsetHaze(sky, towards);
+      return mix(sunsetHaze(${rgb(SUNSET.haze)}, towards), sky, smoothstep(0.0, 0.14, up));
+    }
+  `;
+}
+
 let installedFor: string | null = null;
 
 /**
  * Makes three.js's fog glow towards the sun, so fogged land and sea fade into
- * the sky's own horizon in every direction. The fog's colour stays the base
- * haze; the glow is added along each fragment's view direction. The fog comes
- * last in every fogged material, everything but the sky, so it also stops any
- * not-a-number colour there (see `STOP_NAN_GLSL`). Call it before the first
- * frame is drawn; calling it again with the same sun does nothing.
+ * the sky's own horizon in every direction. The fog's colour is the base
+ * haze, with the glow added along each fragment's view direction; towards the
+ * fog's far end it gives way to the sky behind, so the furthest land, even
+ * where it stands above the horizon, fades into the sky and leaves no edge
+ * where the draw distance cuts it off. The fog comes last in every fogged
+ * material, everything but the sky, so it also stops any not-a-number colour
+ * there (see `STOP_NAN_GLSL`). Call it before the first frame is drawn;
+ * calling it again with the same sun does nothing.
  */
 export function installSunsetHaze(sun: Vector3) {
   const key = vec3(sun);
@@ -117,7 +140,7 @@ export function installSunsetHaze(sun: Vector3) {
         uniform float fogNear;
         uniform float fogFar;
       #endif
-      ${sunsetHazeGlsl(sun)}
+      ${sunsetSkyGlsl(sun)}
     #endif
   `;
   ShaderChunk.fog_fragment = /* glsl */ `
@@ -127,7 +150,8 @@ export function installSunsetHaze(sun: Vector3) {
       #else
         float fogFactor = smoothstep( fogNear, fogFar, vFogDepth );
       #endif
-      gl_FragColor.rgb = mix( gl_FragColor.rgb, sunsetHaze( fogColor, vFogDirection ), fogFactor );
+      vec3 hazed = mix( sunsetHaze( fogColor, vFogDirection ), sunsetSky( vFogDirection ), smoothstep( 0.6, 1.0, fogFactor ) );
+      gl_FragColor.rgb = mix( gl_FragColor.rgb, hazed, fogFactor );
       ${STOP_NAN_GLSL}
     #endif
   `;
