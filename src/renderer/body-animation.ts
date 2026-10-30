@@ -1,6 +1,6 @@
 import { type Group, Quaternion, Vector3 } from "three";
 import { smoothstep } from "@/math";
-import type { AttackSnapshot, Weapon } from "@/race";
+import type { AttackSnapshot, Side, Weapon } from "@/race";
 import type { BikeModel, Limb } from "./bike-model";
 
 /**
@@ -101,14 +101,14 @@ const swung = new Vector3();
 const struckWay = new Vector3();
 
 /** The way a swing points on `side` at this moment: `raised` through the wind-up, then swept round to `struck` just after the strike. */
-function swingDirection(raised: Direction, struck: Direction, side: -1 | 1, attack: AttackSnapshot): Vector3 {
+function swingDirection(raised: Direction, struck: Direction, side: Side, attack: AttackSnapshot): Vector3 {
   mirrored(swung, raised, side);
   if (attack.stage === "recovery") swung.lerp(mirrored(struckWay, struck, side), smoothstep(0, SWEEP, attack.progress)).normalize();
   return swung;
 }
 
 /** Sets `target` to the unit vector along `direction`, mirrored to the left when `side` is -1. */
-function mirrored(target: Vector3, direction: Direction, side: -1 | 1): Vector3 {
+function mirrored(target: Vector3, direction: Direction, side: Side): Vector3 {
   return target.set(side * direction[0], direction[1], direction[2]).normalize();
 }
 
@@ -120,7 +120,7 @@ const intoForearm = new Quaternion();
 interface Armed {
   readonly weapon: Weapon | null;
   /** 1 the right hand, -1 the left. */
-  readonly clubHand: -1 | 1;
+  readonly clubHand: Side;
   readonly attack: AttackSnapshot | null;
 }
 

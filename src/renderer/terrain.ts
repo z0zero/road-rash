@@ -1,6 +1,6 @@
 import { type BufferGeometry, Color } from "three";
 import { clamp, smoothstep } from "@/math";
-import type { Track, WorldPoint } from "@/race";
+import { createGroundGrid, type Side, type Track, type WorldPoint } from "@/race";
 import { groundDirection, seaward } from "./geography";
 import { geometryFrom } from "./low-poly";
 import { hash, smoothNoise } from "./noise";
@@ -86,7 +86,7 @@ function createTerrain(track: Track): Terrain {
    * point q is nearer once l > |q - c|² / 2 n·(q - c); the same rule stops the inside of a bend
    * at its centre.
    */
-  function reachOf(i: number, side: -1 | 1) {
+  function reachOf(i: number, side: Side) {
     const nx = side * rightX[i];
     const nz = side * rightZ[i];
     let best = MAX_REACH;
@@ -106,7 +106,7 @@ function createTerrain(track: Track): Terrain {
    * along the road, as a share of the sections' spacing: 1 on a straight and on the outside of a
    * bend, less on the inside, where the sections close in on the bend's centre, and 0 there and beyond.
    */
-  function spreadAt(i: number, side: -1 | 1, l: number) {
+  function spreadAt(i: number, side: Side, l: number) {
     const before = Math.max(0, i - 1);
     const after = Math.min(count - 1, i + 1);
     // Forward is a quarter turn anticlockwise from the right.
@@ -134,33 +134,22 @@ function createTerrain(track: Track): Terrain {
 
   // A coarse grid of the sections, to find the stretch of road nearest a point quickly.
   const CELL = 64;
-  const grid = new Map<string, number[]>();
-  for (let i = 0; i < count; i++) {
-    const key = `${Math.floor(xs[i] / CELL)},${Math.floor(zs[i] / CELL)}`;
-    const bucket = grid.get(key);
-    if (bucket) bucket.push(i);
-    else grid.set(key, [i]);
-  }
+  const grid = createGroundGrid<number>(CELL);
+  for (let i = 0; i < count; i++) grid.add(xs[i], zs[i], i);
 
   function nearestSection(x: number, z: number) {
     let best = 0;
     let bestDistance = Infinity;
-    const cx = Math.floor(x / CELL);
-    const cz = Math.floor(z / CELL);
+    const nearer = (i: number) => {
+      const d = (xs[i] - x) ** 2 + (zs[i] - z) ** 2;
+      if (d < bestDistance) {
+        bestDistance = d;
+        best = i;
+      }
+    };
     // Widen the search ring by ring until nothing outside it could be nearer.
     for (let ring = 1; ring <= 8; ring++) {
-      for (let a = -ring; a <= ring; a++) {
-        for (let b = -ring; b <= ring; b++) {
-          if (Math.max(Math.abs(a), Math.abs(b)) !== ring && ring > 1) continue;
-          for (const i of grid.get(`${cx + a},${cz + b}`) ?? []) {
-            const d = (xs[i] - x) ** 2 + (zs[i] - z) ** 2;
-            if (d < bestDistance) {
-              bestDistance = d;
-              best = i;
-            }
-          }
-        }
-      }
+      grid.forEachNear(x, z, ring, nearer, ring > 1 ? ring : 0);
       if (bestDistance <= (ring * CELL) ** 2) break;
     }
     return best;
@@ -296,7 +285,7 @@ function coastlineOf(track: Track, xs: Float64Array, zs: Float64Array) {
 function crossSection(
   track: Track,
   i: number,
-  side: -1 | 1,
+  side: Side,
   reach: number,
   spread: (lateral: number) => number,
   shape: { lateral: Float64Array; height: Float64Array },

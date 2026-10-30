@@ -1,6 +1,6 @@
 import type { Footprint } from "./footprint";
 import { BIKE_LENGTH, BIKE_WIDTH, clamp, maxSidewaysSpeed, type Controls, type Motion } from "./riding";
-import type { Track } from "./track";
+import type { Moving, Track } from "./track";
 import { TUNING } from "./tuning";
 
 /** How an opponent rides this race. */
@@ -167,7 +167,7 @@ export function opponentControls(
  */
 export function levelWith(
   me: Readonly<Motion>,
-  rider: { readonly distance: number; readonly offset: number; readonly speed: number },
+  rider: Moving,
   edge: number,
 ): { line: number; speed: number } {
   const side = me.offset >= rider.offset ? 1 : -1;

@@ -1,15 +1,5 @@
-import type { RiderId, RiderOrCop } from "./events";
-
-/** Where a rider is and how fast they are going along the track. */
-export interface Place {
-  readonly id: RiderId;
-  /** Metres along the centreline. */
-  readonly distance: number;
-  /** Metres right of the centreline. */
-  readonly offset: number;
-  /** Metres per second along the track. */
-  readonly speed: number;
-}
+import type { RiderOrCop } from "./events";
+import { apart, type Moving, type TrackPosition } from "./track";
 
 /** Riders and cops the player should know are there, on either side of them. */
 export interface Warnings {
@@ -20,12 +10,8 @@ export interface Warnings {
 }
 
 /** An opponent on their bike or a cop in the race, and where they are. */
-export interface Someone {
+export interface Someone extends TrackPosition {
   readonly who: RiderOrCop;
-  /** Metres along the centreline. */
-  readonly distance: number;
-  /** Metres right of the centreline. */
-  readonly offset: number;
 }
 
 /** The nearest opponent or cop is named only if they are within this many metres of the player. */
@@ -38,18 +24,18 @@ const ALONGSIDE_ACROSS = 4;
 const COMING_UP = 30;
 
 /** The opponent or cop nearest the player (straight-line, in track space) if one is within range; null otherwise. */
-export function nearestOpponentOrCop(player: Place, others: readonly Someone[]): RiderOrCop | null {
+export function nearestOpponentOrCop(player: TrackPosition, others: readonly Someone[]): RiderOrCop | null {
   let nearest: RiderOrCop | null = null;
   let nearestApart = NEAREST_RANGE;
   for (const other of others) {
-    const apart = Math.hypot(other.distance - player.distance, other.offset - player.offset);
-    if (apart <= nearestApart) [nearest, nearestApart] = [other.who, apart];
+    const metres = apart(other, player);
+    if (metres <= nearestApart) [nearest, nearestApart] = [other.who, metres];
   }
   return nearest;
 }
 
 /** Which sides of the player have an opponent or a cop (`others`) alongside them, or coming up from behind. */
-export function warningsFor(player: Place, others: readonly Omit<Place, "id">[]): Warnings {
+export function warningsFor(player: Moving, others: readonly Moving[]): Warnings {
   let left = false;
   let right = false;
   for (const other of others) {

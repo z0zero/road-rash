@@ -1,15 +1,12 @@
+import { createGroundGrid } from "./ground-grid";
 import type { Random } from "./random";
-import type { Track, WorldPoint } from "./track";
+import type { Track, TrackPosition, WorldPoint } from "./track";
 
 export type SceneryKind = "palm" | "pine" | "rock" | "house" | "sign" | "guard-rail";
 
 /** Something beside the road that nobody can hit: it stands beyond the shoulders of every stretch of road. */
-export interface SceneryPlacement {
+export interface SceneryPlacement extends TrackPosition {
   readonly kind: SceneryKind;
-  /** Metres along the centreline. */
-  readonly distance: number;
-  /** Metres sideways from the centreline; positive is right. */
-  readonly offset: number;
   /** Radians turned about the vertical, relative to the road's heading at `distance`. */
   readonly yaw: number;
   /** Size relative to the kind's usual size. */
@@ -19,12 +16,8 @@ export interface SceneryPlacement {
 export type ObstacleKind = "rock" | "sign" | "post" | "fallen-rock";
 
 /** A fixed object that makes a rider who runs into it crash. */
-export interface ObstaclePlacement {
+export interface ObstaclePlacement extends TrackPosition {
   readonly kind: ObstacleKind;
-  /** Metres along the centreline. */
-  readonly distance: number;
-  /** Metres sideways from the centreline; positive is right. */
-  readonly offset: number;
   /** Metres from its centre within which a rider hits it. */
   readonly radius: number;
 }
@@ -168,26 +161,17 @@ function inlandSide(road: Road, distance: number, random: Random, inland: number
 function clearanceFrom(road: Road) {
   const cell = 20;
   const reach = 60;
-  const grid = new Map<string, WorldPoint[]>();
+  const grid = createGroundGrid<WorldPoint>(cell);
   for (let d = 0; d <= road.length; d += 2) {
     const point = road.sampleAt(d);
-    const key = `${Math.floor(point.x / cell)},${Math.floor(point.z / cell)}`;
-    const bucket = grid.get(key);
-    if (bucket) bucket.push(point);
-    else grid.set(key, [point]);
+    grid.add(point.x, point.z, point);
   }
   const span = Math.ceil(reach / cell);
   return (point: WorldPoint) => {
     let nearest = reach;
-    const cx = Math.floor(point.x / cell);
-    const cz = Math.floor(point.z / cell);
-    for (let i = -span; i <= span; i++) {
-      for (let j = -span; j <= span; j++) {
-        for (const other of grid.get(`${cx + i},${cz + j}`) ?? []) {
-          nearest = Math.min(nearest, Math.hypot(point.x - other.x, point.z - other.z));
-        }
-      }
-    }
+    grid.forEachNear(point.x, point.z, span, (other) => {
+      nearest = Math.min(nearest, Math.hypot(point.x - other.x, point.z - other.z));
+    });
     return nearest;
   };
 }

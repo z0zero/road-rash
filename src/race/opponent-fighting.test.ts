@@ -3,6 +3,7 @@ import { NO_INPUT, PLAYER, STEP_SECONDS, type PlayerInput, type Race, type RaceE
 import {
   alongsideAn,
   alongsideARacer,
+  type AttackThrown,
   autopilot,
   CLOSED_ROAD,
   eventsUntil,
@@ -27,7 +28,6 @@ const emptyTallies = (): Tallies => ({
   opponent: { racer: { seconds: 0, attacks: 0 }, brawler: { seconds: 0, attacks: 0 }, bully: { seconds: 0, attacks: 0 } },
 });
 
-type AttackThrown = Extract<RaceEvent, { type: "attack-thrown" }>;
 
 /** An opponent whose hit lands on a player who doesn't hit back gives them this many seconds before its next attack. */
 const BREATHER_SECONDS = 3;

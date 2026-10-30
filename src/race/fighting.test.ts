@@ -1,19 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { NO_INPUT, PLAYER, STEP_SECONDS, type AttackKind, type RaceEvent, type RiderId, type RiderSnapshot } from ".";
+import { NO_INPUT, PLAYER, STEP_SECONDS, type AttackKind, type RaceEvent, type RiderSnapshot } from ".";
 import {
   alongsideARacer,
   autopilot,
   eventsDuring,
   eventsUntil,
+  ME,
   player,
+  rider,
   secondsUntil,
   startedRace,
   STEPS_PER_SECOND,
   withinReach,
 } from "./test-helpers";
 
-const ME = { kind: "rider", id: PLAYER } as const;
-const rider = (id: RiderId) => ({ kind: "rider", id }) as const;
 
 const byThePlayer = (event: RaceEvent) =>
   (event.type === "attack-thrown" || event.type === "attack-landed") && event.attacker.id === PLAYER;

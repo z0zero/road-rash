@@ -5,24 +5,20 @@ import { attackStage, who, type Weapon } from "./fighting";
 import type { Temperament } from "./opponents";
 import { clock, COUNTDOWN_STEPS, copsInTheRace, onTheirBikes, type RaceState } from "./race-state";
 import { positions } from "./results";
-import { PLAYER, whereIs, type RiderStatus } from "./riders";
+import { isPlayer, PLAYER, whereIs, type RiderStatus } from "./riders";
 import { isOffRoad } from "./riding";
 import { STEPS_PER_SECOND } from "./steps";
 import { nearestOpponentOrCop, warningsFor, type Warnings } from "./surroundings";
+import type { Moving, Side } from "./track";
 import type { CarKind } from "./traffic";
 
-export interface RiderSnapshot {
+/** A rider, where they are: on their bike, or off it after a crash. */
+export interface RiderSnapshot extends Moving {
   readonly id: RiderId;
   /** The opponent's nickname, or "You" for the player. */
   readonly name: string;
   /** How the opponent races and fights; null for the player. */
   readonly temperament: Temperament | null;
-  /** Metres along the track's centreline. */
-  readonly distance: number;
-  /** Metres sideways from the centreline; positive is right of the race direction. */
-  readonly offset: number;
-  /** Metres per second along the track. */
-  readonly speed: number;
   /** Whether the rider is beyond the road's edge, on a shoulder, where a bike slows sharply. */
   readonly offRoad: boolean;
   readonly status: RiderStatus;
@@ -51,21 +47,15 @@ export interface RiderSnapshot {
 /** An attack under way: it winds up, strikes at the end of its wind-up, then recovers before the next. */
 export interface AttackSnapshot {
   readonly kind: AttackKind;
-  /** Which way the attack goes: 1 to the attacker's right, -1 to their left. */
-  readonly side: -1 | 1;
+  /** Which way the attack goes: to the attacker's right or left. */
+  readonly side: Side;
   readonly stage: "wind-up" | "recovery";
   /** How far through its stage the attack is, from 0 to 1. */
   readonly progress: number;
 }
 
-export interface BikeSnapshot {
-  /** Metres along the track's centreline. */
-  readonly distance: number;
-  /** Metres sideways from the centreline; positive is right of the race direction. */
-  readonly offset: number;
-  /** Metres per second along the track. */
-  readonly speed: number;
-}
+/** Where a bike is, and how fast it goes along the track. */
+export type BikeSnapshot = Moving;
 
 /** Everything visible in the race at one moment. Snapshots are plain data that later steps never change. */
 export interface RaceSnapshot {
@@ -108,17 +98,11 @@ export interface CarSnapshot {
   readonly width: number;
 }
 
-/** A cop on a motorcycle, as the riders see them. */
-export interface CopSnapshot {
+/** A cop on a motorcycle, as the riders see them, where they are: on their bike, or off it once knocked off. */
+export interface CopSnapshot extends Moving {
   readonly id: CopId;
   readonly name: string;
   readonly status: CopStatus;
-  /** Where the cop is, on their bike or off it: metres along the track's centreline. */
-  readonly distance: number;
-  /** Metres sideways from the centreline; positive is right of the race direction. */
-  readonly offset: number;
-  /** Metres per second along the track. */
-  readonly speed: number;
   /** How much fight the cop has left: 150 when fresh, down to 0. */
   readonly stamina: number;
   /** The attack the cop is making, or null. */
@@ -138,7 +122,7 @@ export interface CopSnapshot {
 }
 
 /** Where something is in track space, and how fast it goes along the track, as plain data. */
-function placeOf({ distance, offset, speed }: { readonly distance: number; readonly offset: number; readonly speed: number }) {
+function movingOf({ distance, offset, speed }: Moving): Moving {
   return { distance, offset, speed };
 }
 
@@ -148,7 +132,7 @@ export function snapshotOf(race: RaceState): RaceSnapshot {
   const positionOf = positions(race);
   const player = { id: PLAYER, ...whereIs(riders[PLAYER]) };
   const opponents = onTheirBikes(race)
-    .filter((rider) => rider.id !== PLAYER)
+    .filter((rider) => !isPlayer(rider))
     .map(({ id, motion: { distance, offset, speed } }) => ({ id, distance, offset, speed }));
   return {
     countdown: Math.max(0, COUNTDOWN_STEPS - race.stepsTaken) / STEPS_PER_SECOND,
@@ -186,19 +170,19 @@ export function snapshotOf(race: RaceState): RaceSnapshot {
         attack: rider.attack && { kind: rider.attack.kind, side: rider.attack.side, ...attackStage(rider.attack) },
         weapon: rider.weapon,
         crash: rider.crash?.phase ?? null,
-        bike: { distance: rider.motion.distance, offset: rider.motion.offset, speed: rider.motion.speed },
+        bike: movingOf(rider.motion),
       };
     }),
     cops: cops.map((cop) => ({
       id: cop.id,
       name: cop.name,
       status: cop.status,
-      ...placeOf(cop.crash ? cop.crash.body : cop.motion),
+      ...movingOf(cop.crash ? cop.crash.body : cop.motion),
       stamina: cop.stamina,
       attack: cop.attack && { kind: cop.attack.kind, side: cop.attack.side, ...attackStage(cop.attack) },
       weapon: cop.weapon,
       crash: cop.crash?.phase ?? null,
-      bike: placeOf(cop.motion),
+      bike: movingOf(cop.motion),
       busting: cop.busting,
       fightingBack: cop.fightingBack,
       near: cop.near,

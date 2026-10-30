@@ -1,5 +1,5 @@
 import type { RaceView } from "@/game/session";
-import { STEP_SECONDS, type CopSnapshot, type RaceSnapshot, type RiderSnapshot } from "@/race";
+import { STEP_SECONDS, type CopSnapshot, type Moving, type RaceSnapshot, type RiderSnapshot } from "@/race";
 
 /** Where a rider or cop, or their bike, is drawn this frame in track space, between the last two snapshots. */
 export interface TrackPose {
@@ -37,9 +37,7 @@ export function bikePoseOf(
   return between(entryIn(view.previous).bike, entryIn(view.current).bike, view.alpha, pose);
 }
 
-type TrackPosition = Pick<TrackPose, "distance" | "offset" | "speed">;
-
-function between(before: TrackPosition, after: TrackPosition, t: number, pose: TrackPose): TrackPose {
+function between(before: Moving, after: Moving, t: number, pose: TrackPose): TrackPose {
   pose.distance = before.distance + (after.distance - before.distance) * t;
   pose.offset = before.offset + (after.offset - before.offset) * t;
   pose.speed = before.speed + (after.speed - before.speed) * t;

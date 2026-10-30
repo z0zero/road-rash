@@ -1,5 +1,6 @@
 import type { ObstaclePlacement } from "./placements";
 import { BIKE_LENGTH, BIKE_WIDTH } from "./riding";
+import type { Moving } from "./track";
 import { velocityOf, type Car } from "./traffic";
 
 /**
@@ -40,6 +41,6 @@ export function footprintOfObstacle({ distance, offset, radius }: ObstaclePlacem
 }
 
 /** A cop's bike, as the opponents see it: they slow down for it in time and ride round it, as round a car. */
-export function footprintOfACopsBike({ distance, offset, speed }: { readonly distance: number; readonly offset: number; readonly speed: number }): Footprint {
+export function footprintOfACopsBike({ distance, offset, speed }: Moving): Footprint {
   return { distance, offset, movingTo: offset, velocity: speed, halfLength: BIKE_LENGTH / 2, halfWidth: BIKE_WIDTH / 2 };
 }

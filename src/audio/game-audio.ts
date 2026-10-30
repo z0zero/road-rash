@@ -2,6 +2,7 @@ import type { GameSession, RaceView, Screen, SessionState } from "@/game/session
 import { clamp, smoothstep } from "@/math";
 import {
   COP_ALERT_RANGE,
+  isPlayer,
   PLAYER,
   STEP_SECONDS,
   type CopSnapshot,
@@ -355,7 +356,6 @@ class Sound {
  */
 function hearingOf(race: RaceSnapshot, subject: RiderOrCop, other: RiderOrCop | null): Hearing {
   const player = race.riders[PLAYER];
-  const isPlayer = (who: RiderOrCop | null) => isSameOne(who, THE_PLAYER);
   if (isPlayer(subject) || isPlayer(other)) {
     const them = whereIs(race, isPlayer(subject) ? other : subject);
     return { loudness: 1, pan: them ? panFor(them.distance - player.distance, them.offset - player.offset) : 0 };

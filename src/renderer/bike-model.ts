@@ -14,6 +14,7 @@ import {
   Quaternion,
   Vector3,
 } from "three";
+import type { Side } from "@/race";
 import type { Livery } from "./liveries";
 import { LowPoly } from "./low-poly";
 
@@ -159,7 +160,7 @@ export function createBikeModel(livery: Livery, { cop = false } = {}): BikeModel
   );
 
   const clubs: Group[] = [];
-  const arm = (side: -1 | 1): Limb => {
+  const arm = (side: Side): Limb => {
     const shoulder = new Vector3(side * 0.21, 1.4, -0.07);
     const elbow = new Vector3(side * 0.28, 1.17, -0.3);
     const hand = new Vector3(side * 0.3, 0.99, -0.5);
@@ -183,7 +184,7 @@ export function createBikeModel(livery: Livery, { cop = false } = {}): BikeModel
     return { upper: upper.group, lower: lower.group };
   };
 
-  const leg = (side: -1 | 1): Limb => {
+  const leg = (side: Side): Limb => {
     const hip = new Vector3(side * 0.13, 1.03, 0.3);
     const knee = new Vector3(side * 0.25, 0.86, -0.08);
     const foot = new Vector3(side * 0.19, 0.46, 0.22);
