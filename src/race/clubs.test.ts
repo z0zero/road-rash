@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { createRace, NO_INPUT, PLAYER, type AttackKind, type RaceEvent, type RiderId } from ".";
+import { createRace, NO_INPUT, PLAYER, type AttackKind, type PlayerInput, type Race, type RaceEvent, type RiderId } from ".";
 import {
   alongsideAn,
+  alongsideARacer,
   autopilot,
   eventsDuring,
   eventsUntil,
@@ -104,6 +105,42 @@ describe("clubs", () => {
     const near = aimedAt(2.0, 2.3);
     expect(near.aimedAt).toEqual(rider(near.target));
     expect(aimedAt(2.5, 2.9).aimedAt).toBeNull();
+  });
+});
+
+/** Seconds the player takes to knock the opponent `target`, within reach, off its bike, pressing punch every `every` steps. */
+function secondsToKnockOff(race: Race, target: RiderId, input: () => PlayerInput, every: number) {
+  let step = 0;
+  const pressing = () => ({ ...input(), punch: step++ % every === 0 });
+  return secondsUntil(race, pressing, () => race.snapshot().riders[target].crash !== null, 10);
+}
+
+/** A started race in which the player has punched a racer they ride alongside once, and the punch has landed. */
+function alongsideAPunchedRacer(seed: number) {
+  const alongside = alongsideARacer(seed);
+  const { race, input } = alongside;
+  race.step({ ...input(), punch: true });
+  eventsUntil(race, input, (event) => event.type === "attack-landed" && event.attacker.id === PLAYER, 1);
+  return alongside;
+}
+
+describe("swinging a club", () => {
+  it("knocks a rider off clearly sooner than fists, whether the player presses as fast as the game takes it, mashes or times their swings", () => {
+    // A swing takes 30 stamina, and the next can follow 0.35 s after it; a punch takes 18, the next 0.32 s after it.
+    // From 82 stamina, four swings knock a rider off where fists need six punches.
+    for (const every of [1, 8, 30]) {
+      // Each rider has had one punch: the racer from the player's fists, the bully from the punch that took its club.
+      const fists = alongsideAPunchedRacer(1);
+      const club = punchedMidSwing(1);
+      expect(club.race.snapshot().riders[club.target].stamina).toBe(82);
+      expect(fists.race.snapshot().riders[fists.target].stamina).toBe(82);
+
+      const withFists = secondsToKnockOff(fists.race, fists.target, fists.input, every);
+      const withAClub = secondsToKnockOff(club.race, club.target, club.input, every);
+
+      expect(player(club.race).weapon, `pressing every ${every} steps`).toBe("club");
+      expect(withAClub, `pressing every ${every} steps`).toBeLessThan(0.8 * withFists);
+    }
   });
 });
 
