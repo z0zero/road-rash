@@ -1,6 +1,6 @@
 import { Fragment } from "react";
-import { KEYS, type Key } from "@/input/bindings";
-import { GAMEPAD_NAMES } from "@/input/gamepad";
+import { CONTROLS, KEYS, type Key, type KeyPair } from "@/input/bindings";
+import { GAMEPAD, GAMEPAD_MENUS, type PadControl } from "@/input/gamepad";
 import { Button } from "./Button";
 import { Dialog } from "./Dialog";
 import { nameOn, useKeyboardLabels } from "./key-names";
@@ -8,36 +8,22 @@ import { nameOn, useKeyboardLabels } from "./key-names";
 /** Keys, or gamepad controls, used together to do something, such as A and D for steering. */
 type KeyCombo = readonly string[];
 
-interface Binding {
-  readonly action: string;
-  /** The key combos that do it on the keyboard: any one of them will do. */
-  readonly keyboard: readonly KeyCombo[];
-  /** The combos that do it on a gamepad. */
-  readonly gamepad: readonly KeyCombo[];
+/** The keys that do something, named as the player's keyboard `labels` them: one key, or a pair used together. */
+function keyCombos(keys: readonly (Key | KeyPair)[], labels: ReadonlyMap<string, string> | null): KeyCombo[] {
+  return keys.map((key) => ("left" in key ? [nameOn(labels, key.left), nameOn(labels, key.right)] : [nameOn(labels, key)]));
 }
 
-/**
- * Every binding: the keys and gamepad controls the input reads (src/input),
- * the keys named as the player's keyboard `labels` them where the browser can
- * say. There is no remapping.
- */
-function bindingsNamed(labels: ReadonlyMap<string, string> | null): readonly Binding[] {
-  /** Each of the keys or gamepad controls on its own: any one of them will do. */
-  const eachAlone = (controls: readonly (Key | string)[]): KeyCombo[] =>
-    controls.map((control) => [typeof control === "string" ? control : nameOn(labels, control)]);
-  return [
-    { action: "Throttle", keyboard: eachAlone(KEYS.throttle), gamepad: eachAlone(GAMEPAD_NAMES.throttle) },
-    { action: "Brake", keyboard: eachAlone(KEYS.brake), gamepad: eachAlone(GAMEPAD_NAMES.brake) },
-    {
-      action: "Steer",
-      // A key each way, used together: A and D, or the left and right arrows.
-      keyboard: KEYS.steerLeft.map((left, index) => [nameOn(labels, left), nameOn(labels, KEYS.steerRight[index])]),
-      gamepad: eachAlone(GAMEPAD_NAMES.steer),
-    },
-    { action: "Punch, or swing a club", keyboard: eachAlone(KEYS.punch), gamepad: eachAlone(GAMEPAD_NAMES.punch) },
-    { action: "Kick", keyboard: eachAlone(KEYS.kick), gamepad: eachAlone(GAMEPAD_NAMES.kick) },
-    { action: "Pause", keyboard: eachAlone(KEYS.pause), gamepad: eachAlone(GAMEPAD_NAMES.pause) },
-  ];
+/** The gamepad controls that do something, each on its own. */
+function padCombos(controls: readonly PadControl[]): KeyCombo[] {
+  return controls.map((control) => [control.name]);
+}
+
+/** Controls, as a sentence names them: "the D-pad or the left stick", "A". */
+function sayOr(controls: readonly PadControl[]): string {
+  // A one-letter name is a button's own (A); the others are parts of the gamepad, in lower case
+  // unless named by a letter (the D-pad).
+  const say = (name: string) => (/^[A-Z][a-z]/.test(name) ? name[0].toLowerCase() + name.slice(1) : name);
+  return controls.map(({ name }) => (name.length === 1 ? name : `the ${say(name)}`)).join(" or ");
 }
 
 /** Every binding on the keyboard and on a gamepad, reached from the title screen. Esc goes back. */
@@ -60,16 +46,16 @@ export function ControlsScreen({ onBack }: { onBack: () => void }) {
           </tr>
         </thead>
         <tbody>
-          {bindingsNamed(labels).map(({ action, keyboard, gamepad }) => (
-            <tr key={action}>
+          {CONTROLS.map(({ control, label }) => (
+            <tr key={control}>
               <th scope="row" className="pr-3 text-lg font-semibold text-sand">
-                {action}
+                {label}
               </th>
               <td className="px-3">
-                <Alternatives combos={keyboard} />
+                <Alternatives combos={keyCombos(KEYS[control], labels)} />
               </td>
               <td>
-                <Alternatives combos={gamepad} />
+                <Alternatives combos={padCombos(GAMEPAD[control])} />
               </td>
             </tr>
           ))}
@@ -77,7 +63,9 @@ export function ControlsScreen({ onBack }: { onBack: () => void }) {
       </table>
       <div className="flex flex-col gap-1 text-center text-sm text-sand/80">
         <p>Gamepad buttons are named as on an Xbox controller: A is the bottom one, B the right one and X the left one.</p>
-        <p>In menus, the D-pad or the left stick moves between buttons and A presses them.</p>
+        <p>
+          In menus, {sayOr(GAMEPAD_MENUS.move)} moves between buttons and {sayOr(GAMEPAD_MENUS.press)} presses them.
+        </p>
         <p>After a crash, steer to run back to your bike, and brake to stand still.</p>
         {labels === null && <p>The letter keys are where they are on a US keyboard, whatever yours are labelled.</p>}
       </div>

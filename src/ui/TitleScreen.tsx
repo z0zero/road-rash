@@ -1,4 +1,4 @@
-import { KEYS, type Key } from "@/input/bindings";
+import { KEYS, RIDING_KEYS, type Key } from "@/input/bindings";
 import type { PersonalBest } from "@/save-data/save-data";
 import { Button } from "./Button";
 import { formatPosition, formatRaceTime } from "./format";
@@ -20,8 +20,11 @@ export function TitleScreen({
   const labels = useKeyboardLabels();
   /** The keys, by their names on the player's keyboard, as a sentence says them: "J or Z". */
   const namesOf = (keys: readonly Key[]) => keys.map((key) => nameOn(labels, key)).join(" or ");
-  // The letter keys to ride with, "W/A/S/D": the first key for each way, the arrow keys being the others.
-  const ridingLetters = [KEYS.throttle, KEYS.steerLeft, KEYS.brake, KEYS.steerRight].map((keys) => nameOn(labels, keys[0])).join("/");
+  // The keys to ride with, "W/A/S/D or the arrow keys": each set by what it is called, or else by its keys.
+  const ridingKeys = RIDING_KEYS.map((keys) => {
+    const each = [keys.throttle, keys.steerLeft, keys.brake, keys.steerRight];
+    return keys.together ?? each.map((key) => nameOn(labels, key)).join("/");
+  }).join(" or ");
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 bg-gradient-to-b from-night/75 via-dusk/35 to-transparent px-6 text-center">
       <GameTitle />
@@ -35,7 +38,7 @@ export function TitleScreen({
         <Button onClick={onCredits}>Credits</Button>
       </div>
       <p className="text-sm text-sand/85 drop-shadow">
-        {ridingLetters} or the arrow keys to ride &middot; {namesOf(KEYS.punch)} to punch, or swing a club &middot;{" "}
+        {ridingKeys} to ride &middot; {namesOf(KEYS.punch)} to punch, or swing a club &middot;{" "}
         {namesOf(KEYS.kick)} to kick &middot; {namesOf(KEYS.pause)} to pause
       </p>
       {personalBest.time !== null && (
