@@ -714,6 +714,8 @@ test("credits the music and disclaims any tie to Road Rash, from the title scree
 });
 
 test("lists the keyboard and gamepad controls, from the title screen", async ({ page }) => {
+  // Seven rows of role queries, over the scene drawn behind them: a busy machine takes a while.
+  test.slow();
   await page.getByRole("button", { name: "Controls" }).click();
 
   const controls = page.getByRole("dialog", { name: "Controls" });
@@ -876,7 +878,54 @@ test.describe("sound", () => {
     await expect.poll(() => audioStates(page)).toEqual(["running"]);
     await expect.poll(() => loudness(page), { timeout: 10_000 }).toBeGreaterThan(0.01);
   });
+
+  test("says that a key press or click turns the sound on, where the browser keeps it locked after a gamepad starts the race", async ({
+    page,
+  }) => {
+    await page.addInitScript(plugInAGamepad);
+    await page.addInitScript(lockSoundUntilAKeyOrClick);
+    await page.reload();
+    await expect(page.getByRole("button", { name: "Start Race" })).toBeFocused();
+
+    // A on Start Race, which has the focus.
+    await page.clock.pauseAt(RACE_STARTS);
+    await gamepad(page).press(GAMEPAD.a);
+    await play(page, 0.2);
+    await gamepad(page).release(GAMEPAD.a);
+    const notice = page.getByTestId("sound-locked");
+    await play(page, 1.2);
+    await expect(notice).toBeVisible();
+    await expect(notice).toHaveText("Press a key or click to turn the sound on");
+    expect(await audioStates(page)).toEqual(["suspended"]);
+
+    await page.keyboard.press("w");
+
+    await expect.poll(() => audioStates(page)).toEqual(["running"]);
+    await expect(notice).toBeHidden();
+    await expect.poll(() => loudness(page), { timeout: 10_000 }).toBeGreaterThan(0.01);
+  });
 });
+
+/**
+ * Runs in the page before its scripts: a browser that keeps sound locked until the page's first key press or click,
+ * as Safari does: until then, an audio context made or resumed stays suspended. A gamepad's press is not one.
+ */
+function lockSoundUntilAKeyOrClick() {
+  let unlocked = false;
+  for (const gesture of ["keydown", "mousedown"]) {
+    window.addEventListener(gesture, (event) => (unlocked ||= event.isTrusted), { capture: true });
+  }
+  const Original = window.AudioContext;
+  window.AudioContext = class extends Original {
+    constructor(options?: AudioContextOptions) {
+      super(options);
+      if (!unlocked) void super.suspend();
+    }
+    resume() {
+      return unlocked ? super.resume() : new Promise<void>(() => {});
+    }
+  };
+}
 
 /** Runs in the page before its scripts: a browser that refuses to make audio contexts. */
 function refuseAudio() {
