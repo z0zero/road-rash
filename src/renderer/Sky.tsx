@@ -2,7 +2,7 @@ import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import { BackSide, type Mesh, type ShaderMaterial, type ShaderMaterialParameters, Vector2, type Vector3 } from "three";
 import { groundDirection } from "./geography";
-import { SUNSET, sunsetHazeGlsl } from "./sunset";
+import { STOP_NAN_GLSL, SUNSET, sunsetHazeGlsl } from "./sunset";
 
 const vertexShader = /* glsl */ `
   varying vec3 vDirection;
@@ -95,6 +95,7 @@ function fragmentShader(sun: Vector3) {
       color += sunColor * (disc * 20.0 + pow(towardsSun, 1800.0) * 2.0);
 
       gl_FragColor = vec4(color, 1.0);
+      ${STOP_NAN_GLSL}
     }
   `;
 }
