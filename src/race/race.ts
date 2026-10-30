@@ -11,24 +11,22 @@ import {
   pullingOverIntent,
   type Cop,
   type CopIntent,
-  type CopStatus,
 } from "./cops";
-import { canRemount, carryOn, remount, slide, throwOff, type CrashPhase, type OnFootControls } from "./crashing";
-import type { AttackKind, CopId, CrashCause, RaceEvent, RaceOutcome, RiderId, RiderOrCop } from "./events";
+import { canRemount, carryOn, remount, slide, throwOff, type OnFootControls } from "./crashing";
+import type { AttackKind, CrashCause, RaceEvent } from "./events";
 import { lineUpOpponents } from "./field";
 import {
-  attackStage,
   attackSteps,
   awayFrom,
   isMidSwing,
   nearestWithinReach,
+  who,
   windUpSteps,
   withinReach,
   type Attack,
-  type Weapon,
+  type Fighter,
 } from "./fighting";
 import { footprintOfACopsBike, footprintOfCar, footprintOfObstacle, type Footprint } from "./footprint";
-import { QUALIFYING_POSITION } from "./limits";
 import {
   breatherAfterHitting,
   isDroppingBack,
@@ -41,20 +39,17 @@ import {
   wholePatience,
 } from "./opponent-fighting";
 import { catchUpFor, opponentControls, paceAt, paceFor, type Intent } from "./opponent-riding";
-import { OPPONENTS, PLAYER_NAME, type Temperament } from "./opponents";
-import { copsInTheRace, onTheirBikes, type RaceState } from "./race-state";
+import { OPPONENTS, PLAYER_NAME } from "./opponents";
+import { clock, COUNTDOWN_STEPS, copsInTheRace, onTheirBikes, type RaceState } from "./race-state";
 import { createRandom } from "./random";
-import { remarkOn, type Ending, type Remark } from "./remarks";
-import { PLAYER, whereIs, type Rider, type RiderStatus } from "./riders";
-import { isOffRoad, ride, type Controls, type Motion } from "./riding";
+import { finishCrossings, resultsOf, type RaceResults } from "./results";
+import { PLAYER, whereIs, type Rider } from "./riders";
+import { ride, type Controls, type Motion } from "./riding";
+import { snapshotOf, type RaceSnapshot } from "./snapshot";
 import { STEP_SECONDS, STEPS_PER_SECOND, stepsIn } from "./steps";
-import { nearestOpponentOrCop, warningsFor, type Warnings } from "./surroundings";
 import type { Track } from "./track";
-import { CLOSED_ROAD, createTraffic, type CarKind, type Traffic } from "./traffic";
+import { CLOSED_ROAD, createTraffic, type Traffic } from "./traffic";
 import { TUNING } from "./tuning";
-
-/** The 3-2-1 countdown lasts three seconds. */
-const COUNTDOWN_STEPS = 3 * STEPS_PER_SECOND;
 
 /** Once over the finish line, a rider lets go of the throttle and brakes to a stop. */
 const FINISHED_CONTROLS: Controls = { throttle: 0, brake: 0.7, steer: 0 };
@@ -76,9 +71,6 @@ const FAST_FORWARD_UNTIL_STEPS = COUNTDOWN_STEPS + 6 * 60 * STEPS_PER_SECOND;
 const CLEAR_OF_THE_GRID = 60;
 /** Mixed into the race's seed for the traffic's own random choices, so they never change the riders' choices. */
 const TRAFFIC_SEED = 0x7ea5_1c3a;
-/** Mixed into the race's seed for choosing the remark on the results, so the choice never changes the race. */
-const REMARK_SEED = 0x2e3a_4b51;
-
 /** The player's controls for one step. Values outside their ranges are clamped. */
 export interface PlayerInput {
   /** 0 (closed) to 1 (full throttle). */
@@ -94,169 +86,6 @@ export interface PlayerInput {
 }
 
 export const NO_INPUT: PlayerInput = { throttle: 0, brake: 0, steer: 0, punch: false, kick: false };
-
-export interface RiderSnapshot {
-  readonly id: RiderId;
-  /** The opponent's nickname, or "You" for the player. */
-  readonly name: string;
-  /** How the opponent races and fights; null for the player. */
-  readonly temperament: Temperament | null;
-  /** Metres along the track's centreline. */
-  readonly distance: number;
-  /** Metres sideways from the centreline; positive is right of the race direction. */
-  readonly offset: number;
-  /** Metres per second along the track. */
-  readonly speed: number;
-  /** Whether the rider is beyond the road's edge, on a shoulder, where a bike slows sharply. */
-  readonly offRoad: boolean;
-  readonly status: RiderStatus;
-  /** Position in the race, 1 for the leader; null for wrecked and busted riders. */
-  readonly position: number | null;
-  /** Race time at which the rider crossed the finish line, in seconds; null until then. */
-  readonly finishTime: number | null;
-  /** How much fight the rider has left: 100 when fresh, down to 0. */
-  readonly stamina: number;
-  /** How intact the rider's bike is: 100 when perfect, down to 0, when it is wrecked. */
-  readonly condition: number;
-  /** The attack the rider is making, or null. */
-  readonly attack: AttackSnapshot | null;
-  /** The weapon the rider holds, which their punches swing instead; null when they hold none. */
-  readonly weapon: Weapon | null;
-  /**
-   * Null while the rider is on their bike; after a crash, "tumbling" and then
-   * "on-foot" until they remount, and "knocked-down" while they tumble again
-   * after a car has knocked them down on foot.
-   */
-  readonly crash: CrashPhase | null;
-  /** Where the rider's bike is: under them while they ride it, or wherever it slid to after a crash. */
-  readonly bike: BikeSnapshot;
-}
-
-/** An attack under way: it winds up, strikes at the end of its wind-up, then recovers before the next. */
-export interface AttackSnapshot {
-  readonly kind: AttackKind;
-  /** Which way the attack goes: 1 to the attacker's right, -1 to their left. */
-  readonly side: -1 | 1;
-  readonly stage: "wind-up" | "recovery";
-  /** How far through its stage the attack is, from 0 to 1. */
-  readonly progress: number;
-}
-
-export interface BikeSnapshot {
-  /** Metres along the track's centreline. */
-  readonly distance: number;
-  /** Metres sideways from the centreline; positive is right of the race direction. */
-  readonly offset: number;
-  /** Metres per second along the track. */
-  readonly speed: number;
-}
-
-/** Everything visible in the race at one moment. Snapshots are plain data that later steps never change. */
-export interface RaceSnapshot {
-  /** Seconds left in the 3-2-1 countdown; 0 once the race has started. */
-  readonly countdown: number;
-  /** Race time in seconds since the start; 0 during the countdown. */
-  readonly clock: number;
-  /** Every rider, indexed by `RiderId`. */
-  readonly riders: readonly RiderSnapshot[];
-  /**
-   * The opponent on their bike, or the cop in the race, nearest the player,
-   * whose name and stamina the HUD shows; null when none is within 50 m.
-   */
-  readonly nearestOpponentOrCop: RiderOrCop | null;
-  /** Opponents alongside the player, or coming up from behind, on either side of them. */
-  readonly warnings: Warnings;
-  /** The cars on the road around the player. */
-  readonly traffic: readonly CarSnapshot[];
-  /** Every cop, indexed by `CopId`. */
-  readonly cops: readonly CopSnapshot[];
-}
-
-/** A car on the road: someone driving by who isn't racing. */
-export interface CarSnapshot {
-  /** No two cars in a race share an id, so a car can be followed from one snapshot to the next. */
-  readonly id: number;
-  /** The body the car is built on. */
-  readonly kind: CarKind;
-  /** Whether the car drives towards the riders, in the left lanes; otherwise it drives in the race direction, in the right lanes. */
-  readonly oncoming: boolean;
-  /** Metres along the track's centreline: the middle of the car. */
-  readonly distance: number;
-  /** Metres sideways from the centreline; positive is right of the race direction. */
-  readonly offset: number;
-  /** Metres per second in the car's own direction of travel. */
-  readonly speed: number;
-  /** Metres from bumper to bumper. */
-  readonly length: number;
-  /** Metres from side to side. */
-  readonly width: number;
-}
-
-/** A cop on a motorcycle, as the riders see them. */
-export interface CopSnapshot {
-  readonly id: CopId;
-  readonly name: string;
-  readonly status: CopStatus;
-  /** Where the cop is, on their bike or off it: metres along the track's centreline. */
-  readonly distance: number;
-  /** Metres sideways from the centreline; positive is right of the race direction. */
-  readonly offset: number;
-  /** Metres per second along the track. */
-  readonly speed: number;
-  /** How much fight the cop has left: 150 when fresh, down to 0. */
-  readonly stamina: number;
-  /** The attack the cop is making, or null. */
-  readonly attack: AttackSnapshot | null;
-  /** The weapon the cop holds, which their punches swing instead: a club, unless a rider has taken it. */
-  readonly weapon: Weapon | null;
-  /** Null while the cop is on their bike; "tumbling" and then "on-foot" once knocked off it. */
-  readonly crash: CrashPhase | null;
-  /** Where the cop's bike is: under them while they ride it, or wherever it slid to after they were knocked off. */
-  readonly bike: BikeSnapshot;
-  /** The crashed rider the cop is riding to, to bust them; null when it isn't busting anyone. */
-  readonly busting: RiderId | null;
-  /** The rider the cop is fighting back against, for hitting it; null when it isn't fighting anyone. */
-  readonly fightingBack: RiderId | null;
-  /** Whether the cop is in the race within 150 m of the player: the cop alert is on, and the siren sounds, while one is. */
-  readonly near: boolean;
-}
-
-/** How the race went for everyone, once the player's race is over. */
-export interface RaceResults {
-  /** How the player's race ended. */
-  readonly outcome: RaceOutcome;
-  /** The player's finishing time in seconds; null unless they finished. */
-  readonly time: number | null;
-  /** The player's final position; null if they were wrecked or busted. */
-  readonly position: number | null;
-  /** Whether the player finished in third position or better. */
-  readonly qualified: boolean;
-  /**
-   * Whether the standings are final: false while the rest of the field is
-   * still being raced to the finish. The player's own result above is final
-   * either way.
-   */
-  readonly complete: boolean;
-  /**
-   * Every rider: finishers in finishing order, then anyone still racing (on
-   * their way to the finish, or, once the standings are complete, still on the
-   * road when the fast-forward ran out of time), by distance, then wrecked and
-   * busted riders.
-   */
-  readonly standings: readonly Standing[];
-  /** A one-line remark on how the player's race went, chosen with the race's seed; null until the standings are complete. */
-  readonly remark: Remark | null;
-}
-
-export interface Standing {
-  readonly rider: RiderId;
-  /** The opponent's nickname, or "You" for the player. */
-  readonly name: string;
-  readonly status: RiderStatus;
-  readonly position: number | null;
-  /** Finishing time in seconds; null unless the rider finished. */
-  readonly time: number | null;
-}
 
 export interface RaceOptions {
   /** Seeds every random choice the race makes, so the same seed and inputs replay the same race. */
@@ -300,19 +129,6 @@ export interface Race {
   fastForward(steps?: number): RaceResults;
 }
 
-/** Anyone who fights: a rider, or a cop. */
-type Fighter = Rider | Cop;
-
-/** How events name a fighter. */
-function who(fighter: Fighter): RiderOrCop {
-  return fighter.kind === "rider" ? { kind: "rider", id: fighter.id } : { kind: "cop", id: fighter.id };
-}
-
-/** Where something is in track space, and how fast it goes along the track, as plain data. */
-function placeOf({ distance, offset, speed }: { readonly distance: number; readonly offset: number; readonly speed: number }) {
-  return { distance, offset, speed };
-}
-
 /** Metres between two places in track space (straight-line). */
 function apart(a: { readonly distance: number; readonly offset: number }, b: { readonly distance: number; readonly offset: number }) {
   return Math.hypot(a.distance - b.distance, a.offset - b.offset);
@@ -344,11 +160,6 @@ function lineUp(rider: Pick<Rider, "id" | "name" | "temperament" | "riding">, di
     stepsSinceThePlayerHitIt: Infinity,
     breatherSteps: 0,
   };
-}
-
-/** The race clock: seconds since the start, 0 during the countdown. */
-function clock(race: RaceState) {
-  return Math.max(0, race.stepsTaken - COUNTDOWN_STEPS) / STEPS_PER_SECOND;
 }
 
 /** Where the riders still racing are on the road, on their bikes or off them. */
@@ -623,143 +434,6 @@ function alertThePlayer(race: RaceState) {
   }
 }
 
-/** Finishes the riders who crossed the finish line during the step that began at `clockBefore`, in the order they crossed it. */
-function finishCrossings(race: RaceState, distancesBefore: readonly number[], clockBefore: number) {
-  const { track } = race;
-  const crossings = race.riders
-    .filter((rider) => rider.status === "racing" && whereIs(rider).distance >= track.finishDistance)
-    .map((rider) => {
-      const before = distancesBefore[rider.id];
-      const share = (track.finishDistance - before) / (whereIs(rider).distance - before);
-      return { rider, time: clockBefore + share * STEP_SECONDS };
-    })
-    .sort((a, b) => a.time - b.time || a.rider.id - b.rider.id);
-  for (const { rider, time } of crossings) {
-    rider.finishTime = time;
-    rider.status = "finished";
-    rider.finishOrder = ++race.finishers;
-    race.events.push({ type: "rider-finished", rider: rider.id, time, position: rider.finishOrder });
-    if (rider.id === PLAYER) race.events.push({ type: "player-race-over", outcome: "finished" });
-  }
-}
-
-/**
- * The riders who have a position, best first: finishers in finishing order,
- * then riders still racing by distance travelled. Wrecked and busted riders
- * have no position.
- */
-function ranking(race: RaceState) {
-  const finished = race.riders
-    .filter((rider) => rider.status === "finished")
-    .sort((a, b) => (a.finishOrder ?? 0) - (b.finishOrder ?? 0));
-  const racing = race.riders
-    .filter((rider) => rider.status === "racing")
-    .sort((a, b) => whereIs(b).distance - whereIs(a).distance);
-  return [...finished, ...racing];
-}
-
-function positions(race: RaceState) {
-  return new Map(ranking(race).map((rider, index) => [rider.id, index + 1]));
-}
-
-function results(race: RaceState, outcome: RaceOutcome, complete: boolean): RaceResults {
-  const { riders } = race;
-  const standing = (rider: Rider, position: number | null): Standing => ({
-    rider: rider.id,
-    name: rider.name,
-    status: rider.status,
-    position,
-    time: rider.finishTime,
-  });
-  const unplaced = riders.filter((rider) => rider.status === "wrecked" || rider.status === "busted");
-  const standings = [
-    ...ranking(race).map((rider, index) => standing(rider, index + 1)),
-    ...unplaced.map((rider) => standing(rider, null)),
-  ];
-  const position = standings.find((entry) => entry.rider === PLAYER)?.position ?? null;
-  const qualified = outcome === "finished" && position !== null && position <= QUALIFYING_POSITION;
-  const opponents = standings.flatMap(({ rider, name, position }) => {
-    const { temperament } = riders[rider];
-    return temperament ? [{ id: rider, name, temperament, position }] : [];
-  });
-  const remark = complete
-    ? remarkOn(endingFor(race, outcome, position, qualified), opponents, createRandom(race.seed ^ REMARK_SEED))
-    : null;
-  return { outcome, time: riders[PLAYER].finishTime, position, qualified, complete, standings, remark };
-}
-
-/** How the player's race ended, for the remark on it: a race that neither finished nor got them busted wrecked their bike. */
-function endingFor(race: RaceState, outcome: RaceOutcome, position: number | null, qualified: boolean): Ending {
-  const { playerBustedBy } = race;
-  if (outcome === "busted" && playerBustedBy) return { outcome, cop: { id: playerBustedBy.id, name: playerBustedBy.name } };
-  if (outcome === "finished" && position !== null) return { outcome, position, qualified };
-  return { outcome: "wrecked" };
-}
-
-/** Everything visible in the race right now, as plain data. */
-function snapshotOf(race: RaceState): RaceSnapshot {
-  const { riders, cops, track, traffic } = race;
-  const ranks = positions(race);
-  const player = { id: PLAYER, ...whereIs(riders[PLAYER]) };
-  const opponents = onTheirBikes(race)
-    .filter((rider) => rider.id !== PLAYER)
-    .map(({ id, motion: { distance, offset, speed } }) => ({ id, distance, offset, speed }));
-  return {
-    countdown: Math.max(0, COUNTDOWN_STEPS - race.stepsTaken) / STEPS_PER_SECOND,
-    clock: clock(race),
-    nearestOpponentOrCop: nearestOpponentOrCop(player, [
-      ...opponents.map(({ id, distance, offset }) => ({ who: { kind: "rider", id } as const, distance, offset })),
-      ...copsInTheRace(race).map((cop) => ({ who: who(cop), distance: cop.motion.distance, offset: cop.motion.offset })),
-    ]),
-    warnings: warningsFor(player, [...opponents, ...copsInTheRace(race).map(({ motion }) => motion)]),
-    traffic: traffic.cars.map(({ id, kind, oncoming, distance, offset, speed, length, width }) => ({
-      id,
-      kind,
-      oncoming,
-      distance,
-      offset,
-      speed,
-      length,
-      width,
-    })),
-    riders: riders.map((rider) => {
-      const { distance, offset, speed } = whereIs(rider);
-      return {
-        id: rider.id,
-        name: rider.name,
-        temperament: rider.temperament,
-        distance,
-        offset,
-        speed,
-        offRoad: isOffRoad(offset, track),
-        status: rider.status,
-        position: ranks.get(rider.id) ?? null,
-        finishTime: rider.finishTime,
-        stamina: rider.stamina,
-        condition: rider.condition,
-        attack: rider.attack && { kind: rider.attack.kind, side: rider.attack.side, ...attackStage(rider.attack) },
-        weapon: rider.weapon,
-        crash: rider.crash?.phase ?? null,
-        bike: { distance: rider.motion.distance, offset: rider.motion.offset, speed: rider.motion.speed },
-      };
-    }),
-    cops: cops.map((cop) => ({
-      id: cop.id,
-      name: cop.name,
-      status: cop.status,
-      ...placeOf(cop.crash ? cop.crash.body : cop.motion),
-      stamina: cop.stamina,
-      attack: cop.attack && { kind: cop.attack.kind, side: cop.attack.side, ...attackStage(cop.attack) },
-      weapon: cop.weapon,
-      crash: cop.crash?.phase ?? null,
-      bike: placeOf(cop.motion),
-      busting: cop.busting,
-      fightingBack: cop.fightingBack,
-      near: cop.near,
-    })),
-  };
-}
-
 /** Advances the race by exactly `STEP_SECONDS` with the player's input for that step. */
 function step(race: RaceState, input: PlayerInput) {
   const { riders, cops, track, traffic, edge, random } = race;
@@ -919,7 +593,7 @@ export function createRace(options: RaceOptions): Race {
       }
       const done = () => !riders.some((rider) => rider.status === "racing") || race.stepsTaken >= FAST_FORWARD_UNTIL_STEPS;
       for (let taken = 0; taken < steps && !done(); taken++) step(race, NO_INPUT);
-      return results(race, outcome, done());
+      return resultsOf(race, outcome, done());
     },
   };
 }
