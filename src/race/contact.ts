@@ -12,39 +12,46 @@ const BODY_SIZE = 0.6;
 /** A rider who runs into a car or an obstacle is thrown sideways off it at least this fast (m/s), so they land beside it, not on it. */
 const THROWN_SIDEWAYS = 3;
 
-/** A rider who ran into another rider too fast to bump them: they crash. */
+/** A rider who ran into another bike too fast to bump it: they crash. */
 export interface RunIn<T> {
   /** The faster of the two. */
   readonly rider: T;
-  /** How much faster they were going than the rider they hit (m/s). */
+  /** The bike they ran into. */
+  readonly into: T;
+  /** How much faster they were going than the bike they hit (m/s). */
   readonly speedDifference: number;
 }
 
 /**
- * Settles contact between every pair of riders on their bikes who overlap.
- * At a speed difference under `TUNING.bumpSpeedLimit` they bump apart: they
- * are separated the shorter way (sideways when side by side, along the track
- * when nose to tail), shoved sideways away from each other, and a faster rider
- * behind can't push through the one in front, so the two share their speed.
- * Offsets stay within `edge`. At a bigger speed difference the faster rider
- * runs into the other: they are returned, to crash, and take no further part
- * in this contact. Pairs are taken in a fixed order, so the outcome is
- * deterministic.
+ * Settles contact between every pair of bikes being ridden (`bikes`, riders'
+ * and cops') that overlap. At a speed difference under
+ * `TUNING.bumpSpeedLimit` they bump apart: they are separated the shorter way
+ * (sideways when side by side, along the track when nose to tail), shoved
+ * sideways away from each other, and a faster bike behind can't push through
+ * the one in front, so the two share their speed. Offsets stay within `edge`.
+ * At a bigger speed difference the faster one runs into the other: it is
+ * returned, to crash, and takes no further part in this contact; unless it
+ * `canCrash` not, when the two only bump. Pairs are taken in a fixed order, so
+ * the outcome is deterministic.
  */
-export function settleContact<T extends { readonly motion: Motion }>(riders: readonly T[], edge: number): RunIn<T>[] {
+export function settleContact<T extends { readonly motion: Motion }>(
+  bikes: readonly T[],
+  edge: number,
+  canCrash: (bike: T) => boolean = () => true,
+): RunIn<T>[] {
   const runIns: RunIn<T>[] = [];
   const ranIn = new Set<T>();
-  for (let i = 0; i < riders.length; i++) {
-    for (let j = i + 1; j < riders.length; j++) {
-      const [a, b] = [riders[i], riders[j]];
+  for (let i = 0; i < bikes.length; i++) {
+    for (let j = i + 1; j < bikes.length; j++) {
+      const [a, b] = [bikes[i], bikes[j]];
       if (ranIn.has(a) || ranIn.has(b) || !overlapping(a.motion, b.motion)) continue;
       const speedDifference = Math.abs(a.motion.speed - b.motion.speed);
-      if (speedDifference < TUNING.bumpSpeedLimit) {
+      const [faster, slower] = a.motion.speed > b.motion.speed ? [a, b] : [b, a];
+      if (speedDifference < TUNING.bumpSpeedLimit || !canCrash(faster)) {
         bump(a.motion, b.motion, edge);
       } else {
-        const faster = a.motion.speed > b.motion.speed ? a : b;
         ranIn.add(faster);
-        runIns.push({ rider: faster, speedDifference });
+        runIns.push({ rider: faster, into: slower, speedDifference });
       }
     }
   }
@@ -61,19 +68,21 @@ export interface Impact<T> {
 }
 
 /**
- * Settles contact between riders on their bikes and cars or obstacles (their
+ * Settles contact between bikes being ridden and cars or obstacles (their
  * `footprints`), which carry on as if nothing happened. At a speed difference
- * under `TUNING.bumpSpeedLimit` the rider bumps off it: they are pushed clear
- * of it the shorter way (sideways when side by side, along the track when
- * nose to tail) and shoved sideways away from it; a rider behind it can't
- * push through it, and one a car catches from behind is carried along by it.
- * At a bigger speed difference the rider runs into it: they are returned,
- * with what they ran into, to crash. Offsets stay within `edge`.
+ * under `TUNING.bumpSpeedLimit` the bike bumps off it: it is pushed clear of
+ * it the shorter way (sideways when side by side, along the track when nose
+ * to tail) and shoved sideways away from it; a bike behind it can't push
+ * through it, and one a car catches from behind is carried along by it. At a
+ * bigger speed difference its rider runs into it: they are returned, with
+ * what they ran into, to crash; unless they `canCrash` not, when they only
+ * bump. Offsets stay within `edge`.
  */
 export function settleImpacts<T extends { readonly motion: Motion }>(
   riders: readonly T[],
   footprints: readonly Footprint[],
   edge: number,
+  canCrash: (rider: T) => boolean = () => true,
 ): Impact<T>[] {
   const impacts: Impact<T>[] = [];
   for (const rider of riders) {
@@ -81,7 +90,7 @@ export function settleImpacts<T extends { readonly motion: Motion }>(
       const contact = contactWith(rider.motion, footprint);
       if (!contact) continue;
       const speedDifference = Math.abs(rider.motion.speed - footprint.velocity);
-      if (speedDifference >= TUNING.bumpSpeedLimit) {
+      if (speedDifference >= TUNING.bumpSpeedLimit && canCrash(rider)) {
         impacts.push({ rider, footprint, speedDifference });
         break;
       }

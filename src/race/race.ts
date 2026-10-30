@@ -506,10 +506,11 @@ export function createRace(options: RaceOptions): Race {
    * within reach; or stands by a rider it has just busted; or else patrols
    * near the player, pulling over while the player is down after a crash it
    * isn't riding to. Cops find their way around everyone on a bike, the
-   * riders (`field`) and each other, and the cars and obstacles on the road.
-   * Returns each cop's intent, or null for a cop not riding in the race.
+   * riders and each other (`everyoneOnABike`), and the cars and obstacles on
+   * the road. Returns each cop's intent, or null for a cop not riding in the
+   * race.
    */
-  function decideCops(field: readonly Readonly<Motion>[], carsAndObstacles: readonly Footprint[]): (CopIntent | null)[] {
+  function decideCops(everyoneOnABike: readonly Readonly<Motion>[], carsAndObstacles: readonly Footprint[]): (CopIntent | null)[] {
     letGo();
     for (const cop of copsInTheRace()) {
       const fighting = cop.fightingBack === null ? null : riders[cop.fightingBack];
@@ -527,10 +528,11 @@ export function createRace(options: RaceOptions): Race {
     }
     const player = whereIs(riders[PLAYER]);
     takeTurns(cops, rota, player, (cop) => cop.busting !== null || cop.fightingBack !== null || cop.standingBySteps > 0);
-    const everyoneOnABike = [...field, ...copsInTheRace().map((cop) => cop.motion)];
     return cops.map((cop) => {
       if (cop.status !== "riding") return null;
-      if (cop.busting !== null) return bustingIntent(cop.motion, whereIs(riders[cop.busting]), edge);
+      if (cop.busting !== null) {
+        return bustingIntent(cop.motion, whereIs(riders[cop.busting]), everyoneOnABike, carsAndObstacles, edge);
+      }
       const fighting = cop.fightingBack === null ? null : riders[cop.fightingBack];
       if (fighting && !fighting.crash) {
         return fightingBackIntent(cop.motion, fighting.motion, track, everyoneOnABike, carsAndObstacles);
@@ -605,7 +607,8 @@ export function createRace(options: RaceOptions): Race {
   /**
    * Riders on their bikes who run into the `cars` (by their footprints) or
    * obstacles crash, or bump off them at a small speed difference; a car
-   * that runs into a rider on foot knocks them down.
+   * that runs into a rider on foot knocks them down. Cops in the race only
+   * ever bump off cars and obstacles.
    */
   function runIntoCarsAndObstacles(cars: readonly Footprint[]) {
     for (const [footprints, cause] of [
@@ -616,6 +619,7 @@ export function createRace(options: RaceOptions): Race {
         crash(rider, cause, speedDifference);
         if (rider.crash) throwClearOf(footprint, rider.motion, rider.crash.body, edge);
       }
+      settleImpacts(copsInTheRace(), footprints, edge, () => false);
     }
     for (const rider of riders) {
       if (rider.status !== "racing" || rider.crash?.phase !== "on-foot") continue;
@@ -740,6 +744,8 @@ export function createRace(options: RaceOptions): Race {
         // Everyone decides what to do from where things stand, then everyone moves.
         const riding = onTheirBikes();
         const field = riding.map((rider) => rider.motion);
+        // Everyone on a bike in the race, the cops too, whom riders and cops find their way around.
+        const everyoneOnABike = [...field, ...copsInTheRace().map((cop) => cop.motion)];
         const player = riders[PLAYER];
         // Catch-up keeps the field near the player, so it stops once the player's race is over.
         const catchUp = (rider: Rider) =>
@@ -754,7 +760,7 @@ export function createRace(options: RaceOptions): Race {
           if (rider.status !== "racing" || rider.crash) return FINISHED_CONTROLS;
           if (!rider.riding || !rider.temperament) return input;
           const intent = opponentIntent(rider.temperament, rider.motion, playerToFight, rider.droppingBack);
-          return opponentControls(rider.motion, rider.riding, track, field, catchUp(rider), intent, carsAndObstacles);
+          return opponentControls(rider.motion, rider.riding, track, everyoneOnABike, catchUp(rider), intent, carsAndObstacles);
         });
         if (player.status === "racing" && !player.crash && !player.attack && (input.punch || input.kick)) {
           throwAttack(player, input.punch ? "punch" : "kick");
@@ -768,7 +774,7 @@ export function createRace(options: RaceOptions): Race {
           // A club reaches further than a kick: a club holder swings at a rider its kick can't reach.
           if (kind) throwAttack(opponent, kind === "kick" && !withinReach(opponent.motion, nearest.motion, kind) ? "punch" : kind);
         }
-        const copIntents = decideCops(field, carsAndObstacles);
+        const copIntents = decideCops(everyoneOnABike, carsAndObstacles);
         const distancesBefore = riders.map((rider) => whereIs(rider).distance);
         riders.forEach((rider, index) => {
           if (!rider.crash) {
@@ -783,6 +789,8 @@ export function createRace(options: RaceOptions): Race {
         cops.forEach((cop, index) => {
           const intent = copIntents[index];
           if (intent) moveCop(cop.motion, intent, edge);
+          // A cop's bike parked on the shoulder, bumped, slides to a stop.
+          if (cop.status === "waiting") slide(cop.motion, edge);
           // A knocked-off cop's bike slides to a stop while they tumble, and then they stay where they are.
           if (cop.crash) {
             slide(cop.motion, edge);
@@ -792,7 +800,11 @@ export function createRace(options: RaceOptions): Race {
         traffic.step(whereIs(player), ridersOnTheRoad());
         bustTheCaught();
         joinThePlayer();
-        for (const { rider, speedDifference } of settleContact(riding, edge)) crash(rider, "rider", speedDifference);
+        // Riders on their bikes bump each other and the cops' bikes, or run into them and crash; a cop never crashes.
+        const bikes: Fighter[] = [...riding, ...cops.filter((cop) => cop.status !== "knocked-off")];
+        for (const { rider, into, speedDifference } of settleContact(bikes, edge, (bike) => bike.kind === "rider")) {
+          if (rider.kind === "rider") crash(rider, into.kind === "cop" ? "cop" : "rider", speedDifference);
+        }
         runIntoCarsAndObstacles(traffic.cars.map(footprintOfCar));
         advanceAttacks();
         recoverStamina();
