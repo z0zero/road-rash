@@ -98,9 +98,9 @@ export default function Game() {
         <TitleScreen
           personalBest={state.personalBest}
           onStart={startRace}
-          onControls={session.openControls}
-          onSettings={session.openSettings}
-          onCredits={session.openCredits}
+          onControls={() => session.openFromTitle("controls")}
+          onSettings={() => session.openFromTitle("settings")}
+          onCredits={() => session.openFromTitle("credits")}
         />
       )}
       {state.screen === "settings" && (
@@ -108,11 +108,11 @@ export default function Game() {
           settings={state.settings}
           reduceMotion={reduceMotion}
           onChange={session.changeSettings}
-          onBack={session.closeSettings}
+          onBack={session.backToTitle}
         />
       )}
-      {state.screen === "controls" && <ControlsScreen onBack={session.closeControls} />}
-      {state.screen === "credits" && <CreditsScreen onBack={session.closeCredits} />}
+      {state.screen === "controls" && <ControlsScreen onBack={session.backToTitle} />}
+      {state.screen === "credits" && <CreditsScreen onBack={session.backToTitle} />}
       {(state.screen === "racing" || state.screen === "paused") && <Hud session={session} reduceMotion={reduceMotion} />}
       {state.screen === "paused" && (
         <PauseMenu seed={state.seed} onResume={session.resume} onRestart={restart} onQuit={session.quitToTitle} />

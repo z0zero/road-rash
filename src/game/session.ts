@@ -19,8 +19,11 @@ import {
   type Settings,
 } from "@/save-data/save-data";
 
+/** The screens the title screen opens, each with a way back to it. */
+export type TitleSubscreen = "settings" | "credits" | "controls";
+
 /** Which screen the game shows. The countdown and the race itself are both "racing". */
-export type Screen = "title" | "settings" | "credits" | "controls" | "racing" | "paused" | "results";
+export type Screen = "title" | TitleSubscreen | "racing" | "paused" | "results";
 
 /** What React renders from. It changes only on screen changes and settings changes, never per frame. */
 export interface SessionState {
@@ -169,34 +172,15 @@ export class GameSession {
     this.setState({ screen: "title", results: null, newBestTime: false, newBestPosition: false, seed });
   };
 
-  /** Shows the Settings screen; only from the title screen. */
-  openSettings = () => {
-    if (this.state.screen === "title") this.setState({ screen: "settings" });
+  /** Shows one of the screens the title screen opens (Settings, Credits or Controls); only from the title screen. */
+  openFromTitle = (screen: TitleSubscreen) => {
+    if (this.state.screen === "title") this.setState({ screen });
   };
 
-  /** Goes back from the Settings screen to the title screen. */
-  closeSettings = () => {
-    if (this.state.screen === "settings") this.setState({ screen: "title" });
-  };
-
-  /** Shows the Credits screen; only from the title screen. */
-  openCredits = () => {
-    if (this.state.screen === "title") this.setState({ screen: "credits" });
-  };
-
-  /** Goes back from the Credits screen to the title screen. */
-  closeCredits = () => {
-    if (this.state.screen === "credits") this.setState({ screen: "title" });
-  };
-
-  /** Shows the Controls screen; only from the title screen. */
-  openControls = () => {
-    if (this.state.screen === "title") this.setState({ screen: "controls" });
-  };
-
-  /** Goes back from the Controls screen to the title screen. */
-  closeControls = () => {
-    if (this.state.screen === "controls") this.setState({ screen: "title" });
+  /** Goes back to the title screen from one of the screens it opens. */
+  backToTitle = () => {
+    const { screen } = this.state;
+    if (screen === "settings" || screen === "credits" || screen === "controls") this.setState({ screen: "title" });
   };
 
   /** Changes some of the player's settings and saves them. */
