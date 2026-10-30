@@ -68,6 +68,10 @@ _Avoid_: Target speed, cruising speed
 What an opponent is riding for at the moment: just racing, riding up alongside a rider to fight them, or dropping back.
 _Avoid_: AI state, mode, goal
 
+**Patience**:
+How long a brawler or bully keeps riding alongside a player who rides well below its own pace. It wears thin while they do and builds back up while the player keeps up; once it runs out, the opponent gives up on the player and just races until its patience is whole again.
+_Avoid_: Tolerance, temper
+
 **Bike**:
 The motorcycle a rider races on.
 _Avoid_: Motorcycle, motorbike, vehicle

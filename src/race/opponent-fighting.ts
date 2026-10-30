@@ -3,7 +3,7 @@ import { RACING, type Intent } from "./opponent-riding";
 import type { Temperament } from "./opponents";
 import type { Random } from "./random";
 import type { Motion } from "./riding";
-import { STEP_SECONDS } from "./steps";
+import { STEP_SECONDS, stepsIn } from "./steps";
 
 /** Brawlers and bullies ride up alongside the player to fight them when the player is within this many metres along the track... */
 const PICK_A_FIGHT_RANGE = 35;
@@ -24,10 +24,51 @@ export function isDroppingBack(wasDroppingBack: boolean, stamina: number): boole
   return wasDroppingBack ? stamina < RECOVERED : stamina < BADLY_BEATEN;
 }
 
+/** A brawler or bully rides alongside a player slower than this share of its own pace where it is (see `paceAt`)... */
+const SLOW_PLAYER = 0.85;
+/**
+ * ...for at most this many steps, then gives up on them and races on; it
+ * picks a fight with them again only once they have ridden at least that fast
+ * for as long.
+ */
+const PATIENCE_STEPS = stepsIn(10);
+
+/** How long a brawler or bully will still ride alongside a slow player, and whether it has given up on them. */
+export interface Patience {
+  /** Steps it will still ride alongside a slow player. */
+  steps: number;
+  /** Whether it has given up on the player: it just races until its patience is whole again. */
+  gaveUp: boolean;
+}
+
+/** An opponent's patience with the player at the start of the race: whole. */
+export function wholePatience(): Patience {
+  return { steps: PATIENCE_STEPS, gaveUp: false };
+}
+
+/**
+ * Moves an opponent's patience with the player on by a step. It wears thin
+ * while the opponent rides up alongside the player (`alongside`) and the
+ * player rides slower than `SLOW_PLAYER` of the opponent's own pace where it
+ * is (`pace`, m/s), and once it runs out the opponent gives up on them. It
+ * builds back up while the player rides at least that fast, and once it is
+ * whole again the opponent no longer has given up on them. `playerSpeed` is
+ * null while the player isn't riding.
+ */
+export function wearPatience(patience: Patience, alongside: boolean, playerSpeed: number | null, pace: number): void {
+  if (playerSpeed === null) return;
+  const slow = playerSpeed < SLOW_PLAYER * pace;
+  if (slow && alongside) patience.steps = Math.max(0, patience.steps - 1);
+  else if (!slow) patience.steps = Math.min(PATIENCE_STEPS, patience.steps + 1);
+  if (patience.steps === 0) patience.gaveUp = true;
+  else if (patience.steps === PATIENCE_STEPS) patience.gaveUp = false;
+}
+
 /**
  * What an opponent of a temperament is up to: a badly beaten one drops back,
  * easing off, until it has recovered; otherwise brawlers and bullies pick a
- * fight with the player nearby, riding up alongside them, and racers just
+ * fight with the player nearby, riding up alongside them, unless they have
+ * given up on a slow player (`gaveUp`, see `wearPatience`), and racers just
  * race. `player` is the player's motion while they race on their bike, else
  * null.
  */
@@ -36,9 +77,10 @@ export function opponentIntent(
   me: Readonly<Motion>,
   player: Readonly<Motion> | null,
   droppingBack: boolean,
+  gaveUp = false,
 ): Intent {
   if (droppingBack) return { alongside: null, paceShare: DROP_BACK_PACE };
-  if (temperament === "racer" || !player) return RACING;
+  if (temperament === "racer" || !player || gaveUp) return RACING;
   if (Math.abs(player.distance - me.distance) > PICK_A_FIGHT_RANGE || player.speed < PICK_A_FIGHT_SPEED) return RACING;
   return { alongside: player, paceShare: FIGHTING_PACE };
 }
