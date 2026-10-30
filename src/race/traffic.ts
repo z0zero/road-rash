@@ -1,5 +1,5 @@
 import type { Random } from "./random";
-import { BIKE_WIDTH, clamp } from "./riding";
+import { BIKE_LENGTH, BIKE_WIDTH, clamp } from "./riding";
 import { STEP_SECONDS } from "./steps";
 import type { Track } from "./track";
 
@@ -52,6 +52,11 @@ const LANE_CHANGE_SPEED = 1.8;
 /** A lane has room for a car to change into it when no car in it is nearer than this along the road (metres), and the riders give it room. */
 const LANE_CHANGE_ROOM = 30;
 
+/** A car changes lanes to get round a fallen rock in its lane once it is this many metres from it, if there is room... */
+const ROCK_SIGHT = 150;
+/** ...and otherwise stops this many metres short of it until there is. */
+const ROCK_STOP = 3;
+
 /** A car keeps this many metres, plus a second's driving, behind the car ahead of it in its lane... */
 const FOLLOWING_GAP = 8;
 const FOLLOWING_SECONDS = 1;
@@ -99,6 +104,8 @@ export interface RiderOnTheRoad {
   readonly offset: number;
   /** Metres per second along the track. */
   readonly speed: number;
+  /** Whether they are on their bike: a car slows behind a rider on their bike, but runs down one on foot. */
+  readonly onTheirBike: boolean;
 }
 
 /** The cars on the road around the player. */
@@ -108,7 +115,8 @@ export interface Traffic {
   /**
    * Moves every car on by a step, then lets the cars that have left the
    * window around the player go and brings new ones in at its far end. Cars
-   * come onto the road, and change lanes, out of the way of the `riders`.
+   * come onto the road, and change lanes, out of the way of the `riders`, and
+   * slow down behind a slower one on their bike.
    */
   step(player: Around, riders: readonly RiderOnTheRoad[]): void;
 }
@@ -141,8 +149,11 @@ interface NextCar {
  * when the player is catching them up; but never right in front of a rider,
  * so in the other lane, or later, when a rider is about to ride up to one.
  * Cars keep their distance from the car ahead of them in their lane, and
- * some change lanes now and then, when no car is close by in the lane they
- * change to and no rider in it is close by or coming up to them. At the start
+ * cars in the race direction from a slower rider on their bike ahead of them
+ * too. Some change lanes now and then, when no car is close by in the lane they
+ * change to and no rider in it is close by or coming up to them. Cars change
+ * lanes to get round a fallen rock in theirs, or stop short of it until they
+ * can, and never come onto the road just short of one. At the start
  * (the player at `player.distance`), cars in the race direction keep clear of
  * the road before `clearUntil`, where the riders line up. Every choice comes
  * from `random`.
@@ -208,11 +219,37 @@ export function createTraffic(track: Track, random: Random, player: Around, clea
       return !near || Math.abs(rider.offset - lane) >= track.laneWidth / 2 + BIKE_WIDTH / 2;
     });
 
-  /** A car whose time has come moves over to its direction's other lane if there is room in it; otherwise it tries again next step. */
+  /** The fallen rocks on the road, which cars drive round. */
+  const fallenRocks = track.obstacles.filter((obstacle) => obstacle.kind === "fallen-rock");
+
+  /**
+   * The fallen rock a car (or the next car to come onto the road) would drive
+   * into, at `distance` along the track and keeping to the offset `offset`,
+   * within `ROCK_SIGHT` ahead of it, and how far its front is from the rock's
+   * near side (metres); null if none.
+   */
+  const rockAhead = (car: Pick<Car, "oncoming" | "length" | "width">, distance: number, offset: number) => {
+    let nearest: { readonly gap: number } | null = null;
+    for (const rock of fallenRocks) {
+      const ahead = car.oncoming ? distance - rock.distance : rock.distance - distance;
+      const gap = ahead - car.length / 2 - rock.radius;
+      const inTheWay = Math.abs(rock.offset - offset) < car.width / 2 + rock.radius;
+      if (inTheWay && ahead > -car.length / 2 && gap < ROCK_SIGHT && (!nearest || gap < nearest.gap)) nearest = { gap };
+    }
+    return nearest;
+  };
+
+  /**
+   * A car whose time has come, or that has a fallen rock ahead in its lane,
+   * moves over to its direction's other lane if there is room in it and no
+   * rock ahead there; otherwise it tries again next step.
+   */
   const changeLanes = (car: Car, riders: readonly RiderOnTheRoad[]) => {
-    if (car.laneChangeIn === Infinity || --car.laneChangeIn > 0) return;
+    const dodging = rockAhead(car, car.distance, car.lane) !== null;
+    if (!dodging && (car.laneChangeIn === Infinity || --car.laneChangeIn > 0)) return;
     const [near, far] = lanes(car.oncoming);
     const other = car.lane === near ? far : near;
+    if (rockAhead(car, car.distance, other)) return;
     const carsGiveRoom = cars.every(
       (them) =>
         them === car ||
@@ -222,12 +259,25 @@ export function createTraffic(track: Track, random: Random, player: Around, clea
     );
     if (!carsGiveRoom || !ridersGiveRoom(riders, car.distance, other, velocityOf(car))) return;
     car.lane = other;
-    car.laneChangeIn = stepsBetween(LANE_CHANGE_EVERY);
+    if (car.laneChangeIn !== Infinity) car.laneChangeIn = stepsBetween(LANE_CHANGE_EVERY);
   };
 
-  /** A car slows to the speed of a car close ahead of it in its lane, so it never runs into it; otherwise it drives at its own speed. */
-  const keepDistance = (car: Car) => {
+  /**
+   * A car slows to the speed of a car close ahead of it in its lane, so it
+   * never runs into it, and so does a car in the race direction for a slower
+   * rider on their bike ahead of it (`riders`); it stops short of a fallen
+   * rock in its way; otherwise it drives at its own speed.
+   */
+  const keepDistance = (car: Car, riders: readonly RiderOnTheRoad[]) => {
     let wanted = car.cruise;
+    const rock = rockAhead(car, car.distance, car.offset);
+    if (rock) wanted = Math.min(wanted, Math.sqrt(2 * BRAKING * Math.max(0, rock.gap - ROCK_STOP)));
+    for (const rider of car.oncoming ? [] : riders) {
+      const gap = rider.distance - car.distance - car.length / 2 - BIKE_LENGTH / 2;
+      const inItsLane = Math.abs(rider.offset - car.offset) < (car.width + BIKE_WIDTH) / 2;
+      if (!rider.onTheirBike || !inItsLane || gap <= -BIKE_LENGTH || rider.speed >= car.speed) continue;
+      wanted = Math.min(wanted, rider.speed + Math.sqrt(2 * BRAKING * Math.max(0, gap - FOLLOWING_GAP)));
+    }
     for (const them of cars) {
       if (them === car || them.oncoming !== car.oncoming) continue;
       const along = car.oncoming ? car.distance - them.distance : them.distance - car.distance;
@@ -261,7 +311,7 @@ export function createTraffic(track: Track, random: Random, player: Around, clea
     step(player, riders) {
       for (const car of cars) {
         changeLanes(car, riders);
-        keepDistance(car);
+        keepDistance(car, riders);
       }
       for (const car of cars) {
         car.distance += (car.oncoming ? -car.speed : car.speed) * STEP_SECONDS;
@@ -280,11 +330,12 @@ export function createTraffic(track: Track, random: Random, player: Around, clea
         let furthest = -Infinity;
         for (const car of cars) if (car.oncoming === oncoming) furthest = Math.max(furthest, car.distance);
         if (front - furthest < gap || cars.length >= MOST_CARS) continue;
-        // Never in front of a rider: in its own lane, or else the other, where the riders give it room.
+        // Never in front of a rider, or a fallen rock: in its own lane, or else the other, where there is room.
         const velocity = oncoming ? -speed : speed;
+        const { kind } = oncoming ? next.oncoming : next.raceDirection;
         const own = laneOfNext(oncoming);
-        const offset = [own, ...lanes(oncoming).filter((lane) => lane !== own)].find((lane) =>
-          ridersGiveRoom(riders, front, lane, velocity),
+        const offset = [own, ...lanes(oncoming).filter((lane) => lane !== own)].find(
+          (lane) => ridersGiveRoom(riders, front, lane, velocity) && !rockAhead({ oncoming, ...kind }, front, lane),
         );
         if (offset !== undefined) bringOn(oncoming, front, offset);
       }

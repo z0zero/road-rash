@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NO_INPUT, PLAYER, STEP_SECONDS, type CarSnapshot, type PlayerInput, type Race, type RaceEvent } from ".";
-import { autopilot, eventsUntil, NO_COPS, player, secondsUntil, startedRace, stepFor, STEPS_PER_SECOND } from "./test-helpers";
+import { autopilot, eventsDuring, eventsUntil, NO_COPS, player, secondsUntil, startedRace, stepFor, STEPS_PER_SECOND } from "./test-helpers";
 
 type Crash = Extract<RaceEvent, { type: "crash" }>;
 const isCrash = (event: RaceEvent): event is Crash => event.type === "crash";
@@ -94,8 +94,10 @@ describe("traffic", () => {
   });
 
   it("fills a window around the player, from 150 m behind them to 600 m ahead, with about one car per 120 m in each direction", () => {
-    // With no cops, who would bust the player if they crashed in traffic, ending their ride through it.
-    const race = startedRace(1, NO_COPS);
+    // With no cops, who would bust the player if they crashed in traffic, ending their ride through it; and on a seed
+    // the player rides without a crash, since cars in the race direction come onto the road only while the player is
+    // catching them up.
+    const race = startedRace(5, NO_COPS);
     const pilot = autopilot(race);
     const counts = { oncoming: [] as number[], raceDirection: [] as number[] };
     const gaps: number[] = [];
@@ -185,6 +187,52 @@ describe("running into a car", () => {
     ]);
     expect(difference).toBeGreaterThan(8);
     expect(player(race).crash).toBe("tumbling");
+  });
+
+  it("throws a rider who runs into the back of it down behind it, not through it, and drives on without running them down", () => {
+    const { race, car } = behindACar();
+    eventsUntil(race, chaseCar(race, car, 12), playerCrashed);
+    /** When the rider, tumbling or on foot, was inside the car they ran into, and when it knocked them down. */
+    const inside: number[] = [];
+    const knockedDownByIt: number[] = [];
+
+    // The rider stands still once on their feet, while the car drives on.
+    for (let step = 0; step < 4 * STEPS_PER_SECOND; step++) {
+      race.step({ ...NO_INPUT, brake: 1 });
+      const me = player(race);
+      const them = carOf(race, car);
+      if (!them) continue;
+      const along = Math.abs(them.distance - me.distance);
+      const across = Math.abs(them.offset - me.offset);
+      // A rider on the ground takes up about 0.6 m either way.
+      if (along < them.length / 2 + 0.3 && across < them.width / 2 + 0.3) inside.push(race.snapshot().clock);
+      const knockedDown = race.drainEvents().some((event) => event.type === "knocked-down" && event.rider === PLAYER);
+      if (knockedDown && along < them.length) knockedDownByIt.push(race.snapshot().clock);
+    }
+
+    expect(player(race).crash).not.toBeNull();
+    expect(inside).toEqual([]);
+    expect(knockedDownByIt).toEqual([]);
+  });
+
+  it("slows down behind a slower rider on their bike in its lane, rather than running into them from behind", () => {
+    const { race, car } = behindACar();
+    // The player gets 40 m ahead of the car, pulls into its lane and stops there.
+    const pilot = autopilot(race);
+    secondsUntil(race, pilot, () => player(race).distance - (carOf(race, car)?.distance ?? Infinity) > 40, 60);
+    const stopping = (): PlayerInput => {
+      const me = player(race);
+      const them = carOf(race, car);
+      const steer = them ? Math.max(-1, Math.min(1, 1.5 * (them.offset - me.offset))) : 0;
+      return { ...NO_INPUT, steer, brake: 1 };
+    };
+
+    const events = eventsDuring(race, 15, stopping).filter(playerCrashed);
+
+    expect(events).toEqual([]);
+    const them = carOf(race, car);
+    expect(them?.speed).toBeLessThan(1);
+    expect(player(race).distance - (them?.distance ?? Infinity)).toBeGreaterThan(0);
   });
 
   it("head on, crashes a rider at the two speeds added together", () => {
@@ -352,10 +400,14 @@ describe("riding with the pack in traffic", () => {
   /** Every lane change, and those that moved a car over into the path of a rider in the lane it moved into. */
   let laneChanges = 0;
   const intoARider: string[] = [];
+  /** Cars that drove into a fallen rock on the road, and the steps cars spent driving past one. */
+  const throughARock: string[] = [];
+  let pastARock = 0;
   for (const seed of races) {
     const race = startedRace(seed, NO_COPS);
     const pilot = autopilot(race, { targetSpeed: 48 });
     const { laneWidth } = race.track;
+    const fallenRocks = race.track.obstacles.filter((obstacle) => obstacle.kind === "fallen-rock");
     /** Every car seen so far, and its offset in the last snapshot. */
     const lastOffsets = new Map(race.snapshot().traffic.map((car) => [car.id, car.offset]));
     /** Every car and obstacle an opponent is coming up to with it in its path, by "rider: thing". */
@@ -372,6 +424,13 @@ describe("riding with the pack in traffic", () => {
       /** Riders on their bikes in the lane whose middle is at `lane`. */
       const inTheLane = (lane: number) => onTheirBikes.filter((rider) => Math.abs(rider.offset - lane) < laneWidth / 2);
       for (const car of traffic) {
+        for (const rock of fallenRocks) {
+          const along = Math.abs(rock.distance - car.distance);
+          if (along < car.length / 2 + 10) pastARock++;
+          if (along < car.length / 2 + rock.radius && Math.abs(rock.offset - car.offset) < car.width / 2 + rock.radius) {
+            throughARock.push(`seed ${seed} at ${clock.toFixed(1)} s: car ${car.id}`);
+          }
+        }
         const last = lastOffsets.get(car.id);
         lastOffsets.set(car.id, car.offset);
         if (last === undefined) {
@@ -420,6 +479,11 @@ describe("riding with the pack in traffic", () => {
     it("change lanes out of the riders' way: never into the path of a rider close by in the lane they move into", () => {
       expect(laneChanges).toBeGreaterThan(30);
       expect(intoARider).toEqual([]);
+    });
+
+    it("keep clear of the fallen rocks on the road: none drives into one", () => {
+      expect(pastARock).toBeGreaterThan(100);
+      expect([...new Set(throughARock)]).toEqual([]);
     });
   });
 
