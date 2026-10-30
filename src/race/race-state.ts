@@ -3,8 +3,12 @@ import type { RaceEvent } from "./events";
 import type { Footprint } from "./footprint";
 import type { Random } from "./random";
 import type { Rider } from "./riders";
+import { STEPS_PER_SECOND } from "./steps";
 import type { Track } from "./track";
 import type { Traffic } from "./traffic";
+
+/** The 3-2-1 countdown lasts three seconds. */
+export const COUNTDOWN_STEPS = 3 * STEPS_PER_SECOND;
 
 /**
  * Everything a race keeps track of as it runs: what its rules read and change,
@@ -48,4 +52,9 @@ export function onTheirBikes(race: RaceState): Rider[] {
 /** Cops riding in the race: the ones who patrol, bust riders and fight. */
 export function copsInTheRace(race: RaceState): Cop[] {
   return race.cops.filter((cop) => cop.status === "riding");
+}
+
+/** The race clock: seconds since the start, 0 during the countdown. */
+export function clock(race: RaceState): number {
+  return Math.max(0, race.stepsTaken - COUNTDOWN_STEPS) / STEPS_PER_SECOND;
 }

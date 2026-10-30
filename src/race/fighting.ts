@@ -1,7 +1,17 @@
+import type { Cop } from "./cops";
 import type { AttackKind, RiderOrCop } from "./events";
+import type { Rider } from "./riders";
 import type { Motion } from "./riding";
 import { stepsIn } from "./steps";
 import { TUNING } from "./tuning";
+
+/** Anyone who fights: a rider, or a cop. */
+export type Fighter = Rider | Cop;
+
+/** How events name a fighter. */
+export function who(fighter: Fighter): RiderOrCop {
+  return fighter.kind === "rider" ? { kind: "rider", id: fighter.id } : { kind: "cop", id: fighter.id };
+}
 
 /** A weapon a rider can hold and swing instead of punching: in this game, only the club. */
 export type Weapon = "club";
