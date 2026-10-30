@@ -1,5 +1,6 @@
+import { bustTheCaught, letGo } from "./busting";
 import { getCoastalTrack } from "./coastal-track";
-import { carRunningInto, knockDownBy, settleContact, settleImpacts, throwClearOf } from "./contact";
+import { knockDownRidersOnFoot, runIntoCarsAndObstacles, runIntoEachOther } from "./contact";
 import {
   bustingIntent,
   COP_ATTACK_EVERY_SECONDS,
@@ -9,26 +10,23 @@ import {
   takeTurns,
   patrolIntent,
   pullingOverIntent,
-  type Cop,
   type CopIntent,
 } from "./cops";
-import { canRemount, carryOn, remount, slide, throwOff, type OnFootControls } from "./crashing";
-import type { AttackKind, CrashCause, RaceEvent } from "./events";
+import { carryOn, runBack, slide, STAND_STILL } from "./crashing";
+import type { RaceEvent } from "./events";
 import { lineUpOpponents } from "./field";
 import {
-  attackSteps,
-  awayFrom,
+  advanceAttacks,
   isMidSwing,
   nearestWithinReach,
-  who,
-  windUpSteps,
+  punchOf,
+  recoverStamina,
+  targetsFor,
+  throwAttack,
   withinReach,
-  type Attack,
-  type Fighter,
 } from "./fighting";
 import { footprintOfACopsBike, footprintOfCar, footprintOfObstacle, type Footprint } from "./footprint";
 import {
-  breatherAfterHitting,
   isDroppingBack,
   isFightingBack,
   opponentAttack,
@@ -47,18 +45,12 @@ import { PLAYER, whereIs, type Rider } from "./riders";
 import { ride, type Controls, type Motion } from "./riding";
 import { snapshotOf, type RaceSnapshot } from "./snapshot";
 import { STEP_SECONDS, STEPS_PER_SECOND, stepsIn } from "./steps";
-import type { Track } from "./track";
+import { apart, type Track } from "./track";
 import { CLOSED_ROAD, createTraffic, type Traffic } from "./traffic";
 import { TUNING } from "./tuning";
 
 /** Once over the finish line, a rider lets go of the throttle and brakes to a stop. */
 const FINISHED_CONTROLS: Controls = { throttle: 0, brake: 0.7, steer: 0 };
-
-/** Opponents on foot run straight back to their bikes. */
-const RUN_STRAIGHT_BACK: OnFootControls = { steer: 0, brake: 0 };
-
-/** A rider whose race is over stays where they are once they are on their feet. */
-const STAND_STILL: OnFootControls = { steer: 0, brake: 1 };
 
 /**
  * Fast-forwarding races the rest of the field until the race clock reads six
@@ -71,6 +63,7 @@ const FAST_FORWARD_UNTIL_STEPS = COUNTDOWN_STEPS + 6 * 60 * STEPS_PER_SECOND;
 const CLEAR_OF_THE_GRID = 60;
 /** Mixed into the race's seed for the traffic's own random choices, so they never change the riders' choices. */
 const TRAFFIC_SEED = 0x7ea5_1c3a;
+
 /** The player's controls for one step. Values outside their ranges are clamped. */
 export interface PlayerInput {
   /** 0 (closed) to 1 (full throttle). */
@@ -129,14 +122,6 @@ export interface Race {
   fastForward(steps?: number): RaceResults;
 }
 
-/** Metres between two places in track space (straight-line). */
-function apart(a: { readonly distance: number; readonly offset: number }, b: { readonly distance: number; readonly offset: number }) {
-  return Math.hypot(a.distance - b.distance, a.offset - b.offset);
-}
-
-/** Stamina starts recovering once a rider has gone this many steps without being hit. */
-const RECOVERY_DELAY_STEPS = stepsIn(TUNING.staminaRecoveryDelay);
-
 /**
  * A rider on the grid: fresh, on a bike in perfect condition, standing at
  * `distance` and `offset`. Bullies start the race with a club.
@@ -165,102 +150,6 @@ function lineUp(rider: Pick<Rider, "id" | "name" | "temperament" | "riding">, di
 /** Where the riders still racing are on the road, on their bikes or off them. */
 function ridersOnTheRoad(race: RaceState) {
   return race.riders.filter((rider) => rider.status === "racing").map((rider) => ({ ...whereIs(rider), onTheirBike: !rider.crash }));
-}
-
-/** Whether a fighter is in a fight: on their bike in the race. */
-function canFight(fighter: Fighter) {
-  return fighter.kind === "rider" ? fighter.status === "racing" && !fighter.crash : fighter.status === "riding";
-}
-
-/** Whom a fighter's attacks can land on: riders on their bikes, and cops in the race too for a rider. */
-function targetsFor(race: RaceState, attacker: Fighter): Fighter[] {
-  return attacker.kind === "rider" ? [...onTheirBikes(race), ...copsInTheRace(race)] : onTheirBikes(race);
-}
-
-/** A fighter's punch: a club holder swings their club instead. */
-function punchOf(fighter: Fighter): AttackKind {
-  return fighter.weapon === "club" ? "club-swing" : "punch";
-}
-
-/**
- * Starts an attack's wind-up, aimed at the nearest rider or cop within reach
- * (if any): towards them, or else to the right. A punch from a club holder
- * is a club swing.
- */
-function throwAttack(race: RaceState, attacker: Fighter, thrown: AttackKind) {
-  const kind = thrown === "punch" ? punchOf(attacker) : thrown;
-  const target = nearestWithinReach(attacker.motion, targetsFor(race, attacker), kind);
-  attacker.attack = {
-    kind,
-    steps: 0,
-    side: target ? awayFrom(attacker.motion, target.motion) : 1,
-    thrownMidSwingAt: target && isMidSwing(target.attack) ? who(target) : null,
-  };
-  race.events.push({ type: "attack-thrown", attacker: who(attacker), target: target && who(target), kind });
-}
-
-/** Moves every attack on by a step: each strikes at the end of its wind-up and is over after its recovery. */
-function advanceAttacks(race: RaceState) {
-  for (const attacker of [...race.riders, ...race.cops]) {
-    const attack = attacker.attack;
-    if (!attack) continue;
-    attack.steps++;
-    if (attack.steps === windUpSteps(attack.kind) && canFight(attacker)) {
-      const target = nearestWithinReach(attacker.motion, targetsFor(race, attacker), attack.kind);
-      if (target) {
-        attack.side = awayFrom(attacker.motion, target.motion);
-        land(race, attacker, target, attack);
-      }
-    }
-    if (attack.steps >= attackSteps(attack.kind)) attacker.attack = null;
-  }
-}
-
-function land(race: RaceState, attacker: Fighter, target: Fighter, { kind, thrownMidSwingAt }: Attack) {
-  race.events.push({ type: "attack-landed", attacker: who(attacker), target: who(target), kind });
-  // An opponent whose hit lands on a player who doesn't fight it back gives them a breather before its next attack.
-  if (attacker.kind === "rider" && target.kind === "rider") {
-    if (attacker.id === PLAYER) target.stepsSinceThePlayerHitIt = 0;
-    else if (target.id === PLAYER) attacker.breatherSteps = breatherAfterHitting(attacker.stepsSinceThePlayerHitIt);
-  }
-  // Any hit a rider throws at another rider winding up a club swing takes the club, and the swing, if it hasn't
-  // struck, never does. Cops neither take clubs nor lose them.
-  const intoTheSwing = thrownMidSwingAt?.kind === target.kind && thrownMidSwingAt.id === target.id;
-  if (attacker.kind === "rider" && target.kind === "rider" && intoTheSwing && target.weapon === "club") {
-    target.weapon = null;
-    target.attack = null;
-    attacker.weapon = "club";
-    race.events.push({ type: "weapon-stolen", from: who(target), by: who(attacker) });
-  }
-  const { stamina, shove } = TUNING.attacks[kind];
-  // A kick shoves its target sideways, away from the attacker.
-  if (shove > 0) target.motion.kickShove = awayFrom(attacker.motion, target.motion) * shove;
-  // A hit on a rider or cop with no stamina left knocks them off their bike.
-  if (target.stamina <= 0) {
-    if (target.kind === "rider") crash(race, target, "knocked-off", target.motion.speed);
-    else knockOff(race, target);
-  }
-  target.stamina = Math.max(0, target.stamina - stamina);
-  target.stepsSinceHit = 0;
-  if (target.kind === "cop" && attacker.kind === "rider" && target.status === "riding") fightBack(race, target, attacker);
-}
-
-/** Knocks a cop off their bike and out of the race for good, dropping their club. */
-function knockOff(race: RaceState, cop: Cop) {
-  race.events.push({ type: "cop-knocked-off", cop: cop.id, impactSpeed: cop.motion.speed });
-  cop.status = "knocked-off";
-  cop.crash = throwOff(cop.motion);
-  cop.attack = null;
-  cop.weapon = null;
-  cop.busting = null;
-  cop.fightingBack = null;
-}
-
-/** A cop hit by a rider fights back against them, until a while after it was last hit. */
-function fightBack(race: RaceState, cop: Cop, rider: Rider) {
-  if (cop.fightingBack !== rider.id) race.events.push({ type: "cop-retaliating", cop: cop.id, target: rider.id });
-  cop.fightingBack = rider.id;
-  cop.fightingBackSteps = stepsIn(TUNING.cops.fightingBackSeconds);
 }
 
 /**
@@ -310,109 +199,6 @@ function decideCops(
     if (cop.standingBySteps > 0 || riders[PLAYER].crash) return pullingOverIntent(cop.motion, track);
     return patrolIntent(cop.motion, player, cop.following, track, everyoneOnABike, carsAndObstacles);
   });
-}
-
-/**
- * Throws a rider off their bike, which loses condition; a bike whose
- * condition runs out is wrecked, and so is the rider's race. A rider who
- * crashes drops their club, which is lost.
- */
-function crash(race: RaceState, rider: Rider, cause: CrashCause, impactSpeed: number) {
-  race.events.push({ type: "crash", rider: rider.id, cause, impactSpeed });
-  rider.attack = null;
-  rider.weapon = null;
-  rider.crash = throwOff(rider.motion);
-  const loss = TUNING.crashConditionLoss + TUNING.crashConditionLossPerImpactSpeed * impactSpeed;
-  rider.condition = Math.max(0, rider.condition - loss);
-  if (rider.condition === 0) {
-    rider.status = "wrecked";
-    race.events.push({ type: "wrecked", rider: rider.id });
-    if (rider.id === PLAYER) race.events.push({ type: "player-race-over", outcome: "wrecked" });
-  } else {
-    sendCopsTo(race, rider);
-  }
-}
-
-/**
- * Every cop in the race within busting range of a rider who has just
- * crashed rides to them, unless it is busting someone already.
- */
-function sendCopsTo(race: RaceState, rider: Rider) {
-  for (const cop of copsInTheRace(race)) {
-    if (cop.busting === null && apart(cop.motion, whereIs(rider)) <= TUNING.cops.bustingRange) cop.busting = rider.id;
-  }
-}
-
-/** Cops stop riding to crashed riders who are back on their bikes, or whose race is over: they got away. */
-function letGo(race: RaceState) {
-  for (const cop of race.cops) {
-    const rider = cop.busting === null ? null : race.riders[cop.busting];
-    if (rider && (rider.status !== "racing" || !rider.crash)) cop.busting = null;
-  }
-}
-
-/**
- * A cop that has reached the crashed rider it was riding to busts them,
- * ending their race, once they are on their feet: never while they tumble.
- */
-function bustTheCaught(race: RaceState) {
-  for (const cop of race.cops) {
-    const rider = cop.busting === null ? null : race.riders[cop.busting];
-    if (rider?.crash?.phase !== "on-foot" || rider.status !== "racing") continue;
-    if (apart(cop.motion, whereIs(rider)) > TUNING.cops.bustingReach) continue;
-    rider.status = "busted";
-    cop.busting = null;
-    cop.standingBySteps = stepsIn(TUNING.cops.standingBySeconds);
-    race.events.push({ type: "busted", rider: rider.id, cop: cop.id });
-    if (rider.id === PLAYER) {
-      race.playerBustedBy = cop;
-      race.events.push({ type: "player-race-over", outcome: "busted" });
-    }
-  }
-}
-
-/**
- * Riders on their bikes who run into the `cars` (by their footprints) or
- * obstacles crash, or bump off them at a small speed difference; a car
- * that runs into a rider on foot knocks them down. Cops in the race only
- * ever bump off cars and obstacles.
- */
-function runIntoCarsAndObstacles(race: RaceState, cars: readonly Footprint[]) {
-  const { edge } = race;
-  for (const [footprints, cause] of [
-    [cars, "traffic"],
-    [race.obstacles, "obstacle"],
-  ] as const) {
-    for (const { rider, footprint, speedDifference } of settleImpacts(onTheirBikes(race), footprints, edge)) {
-      crash(race, rider, cause, speedDifference);
-      if (rider.crash) throwClearOf(footprint, rider.motion, rider.crash.body, edge);
-    }
-    settleImpacts(copsInTheRace(race), footprints, edge, () => false);
-  }
-  for (const rider of race.riders) {
-    if (rider.status !== "racing" || rider.crash?.phase !== "on-foot") continue;
-    const car = carRunningInto(rider.crash.body, cars);
-    if (car) race.events.push({ type: "knocked-down", rider: rider.id, impactSpeed: knockDownBy(car, rider.crash) });
-  }
-}
-
-/** A rider on foot who has reached their bike rides off on it again, with at least some stamina. */
-function getBackOn(race: RaceState, rider: Rider) {
-  rider.crash = null;
-  remount(rider.motion);
-  rider.stamina = Math.max(rider.stamina, TUNING.remountStamina);
-  race.events.push({ type: "remounted", rider: rider.id });
-}
-
-/** Riders and cops who have gone long enough without being hit get their stamina back, a little every step. */
-function recoverStamina(race: RaceState) {
-  for (const fighter of [...race.riders, ...race.cops]) {
-    fighter.stepsSinceHit++;
-    if (fighter.stepsSinceHit > RECOVERY_DELAY_STEPS) {
-      const full = fighter.kind === "rider" ? TUNING.fullStamina : TUNING.cops.fullStamina;
-      fighter.stamina = Math.min(full, fighter.stamina + TUNING.staminaRecovery * STEP_SECONDS);
-    }
-  }
 }
 
 /** Cops waiting on the shoulder join the race once the player, still racing, has passed them. */
@@ -505,10 +291,7 @@ function step(race: RaceState, input: PlayerInput) {
       if (!rider.crash) {
         ride(rider.motion, controls[index], track, STEP_SECONDS);
       } else {
-        slide(rider.motion, edge);
-        const onFoot = rider.status !== "racing" ? STAND_STILL : rider.riding ? RUN_STRAIGHT_BACK : input;
-        carryOn(rider.crash, rider.motion, onFoot, edge);
-        if (rider.status === "racing" && canRemount(rider.crash, rider.motion)) getBackOn(race, rider);
+        runBack(race, rider, input);
       }
     });
     cops.forEach((cop, index) => {
@@ -525,12 +308,10 @@ function step(race: RaceState, input: PlayerInput) {
     traffic.step(whereIs(player), ridersOnTheRoad(race));
     bustTheCaught(race);
     joinThePlayer(race);
-    // Riders on their bikes bump each other and the cops' bikes, or run into them and crash; a cop never crashes.
-    const bikes: Fighter[] = [...riding, ...cops.filter((cop) => cop.status !== "knocked-off")];
-    for (const { rider, into, speedDifference } of settleContact(bikes, edge, (bike) => bike.kind === "rider")) {
-      if (rider.kind === "rider") crash(race, rider, into.kind === "cop" ? "cop" : "rider", speedDifference);
-    }
-    runIntoCarsAndObstacles(race, traffic.cars.map(footprintOfCar));
+    runIntoEachOther(race, riding);
+    const cars = traffic.cars.map(footprintOfCar);
+    runIntoCarsAndObstacles(race, cars);
+    knockDownRidersOnFoot(race, cars);
     advanceAttacks(race);
     recoverStamina(race);
     finishCrossings(race, distancesBefore, clockBefore);
