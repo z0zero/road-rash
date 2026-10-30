@@ -41,7 +41,7 @@ export function SettingsScreen({
         checked={reduceMotion}
         onChange={(on) => onChange({ reduceMotion: on })}
       />
-      <Button autoFocus onClick={onBack}>
+      <Button data-back autoFocus onClick={onBack}>
         Back
       </Button>
     </Dialog>

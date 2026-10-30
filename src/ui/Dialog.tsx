@@ -1,9 +1,14 @@
 import { type ReactNode, useId } from "react";
+import { codesOf, KEYS } from "@/input/bindings";
 import { PANEL, PANEL_TITLE } from "./panel";
+
+const BACK = codesOf(KEYS.back);
 
 /**
  * A screen over the game, such as Settings or the pause menu: the game dimmed
- * behind a panel with the screen's title. With `onBack`, Esc goes back.
+ * behind a panel with the screen's title. With `onBack`, Esc goes back. The
+ * screen's way back, which a gamepad's B presses, is its button marked
+ * `data-back`.
  */
 export function Dialog({
   title,
@@ -26,7 +31,7 @@ export function Dialog({
       aria-labelledby={titleId}
       className="absolute inset-0 flex items-center justify-center overflow-y-auto bg-night/60 p-4 backdrop-blur-sm"
       onKeyDown={(event) => {
-        if (event.key === "Escape") onBack?.();
+        if (BACK.includes(event.code)) onBack?.();
       }}
     >
       <div className={`flex flex-col items-center py-8 ${PANEL} ${panelClassName}`}>
