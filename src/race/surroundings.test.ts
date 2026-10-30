@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { NO_INPUT, PLAYER, type RaceOptions, type RaceSnapshot, type RiderOrCop } from ".";
-import { autopilot, CLOSED_ROAD, NO_COPS, startedRace, STEPS_PER_SECOND } from "./test-helpers";
+import { NO_INPUT, PLAYER, type RaceSnapshot, type RiderOrCop } from ".";
+import { autopilot, CLOSED_ROAD, NO_COPS, startedRace, STEPS_PER_SECOND, type TestSetup } from "./test-helpers";
 
 /** Opponents still racing on their bikes. */
 const opponentsRiding = ({ riders }: RaceSnapshot) =>
@@ -17,8 +17,8 @@ const apart = (a: Place, b: Place) => Math.hypot(a.distance - b.distance, a.offs
  * snapshot to `watch`. The road is closed so that no car holds the player up
  * behind the pack.
  */
-function passThenEaseOff(watch: (snapshot: RaceSnapshot) => void, options: Omit<RaceOptions, "seed"> = {}) {
-  const race = startedRace(1, { ...CLOSED_ROAD, ...options });
+function passThenEaseOff(watch: (snapshot: RaceSnapshot) => void, setup: TestSetup = {}) {
+  const race = startedRace(1, { ...CLOSED_ROAD, ...setup });
   const pilot = autopilot(race);
   for (let step = 0; step < 90 * STEPS_PER_SECOND; step++) {
     race.step(step < 60 * STEPS_PER_SECOND ? pilot() : { ...pilot(), throttle: 0, brake: 0.2 });

@@ -49,12 +49,22 @@ export interface PlayerInput {
 
 export const NO_INPUT: PlayerInput = { throttle: 0, brake: 0, steer: 0, punch: false, kick: false };
 
+/** How the game creates a race: from its seed alone, with the field, the tuning and the track fixed (ADR 0004). */
 export interface RaceOptions {
   /** Seeds every random choice the race makes, so the same seed and inputs replay the same race. */
   readonly seed: number;
+}
+
+/**
+ * How the Race module's own tests may set a race up besides its seed, to try
+ * one rule at a time. The game never does, and `@/race` doesn't export it:
+ * every race in the game runs in traffic, with cops, on perfect bikes. Tests
+ * reach it through `setUpRace` in their helpers.
+ */
+export interface TestSetup {
   /**
    * How intact the player's bike is at the start, up to 100 (perfect, the
-   * default), for a bike that comes into the race already worn. Every
+   * default), so that a test can wreck it in a crash or two. Every
    * opponent's bike starts perfect.
    */
   readonly playerCondition?: number;
@@ -144,25 +154,30 @@ function step(race: RaceState, input: PlayerInput) {
 }
 
 export function createRace(options: RaceOptions): Race {
-  const random = createRandom(options.seed);
+  return setUpRace(options, {});
+}
+
+/** A race created from `options` and set up for a test as `setup` says. Only the Race module's tests call it. */
+export function setUpRace({ seed }: RaceOptions, setup: TestSetup): Race {
+  const random = createRandom(seed);
   const track = getCoastalTrack();
-  const riders = lineUpRiders(track, random, options.playerCondition);
+  const riders = lineUpRiders(track, random, setup.playerCondition);
   const traffic: Traffic =
-    options.traffic === false
+    setup.traffic === false
       ? CLOSED_ROAD
       : createTraffic(
           track,
-          createRandom(options.seed ^ TRAFFIC_SEED),
+          createRandom(seed ^ TRAFFIC_SEED),
           riders[PLAYER].motion,
           Math.max(...riders.map((rider) => rider.motion.distance)) + CLEAR_OF_THE_GRID,
         );
   const race: RaceState = {
-    seed: options.seed,
+    seed,
     random,
     track,
     edge: track.roadHalfWidth + track.shoulderWidth,
     riders,
-    cops: options.cops === false ? [] : lineUpCops(track),
+    cops: setup.cops === false ? [] : lineUpCops(track),
     traffic,
     obstacles: track.obstacles.map(footprintOfObstacle),
     events: [],

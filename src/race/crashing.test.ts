@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createRace, NO_INPUT, PLAYER, STEP_SECONDS, type PlayerInput, type RaceEvent, type RiderSnapshot } from ".";
+import { NO_INPUT, PLAYER, STEP_SECONDS, type PlayerInput, type RaceEvent, type RiderSnapshot } from ".";
 import {
   alongsideARacer,
   chase,
@@ -7,9 +7,11 @@ import {
   eventsUntil,
   kmh,
   nearestOpponent,
+  NO_COPS,
   player,
   racerKnockedOff,
   secondsUntil,
+  setUpRace,
   startedRace,
   stepFor,
 } from "./test-helpers";
@@ -120,15 +122,15 @@ describe("a bike's condition", () => {
     expect(race.snapshot().riders[target].condition).toBeCloseTo(100 - conditionLost(crash?.impactSpeed ?? NaN), 9);
   });
 
-  it("can start a race already worn, for the player only", () => {
-    const { riders } = createRace({ seed: 1, playerCondition: 30 }).snapshot();
+  it("can be set up worn for a test, for the player only", () => {
+    const { riders } = setUpRace({ seed: 1 }, { playerCondition: 30 }).snapshot();
 
     expect(riders.map((rider) => rider.condition)).toEqual([30, ...Array(14).fill(100)]);
   });
 
   it("ends the player's race as Wrecked when it runs out", () => {
     // A bike with 20 condition left, ridden into another rider twice: the first crash leaves a little, the second wrecks it.
-    const race = createRace({ seed: 1, playerCondition: 20 });
+    const race = setUpRace({ seed: 1 }, { playerCondition: 20 });
     stepFor(race, 3);
     const target = nearestOpponent(race);
 
@@ -159,7 +161,7 @@ describe("a bike's condition", () => {
 
   it("takes a wrecked opponent out of the race for good, with no position", () => {
     // With no cops about: a cop near the player would bust the racer long before its bike was wrecked.
-    const alongside = alongsideARacer(1, { cops: false });
+    const alongside = alongsideARacer(1, NO_COPS);
     const { race, target } = alongside;
     const punching = () => ({ ...alongside.input(), punch: true });
 
