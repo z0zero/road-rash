@@ -1,3 +1,4 @@
+import { createGroundGrid } from "./ground-grid";
 import type { Random } from "./random";
 import type { Track, TrackPosition, WorldPoint } from "./track";
 
@@ -160,26 +161,17 @@ function inlandSide(road: Road, distance: number, random: Random, inland: number
 function clearanceFrom(road: Road) {
   const cell = 20;
   const reach = 60;
-  const grid = new Map<string, WorldPoint[]>();
+  const grid = createGroundGrid<WorldPoint>(cell);
   for (let d = 0; d <= road.length; d += 2) {
     const point = road.sampleAt(d);
-    const key = `${Math.floor(point.x / cell)},${Math.floor(point.z / cell)}`;
-    const bucket = grid.get(key);
-    if (bucket) bucket.push(point);
-    else grid.set(key, [point]);
+    grid.add(point.x, point.z, point);
   }
   const span = Math.ceil(reach / cell);
   return (point: WorldPoint) => {
     let nearest = reach;
-    const cx = Math.floor(point.x / cell);
-    const cz = Math.floor(point.z / cell);
-    for (let i = -span; i <= span; i++) {
-      for (let j = -span; j <= span; j++) {
-        for (const other of grid.get(`${cx + i},${cz + j}`) ?? []) {
-          nearest = Math.min(nearest, Math.hypot(point.x - other.x, point.z - other.z));
-        }
-      }
-    }
+    grid.forEachNear(point.x, point.z, span, (other) => {
+      nearest = Math.min(nearest, Math.hypot(point.x - other.x, point.z - other.z));
+    });
     return nearest;
   };
 }
