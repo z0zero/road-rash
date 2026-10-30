@@ -354,7 +354,7 @@ test("credits the music and disclaims any tie to Road Rash, from the title scree
 
   const credits = page.getByRole("dialog", { name: "Credits" });
   await expect(credits).toBeVisible();
-  await expect(credits.getByText("Joth")).toBeVisible();
+  await expect(credits.getByText("MintoDog")).toBeVisible();
   await expect(credits.getByText("CC0")).toBeVisible();
   await expect(credits).toContainText("inspired by Road Rash");
   await expect(credits).toContainText("not affiliated with Road Rash or Electronic Arts");

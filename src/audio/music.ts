@@ -1,32 +1,43 @@
 /**
- * The race's music: "Funked Up" by Joth, a looping funk-rock track (guitar,
- * bass, drums and Rhodes) from OpenGameArt.org. It was downloaded from
- * https://opengameart.org/content/funked-up on 2026-10-29, when that page gave
- * its licence as CC0 (https://creativecommons.org/publicdomain/zero/1.0/). The
- * author appreciates credit but doesn't require it; the Credits screen gives it.
- * The file in public/audio is the download unchanged (1,329,549 bytes, SHA-256
- * 57cd81254a0f4e068535c5421f93b586514332ad2377f81aea190dd91659fff3).
+ * The race's music: "Hot Roadway [Remake]" by MintoDog, a looping
+ * electric-guitar racing track at 160 bpm, from OpenGameArt.org. It was
+ * downloaded from https://opengameart.org/content/hot-roadway-remake on
+ * 2026-10-30, when that page gave its licence as CC0
+ * (https://creativecommons.org/publicdomain/zero/1.0/) and asked for no
+ * credit; the Credits screen gives it anyway. The download,
+ * hot_roadway_remake_bpm160.mp3 (4,802,477 bytes at 320 kbps, SHA-256
+ * 3183bc8e71cb5c8b2bb3eb71c6dd19486fe262dbc268a3ddfa5d59b2e9a9afce), is over
+ * the game's 3 MB for its music, so the file in public/audio is that download
+ * encoded again at 192 kbps, which CC0 allows. With ffmpeg 6.1.1, it was
+ * decoded (`ffmpeg -i hot_roadway_remake_bpm160.mp3 -f s16le -c:a pcm_s16le
+ * pcm.raw`), then encoded (`ffmpeg -f s16le -ar 44100 -ac 2 -i pcm.raw -c:a
+ * libmp3lame -b:a 192k -write_xing 1 -id3v2_version 0 -map_metadata -1
+ * hot-roadway.mp3`), giving 2,881,409 bytes, SHA-256
+ * 9635d236e299956c9485f0e879e0464d96084054ddf178b5b045a778a448ac68.
  */
 export const MUSIC = {
-  title: "Funked Up",
-  author: "Joth",
-  authorPage: "https://opengameart.org/users/joth",
-  page: "https://opengameart.org/content/funked-up",
+  title: "Hot Roadway [Remake]",
+  author: "MintoDog",
+  authorPage: "https://opengameart.org/users/mintodog",
+  page: "https://opengameart.org/content/hot-roadway-remake",
   licence: "CC0",
   licencePage: "https://creativecommons.org/publicdomain/zero/1.0/",
-  url: "/audio/funked-up.mp3",
+  url: "/audio/hot-roadway.mp3",
 } as const;
 
 /**
- * The loop: 24 bars at 87 bpm, 2,919,724 samples at 44.1 kHz. The MP3 encoder
- * delayed it by 528 samples and padded it to whole frames, as the file's
- * gapless playback tag records. Decoders that honour the tag drop the delay
- * and the padding. Others (Chromium's among them) keep the delay, add 529
- * samples of their own, and end with 1,843 samples of padding after the
- * music, so the loop starts wherever the music does, before that padding.
+ * The loop: 80 bars at 160 bpm, exactly 120 s, 5,292,000 samples at 44.1 kHz.
+ * Its end runs into its start without a jump: the last sample is as close to
+ * the first as two neighbouring samples usually are, and the music is as loud
+ * in its last second as in its first. The MP3 encoder delayed it by 576
+ * samples and padded it by 864 to whole frames, as the file's gapless playback
+ * tag records. Chromium honours the tag and decodes exactly the loop. A
+ * decoder that doesn't keeps the delay (adding some of its own) and ends with
+ * the padding after the music, so the loop starts wherever the music does,
+ * before that padding.
  */
-const LOOP_SECONDS = 2_919_724 / 44_100;
-const TRAILING_PADDING_SECONDS = 1_843 / 44_100;
+const LOOP_SECONDS = 5_292_000 / 44_100;
+const TRAILING_PADDING_SECONDS = 864 / 44_100;
 
 /** The loop's last and first moments fade, so its end meets its start without a click. */
 const SEAM_FADE_SECONDS = 0.002;
