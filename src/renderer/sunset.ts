@@ -69,13 +69,25 @@ export function sunsetHazeGlsl(sun: Vector3): string {
   `;
 }
 
+/**
+ * GLSL that draws a fragment whose colour came out as not-a-number or
+ * infinite black instead. One such pixel is invisible on its own, but bloom
+ * would smear it across the whole frame and black it out. It tests the bits,
+ * which no compiler can assume away.
+ */
+export const STOP_NAN_GLSL = /* glsl */ `
+  if (any(equal(floatBitsToUint(gl_FragColor.rgb) & 0x7f800000u, uvec3(0x7f800000u)))) gl_FragColor.rgb = vec3(0.0);
+`;
+
 let installedFor: string | null = null;
 
 /**
  * Makes three.js's fog glow towards the sun, so fogged land and sea fade into
  * the sky's own horizon in every direction. The fog's colour stays the base
- * haze; the glow is added along each fragment's view direction. Call it before
- * the first frame is drawn; calling it again with the same sun does nothing.
+ * haze; the glow is added along each fragment's view direction. The fog comes
+ * last in every fogged material, everything but the sky, so it also stops any
+ * not-a-number colour there (see `STOP_NAN_GLSL`). Call it before the first
+ * frame is drawn; calling it again with the same sun does nothing.
  */
 export function installSunsetHaze(sun: Vector3) {
   const key = vec3(sun);
@@ -116,6 +128,7 @@ export function installSunsetHaze(sun: Vector3) {
         float fogFactor = smoothstep( fogNear, fogFar, vFogDepth );
       #endif
       gl_FragColor.rgb = mix( gl_FragColor.rgb, sunsetHaze( fogColor, vFogDirection ), fogFactor );
+      ${STOP_NAN_GLSL}
     #endif
   `;
 }
