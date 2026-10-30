@@ -173,7 +173,8 @@ describe("holding a club", () => {
     expect(holdings.length).toBeGreaterThanOrEqual(5);
     expect(holdings.filter((holding) => holding.seconds >= 10).length).toBeGreaterThanOrEqual(0.75 * holdings.length);
     expect(holdings.filter((holding) => holding.stolen).length).toBeLessThanOrEqual(0.25 * holdings.length);
-  });
+    // Eight whole races take a while: half a minute on a quiet machine, much more on a busy one.
+  }, 120_000);
 });
 
 describe("stealing a club", () => {
