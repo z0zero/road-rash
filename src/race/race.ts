@@ -39,8 +39,8 @@ import {
 } from "./fighting";
 import { footprintOfCar, footprintOfObstacle, type Footprint } from "./footprint";
 import { QUALIFYING_POSITION } from "./limits";
-import { isDroppingBack, opponentAttack, opponentIntent } from "./opponent-fighting";
-import { catchUpFor, opponentControls, paceFor, type OpponentRiding } from "./opponent-riding";
+import { isDroppingBack, opponentAttack, opponentIntent, wearPatience, wholePatience, type Patience } from "./opponent-fighting";
+import { catchUpFor, opponentControls, paceAt, paceFor, type Intent, type OpponentRiding } from "./opponent-riding";
 import { OPPONENTS, PLAYER_NAME, type Temperament } from "./opponents";
 import { createRandom } from "./random";
 import { remarkOn, type Ending, type Remark } from "./remarks";
@@ -66,8 +66,12 @@ const RUN_STRAIGHT_BACK: OnFootControls = { steer: 0, brake: 0 };
 /** A rider whose race is over stays where they are once they are on their feet. */
 const STAND_STILL: OnFootControls = { steer: 0, brake: 1 };
 
-/** Fast-forwarding races the rest of the field for at most three extra simulated minutes. */
-const FAST_FORWARD_STEPS = 180 * STEPS_PER_SECOND;
+/**
+ * Fast-forwarding races the rest of the field until the race clock reads six
+ * minutes at most: a race takes about three, so everyone who can still finish
+ * does, even after the player's race ended in its first seconds.
+ */
+const FAST_FORWARD_UNTIL_STEPS = COUNTDOWN_STEPS + 6 * 60 * STEPS_PER_SECOND;
 
 /** At the start, cars in the race direction keep at least this many metres ahead of the riders lined up for it. */
 const CLEAR_OF_THE_GRID = 60;
@@ -232,12 +236,20 @@ export interface RaceResults {
   /** Whether the player finished in third position or better. */
   readonly qualified: boolean;
   /**
-   * Every rider: finishers in finishing order, then anyone still racing when
-   * the fast-forward ran out of time, by distance, then wrecked and busted riders.
+   * Whether the standings are final: false while the rest of the field is
+   * still being raced to the finish. The player's own result above is final
+   * either way.
+   */
+  readonly complete: boolean;
+  /**
+   * Every rider: finishers in finishing order, then anyone still racing (on
+   * their way to the finish, or, once the standings are complete, still on the
+   * road when the fast-forward ran out of time), by distance, then wrecked and
+   * busted riders.
    */
   readonly standings: readonly Standing[];
-  /** A one-line remark on how the player's race went, chosen with the race's seed. */
-  readonly remark: Remark;
+  /** A one-line remark on how the player's race went, chosen with the race's seed; null until the standings are complete. */
+  readonly remark: Remark | null;
 }
 
 export interface Standing {
@@ -281,12 +293,15 @@ export interface Race {
   /** Returns and clears every event emitted since the previous call, oldest first. */
   drainEvents(): RaceEvent[];
   /**
-   * Once the player's race is over, races the rest of the field to the finish
-   * (for at most three extra simulated minutes, with the player's input
-   * released) and returns the final results. Events emitted on the way are
-   * queued as usual. Throws while the player is still racing.
+   * Once the player's race is over, races the rest of the field on towards the
+   * finish, with the player's input released, by up to `steps` steps (all the
+   * way, if not given), and returns the results as they stand: complete once
+   * every rider has finished or is out of the race, or the race clock reads six
+   * minutes. A step at a time, it can be spread over several frames. Events
+   * emitted on the way are queued as usual. Throws while the player is still
+   * racing.
    */
-  fastForward(): RaceResults;
+  fastForward(steps?: number): RaceResults;
 }
 
 interface Rider {
@@ -315,6 +330,8 @@ interface Rider {
   crash: Crash | null;
   /** Whether an opponent is badly beaten and dropping back until it has recovered. */
   droppingBack: boolean;
+  /** How long an opponent will still ride alongside the player if they ride slowly, and whether it has given up on them. */
+  readonly patience: Patience;
 }
 
 /** Where a rider is: on their bike, or wherever they are after being thrown off it. */
@@ -371,6 +388,7 @@ export function createRace(options: RaceOptions): Race {
     weapon: rider.temperament === "bully" ? "club" : null,
     crash: null,
     droppingBack: false,
+    patience: wholePatience(),
   });
   // The player starts on the start line, between the two lanes that run in the race direction.
   const riders: Rider[] = [
@@ -704,7 +722,7 @@ export function createRace(options: RaceOptions): Race {
     return new Map(ranking().map((rider, index) => [rider.id, index + 1]));
   }
 
-  function results(outcome: RaceOutcome): RaceResults {
+  function results(outcome: RaceOutcome, complete: boolean): RaceResults {
     const standing = (rider: Rider, position: number | null): Standing => ({
       rider: rider.id,
       name: rider.name,
@@ -723,8 +741,10 @@ export function createRace(options: RaceOptions): Race {
       const { temperament } = riders[rider];
       return temperament ? [{ id: rider, name, temperament, position }] : [];
     });
-    const remark = remarkOn(endingFor(outcome, position, qualified), opponents, createRandom(options.seed ^ REMARK_SEED));
-    return { outcome, time: riders[PLAYER].finishTime, position, qualified, standings, remark };
+    const remark = complete
+      ? remarkOn(endingFor(outcome, position, qualified), opponents, createRandom(options.seed ^ REMARK_SEED))
+      : null;
+    return { outcome, time: riders[PLAYER].finishTime, position, qualified, complete, standings, remark };
   }
 
   /** How the player's race ended, for the remark on it: a race that neither finished nor got them busted wrecked their bike. */
@@ -751,15 +771,21 @@ export function createRace(options: RaceOptions): Race {
         const catchUp = (rider: Rider) =>
           player.status === "racing" ? catchUpFor(rider.motion.distance - whereIs(player).distance) : 1;
         const playerToFight = player.status === "racing" && !player.crash ? player.motion : null;
+        // What each opponent is up to: brawlers and bullies lose patience with a player who rides slowly beside them.
+        const intents = new Map<Rider, Intent>();
         for (const rider of riding) {
-          if (rider.riding) rider.droppingBack = isDroppingBack(rider.droppingBack, rider.stamina);
+          if (!rider.riding || !rider.temperament) continue;
+          rider.droppingBack = isDroppingBack(rider.droppingBack, rider.stamina);
+          const intent = opponentIntent(rider.temperament, rider.motion, playerToFight, rider.droppingBack, rider.patience.gaveUp);
+          wearPatience(rider.patience, intent.alongside !== null, playerToFight?.speed ?? null, paceAt(rider.motion, rider.riding, track));
+          intents.set(rider, intent);
         }
         const carsAndObstacles = [...traffic.cars.map(footprintOfCar), ...obstacles];
         // Riders off their bikes need no controls: their bikes slide on by themselves.
         const controls = riders.map((rider) => {
           if (rider.status !== "racing" || rider.crash) return FINISHED_CONTROLS;
-          if (!rider.riding || !rider.temperament) return input;
-          const intent = opponentIntent(rider.temperament, rider.motion, playerToFight, rider.droppingBack);
+          const intent = intents.get(rider);
+          if (!rider.riding || !intent) return input;
           return opponentControls(rider.motion, rider.riding, track, everyoneOnABike, catchUp(rider), intent, carsAndObstacles);
         });
         if (player.status === "racing" && !player.crash && !player.attack && (input.punch || input.kick)) {
@@ -880,14 +906,14 @@ export function createRace(options: RaceOptions): Race {
       events = [];
       return drained;
     },
-    fastForward() {
+    fastForward(steps = Infinity) {
       const outcome = riders[PLAYER].status;
       if (outcome === "racing") {
         throw new Error("The player is still racing: fast-forward only once the player's race is over");
       }
-      const limit = stepsTaken + FAST_FORWARD_STEPS;
-      while (riders.some((rider) => rider.status === "racing") && stepsTaken < limit) race.step(NO_INPUT);
-      return results(outcome);
+      const done = () => !riders.some((rider) => rider.status === "racing") || stepsTaken >= FAST_FORWARD_UNTIL_STEPS;
+      for (let step = 0; step < steps && !done(); step++) race.step(NO_INPUT);
+      return results(outcome, done());
     },
   };
   return race;

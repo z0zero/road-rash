@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PLAYER, STEP_SECONDS, type PlayerInput, type Race, type RaceEvent, type Temperament } from ".";
+import { NO_INPUT, PLAYER, STEP_SECONDS, type PlayerInput, type Race, type RaceEvent, type Temperament } from ".";
 import {
   alongsideAn,
   alongsideARacer,
@@ -78,6 +78,34 @@ describe("opponents", () => {
   it("leave the cops alone, throwing their attacks only at riders", () => {
     expect(thrown.length).toBeGreaterThan(100);
     expect(thrown.filter((event) => event.target?.kind !== "rider")).toEqual([]);
+  });
+
+  it("give up on a player who rides well below their pace: no brawler or bully rides along with a slow player for long", () => {
+    // The player holds the throttle and never steers, so the bends carry them off the road and they ride on along the
+    // shoulder, at no more than 65 km/h most of the time.
+    const race = startedRace(1, CLOSED_ROAD);
+    const riding = { ...NO_INPUT, throttle: 1 };
+    /** Seconds each brawler and bully spent on its bike within 10 m of the player, along the track, while the player rode slowly. */
+    const secondsAlong = new Map<number, number>();
+    let slowSeconds = 0;
+    for (let step = 0; step < 120 / STEP_SECONDS; step++) {
+      race.step(riding);
+      race.drainEvents();
+      const { riders } = race.snapshot();
+      const me = riders[PLAYER];
+      if (me.speed >= 30) continue;
+      slowSeconds += STEP_SECONDS;
+      for (const rider of riders) {
+        const fighter = rider.temperament === "brawler" || rider.temperament === "bully";
+        if (fighter && rider.status === "racing" && !rider.crash && Math.abs(rider.distance - me.distance) <= 10) {
+          secondsAlong.set(rider.id, (secondsAlong.get(rider.id) ?? 0) + STEP_SECONDS);
+        }
+      }
+    }
+
+    expect(slowSeconds).toBeGreaterThan(80);
+    expect(secondsAlong.size).toBeGreaterThan(0);
+    expect(Math.max(...secondsAlong.values())).toBeLessThan(20);
   });
 
   it("attack the player often if they are brawlers or bullies", () => {
