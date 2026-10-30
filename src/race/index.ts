@@ -2,7 +2,7 @@
  * The Race module: the whole game's rules as a pure, deterministic simulation
  * in track space (ADR 0004). Import it only through this file.
  *
- *   const race = createRace({ seed });
+ *   const race = createRace({ seed, difficulty });
  *   race.step(input);          // exactly STEP_SECONDS, with the player's input
  *   race.snapshot();           // everything visible, as plain data
  *   race.drainEvents();        // what happened since the last drain
@@ -12,12 +12,14 @@
 export { createRace, NO_INPUT } from "./race";
 export { isPlayer, PLAYER } from "./riders";
 export { COP_FULL_STAMINA } from "./cops";
+export { DEFAULT_DIFFICULTY, DIFFICULTIES } from "./difficulty";
 export { COP_ALERT_RANGE, FULL_CONDITION, FULL_STAMINA, QUALIFYING_POSITION, TOP_SPEED } from "./limits";
 export { AHEAD as TRAFFIC_AHEAD, BEHIND as TRAFFIC_BEHIND, MOST_CARS } from "./traffic";
 export { STEP_SECONDS } from "./steps";
 // The renderer finds the stretch of road nearest a point of the land with the grid the track is generated with.
 export { createGroundGrid, type GroundGrid } from "./ground-grid";
 export type { PlayerInput, Race, RaceOptions } from "./race";
+export type { Difficulty } from "./difficulty";
 export type { AttackSnapshot, BikeSnapshot, CarSnapshot, CopSnapshot, RaceSnapshot, RiderSnapshot } from "./snapshot";
 export type { RaceResults, Standing } from "./results";
 export type { RiderStatus } from "./riders";
