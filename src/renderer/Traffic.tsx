@@ -13,9 +13,17 @@ import {
   Vector3,
 } from "three";
 import type { GameSession, RaceView } from "@/game/session";
-import { MOST_CARS, STEP_SECONDS, type CarKind, type CarSnapshot } from "@/race";
+import { smoothstep } from "@/math";
+import { MOST_CARS, PLAYER, STEP_SECONDS, TRAFFIC_AHEAD, type CarKind, type CarSnapshot } from "@/race";
 import { CAR_MODELS, isCarKind, paintOf } from "./car-models";
 import { InstancedMeshes } from "./InstancedMeshes";
+
+/**
+ * Cars come onto the road, and leave it, at the far end of the window around
+ * the player, which across a hairpin can be in plain view: there a car grows
+ * from nothing over this many metres of road, rather than popping in.
+ */
+const GROW_METRES = 40;
 
 /** The cars of one kind, drawn with instancing: one instance per car of that kind on the road. */
 interface CarsOfAKind {
@@ -37,7 +45,8 @@ interface CarsOfAKind {
  * saloons, vans and pickups in a few colours, each drawn between the last two
  * snapshots, facing the way it drives, nosing over as it changes lanes, and
  * pitched and tilted with the road. Their lamps glow, so the oncoming cars'
- * headlamps bloom in the dusk.
+ * headlamps bloom in the dusk. They grow into view, and shrink out of it, at
+ * the far end of the traffic's window.
  */
 export function Traffic({ session }: { session: GameSession }) {
   const kinds = useMemo(() => buildFleet(), []);
@@ -91,9 +100,12 @@ const stretch = new Vector3();
 /** Puts every car on the road where the view says it is this frame. */
 function placeCars(kinds: ReadonlyMap<CarKind, CarsOfAKind>, { track, previous, current, alpha }: RaceView) {
   for (const cars of kinds.values()) cars.drawn = 0;
+  const player = current.riders[PLAYER].distance;
   for (const car of current.traffic) {
     const cars = kinds.get(car.kind);
-    if (!cars || cars.drawn >= MOST_CARS) continue;
+    // Full size once well inside the window's far end, nothing at it.
+    const grown = smoothstep(TRAFFIC_AHEAD, TRAFFIC_AHEAD - GROW_METRES, car.distance - player);
+    if (!cars || cars.drawn >= MOST_CARS || grown === 0) continue;
     // A car that has only just come onto the road is drawn where it came on.
     const before = sameCar(previous.traffic, car.id) ?? car;
     const distance = before.distance + (car.distance - before.distance) * alpha;
@@ -109,7 +121,7 @@ function placeCars(kinds: ReadonlyMap<CarKind, CarsOfAKind>, { track, previous, 
     matrix.compose(
       position.set(at.x, at.y, at.z),
       turn.setFromEuler(angles),
-      stretch.set(car.width / cars.width, 1, car.length / cars.length),
+      stretch.set((grown * car.width) / cars.width, grown, (grown * car.length) / cars.length),
     );
     const instance = cars.drawn++;
     cars.body.setMatrixAt(instance, matrix);

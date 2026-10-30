@@ -12,7 +12,7 @@
 export { createRace, NO_INPUT, PLAYER } from "./race";
 export { COP_FULL_STAMINA } from "./cops";
 export { COP_ALERT_RANGE, FULL_CONDITION, FULL_STAMINA, QUALIFYING_POSITION, TOP_SPEED } from "./limits";
-export { MOST_CARS } from "./traffic";
+export { AHEAD as TRAFFIC_AHEAD, MOST_CARS } from "./traffic";
 export { STEP_SECONDS } from "./steps";
 export type {
   AttackSnapshot,
