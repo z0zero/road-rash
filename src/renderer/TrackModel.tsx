@@ -34,20 +34,28 @@ export function TrackModel({ track }: { track: Track }) {
   );
 }
 
+/**
+ * Metres from the road up to the middle of a gantry's banner: high enough that
+ * the chase camera, on the start line during the countdown, sees under it
+ * rather than having it fill the top of the screen.
+ */
+const BANNER_HEIGHT = 8.2;
+
 /** An arch over the road: two posts and a banner. */
 function Gantry({ track, distance, color }: { track: Track; distance: number; color: string }) {
   const at = track.pointAt(distance, 0);
   const { heading } = track.sampleAt(distance);
   const span = track.roadHalfWidth + track.shoulderWidth + 0.6;
+  const postHeight = BANNER_HEIGHT + 0.2;
   return (
     <group position={[at.x, at.y, at.z]} rotation={[0, -heading, 0]}>
       {[-span, span].map((x) => (
-        <mesh key={x} position={[x, 3.2, 0]}>
-          <boxGeometry args={[0.4, 6.4, 0.4]} />
+        <mesh key={x} position={[x, postHeight / 2, 0]}>
+          <boxGeometry args={[0.4, postHeight, 0.4]} />
           <meshStandardMaterial color="#2d2b33" />
         </mesh>
       ))}
-      <mesh position={[0, 6.2, 0]}>
+      <mesh position={[0, BANNER_HEIGHT, 0]}>
         <boxGeometry args={[2 * span + 0.4, 1.3, 0.3]} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.35} />
       </mesh>
