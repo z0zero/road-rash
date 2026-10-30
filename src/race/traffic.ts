@@ -1,4 +1,5 @@
 import type { Random } from "./random";
+import { BIKE_WIDTH, clamp } from "./riding";
 import { STEP_SECONDS } from "./steps";
 import type { Track } from "./track";
 
@@ -25,6 +26,13 @@ export const AHEAD = 600;
 const MEAN_GAP = 120;
 /** ...each car this many metres, give or take, from the one in front of it in its direction. */
 const GAP_SPREAD = 60;
+/**
+ * A car comes onto the road in a lane, or changes into one, only where no
+ * rider in that lane is nearer to it than this along the road (metres)...
+ */
+const RIDERS_ROOM = 30;
+/** ...or would come up to it, or it to them, within this many seconds. */
+const RIDERS_SECONDS = 3;
 
 /**
  * The road never holds more than this many cars at once, both ways together:
@@ -41,7 +49,7 @@ const FIRST_LANE_CHANGE = [2, 8] as const;
 const LANE_CHANGE_EVERY = [4, 10] as const;
 /** ...moving across at this many metres per second. */
 const LANE_CHANGE_SPEED = 1.8;
-/** A lane has room for a car to change into it when no car in it is nearer than this along the road (metres). */
+/** A lane has room for a car to change into it when no car in it is nearer than this along the road (metres), and the riders give it room. */
 const LANE_CHANGE_ROOM = 30;
 
 /** A car keeps this many metres, plus a second's driving, behind the car ahead of it in its lane... */
@@ -83,15 +91,26 @@ export interface Around {
   readonly speed: number;
 }
 
+/** Where a rider is on the road, which cars make room for. */
+export interface RiderOnTheRoad {
+  /** Metres along the centreline. */
+  readonly distance: number;
+  /** Metres right of the centreline. */
+  readonly offset: number;
+  /** Metres per second along the track. */
+  readonly speed: number;
+}
+
 /** The cars on the road around the player. */
 export interface Traffic {
   /** Every car on the road, in the order they came onto it. */
   readonly cars: readonly Car[];
   /**
    * Moves every car on by a step, then lets the cars that have left the
-   * window around the player go and brings new ones in at its far end.
+   * window around the player go and brings new ones in at its far end. Cars
+   * come onto the road, and change lanes, out of the way of the `riders`.
    */
-  step(player: Around): void;
+  step(player: Around, riders: readonly RiderOnTheRoad[]): void;
 }
 
 /** A closed road: no traffic at all. */
@@ -119,11 +138,14 @@ interface NextCar {
  * in each direction from 150 m behind the player to 600 m ahead. New cars
  * come onto the road only at the far end of that window, as in the original
  * game: oncoming cars whenever there is room, and cars in the race direction
- * when the player is catching them up. Cars keep their distance from the car
- * ahead of them in their lane, and some change lanes now and then. At the
- * start (the player at `player.distance`), cars in the race direction keep
- * clear of the road before `clearUntil`, where the riders line up. Every
- * choice comes from `random`.
+ * when the player is catching them up; but never right in front of a rider,
+ * so in the other lane, or later, when a rider is about to ride up to one.
+ * Cars keep their distance from the car ahead of them in their lane, and
+ * some change lanes now and then, when no car is close by in the lane they
+ * change to and no rider in it is close by or coming up to them. At the start
+ * (the player at `player.distance`), cars in the race direction keep clear of
+ * the road before `clearUntil`, where the riders line up. Every choice comes
+ * from `random`.
  */
 export function createTraffic(track: Track, random: Random, player: Around, clearUntil: number): Traffic {
   const cars: Car[] = [];
@@ -149,10 +171,12 @@ export function createTraffic(track: Track, random: Random, player: Around, clea
   };
   const next = { raceDirection: chooseNext(false), oncoming: chooseNext(true) };
 
-  /** Brings the next car in a direction onto the road at `distance`. */
-  const bringOn = (oncoming: boolean, distance: number) => {
-    const { kind, lane, speed, laneChangeIn } = oncoming ? next.oncoming : next.raceDirection;
-    const offset = lanes(oncoming)[lane];
+  /** The offset of the middle of the lane the next car in a direction is to come onto the road in. */
+  const laneOfNext = (oncoming: boolean) => lanes(oncoming)[(oncoming ? next.oncoming : next.raceDirection).lane];
+
+  /** Brings the next car in a direction onto the road at `distance`, in the lane at `offset` (its own lane, unless given). */
+  const bringOn = (oncoming: boolean, distance: number, offset = laneOfNext(oncoming)) => {
+    const { kind, speed, laneChangeIn } = oncoming ? next.oncoming : next.raceDirection;
     cars.push({
       id: nextId++,
       kind: kind.kind,
@@ -170,19 +194,33 @@ export function createTraffic(track: Track, random: Random, player: Around, clea
     else next.raceDirection = chooseNext(false);
   };
 
+  /**
+   * Whether the `riders` give a car `distance` along the track, driving at
+   * `velocity` (m/s along the track), room to come into the lane whose middle
+   * is at `lane`: no rider in that lane is close to it, or would come up to
+   * it, or it to them, within `RIDERS_SECONDS`.
+   */
+  const ridersGiveRoom = (riders: readonly RiderOnTheRoad[], distance: number, lane: number, velocity: number) =>
+    riders.every((rider) => {
+      const ahead = rider.distance - distance;
+      const closing = ahead > 0 ? velocity - rider.speed : rider.speed - velocity;
+      const near = Math.abs(ahead) < Math.max(RIDERS_ROOM, closing * RIDERS_SECONDS);
+      return !near || Math.abs(rider.offset - lane) >= track.laneWidth / 2 + BIKE_WIDTH / 2;
+    });
+
   /** A car whose time has come moves over to its direction's other lane if there is room in it; otherwise it tries again next step. */
-  const changeLanes = (car: Car) => {
+  const changeLanes = (car: Car, riders: readonly RiderOnTheRoad[]) => {
     if (car.laneChangeIn === Infinity || --car.laneChangeIn > 0) return;
     const [near, far] = lanes(car.oncoming);
     const other = car.lane === near ? far : near;
-    const room = cars.every(
+    const carsGiveRoom = cars.every(
       (them) =>
         them === car ||
         them.oncoming !== car.oncoming ||
         Math.abs(them.distance - car.distance) >= LANE_CHANGE_ROOM ||
         Math.abs(them.offset - other) >= (them.width + car.width) / 2,
     );
-    if (!room) return;
+    if (!carsGiveRoom || !ridersGiveRoom(riders, car.distance, other, velocityOf(car))) return;
     car.lane = other;
     car.laneChangeIn = stepsBetween(LANE_CHANGE_EVERY);
   };
@@ -220,9 +258,9 @@ export function createTraffic(track: Track, random: Random, player: Around, clea
 
   return {
     cars,
-    step(player) {
+    step(player, riders) {
       for (const car of cars) {
-        changeLanes(car);
+        changeLanes(car, riders);
         keepDistance(car);
       }
       for (const car of cars) {
@@ -241,12 +279,15 @@ export function createTraffic(track: Track, random: Random, player: Around, clea
         if (!oncoming && (speed >= player.speed || player.distance + AHEAD >= track.length)) continue;
         let furthest = -Infinity;
         for (const car of cars) if (car.oncoming === oncoming) furthest = Math.max(furthest, car.distance);
-        if (front - furthest >= gap && cars.length < MOST_CARS) bringOn(oncoming, front);
+        if (front - furthest < gap || cars.length >= MOST_CARS) continue;
+        // Never in front of a rider: in its own lane, or else the other, where the riders give it room.
+        const velocity = oncoming ? -speed : speed;
+        const own = laneOfNext(oncoming);
+        const offset = [own, ...lanes(oncoming).filter((lane) => lane !== own)].find((lane) =>
+          ridersGiveRoom(riders, front, lane, velocity),
+        );
+        if (offset !== undefined) bringOn(oncoming, front, offset);
       }
     },
   };
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
 }
