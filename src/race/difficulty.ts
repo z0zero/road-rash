@@ -1,6 +1,6 @@
 /**
- * How hard the opponents make a race: Easy for a first race, Normal, which is
- * v1.0.0's race, and Hard for players who have qualified on Normal. A
+ * How hard the opponents make a race: Easy for a first race, Normal, tuned as
+ * v1.0.0 was, and Hard for players who have qualified on Normal. A
  * difficulty changes only how the opponents ride and fight; the track, the
  * traffic and the cops are the same on every one.
  */
@@ -39,10 +39,16 @@ export interface DifficultyTuning {
   readonly catchUp: CatchUp;
 }
 
-/** Each difficulty's tuning. Normal's numbers are v1.0.0's. */
+/**
+ * Each difficulty's tuning. Normal's numbers are v1.0.0's. Easy's and Hard's
+ * were tuned with the play-tests' bots over 24 seeds: on Easy a novice
+ * (riding at 75% of a safe pace) finishes mid-field and is seldom alone, and
+ * an average rider (85%) usually qualifies; on Hard an expert qualifies now
+ * and then.
+ */
 export const DIFFICULTY_TUNING: Readonly<Record<Difficulty, DifficultyTuning>> = {
   easy: {
-    pace: 0.94,
+    pace: 0.89,
     attacks: 0.5,
     breatherSeconds: 5,
     unansweredHits: 2,
@@ -56,10 +62,10 @@ export const DIFFICULTY_TUNING: Readonly<Record<Difficulty, DifficultyTuning>> =
     catchUp: { near: 75, far: 400, most: 0.08 },
   },
   hard: {
-    pace: 1.04,
-    attacks: 1.5,
-    breatherSeconds: 2,
-    unansweredHits: 4,
+    pace: 1.07,
+    attacks: 2,
+    breatherSeconds: 1,
+    unansweredHits: 6,
     catchUp: { near: 75, far: 400, most: 0.08 },
   },
 };
