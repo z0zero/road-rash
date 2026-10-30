@@ -26,11 +26,11 @@ See ADR 0004.
 
 ## React and rendering
 
-- No React state updates in the frame loop. Per-frame changes, such as HUD numbers and object transforms, go through refs. React state changes only on discrete events, such as a screen change.
+- No React state updates in the frame loop. Per-frame changes, such as HUD numbers and object transforms, go through refs. React state changes only on discrete events, such as a screen change. The one exception is the performance monitor's quality level (`Scene.tsx`): drei's monitor calls back from the frame loop, but only on the rare frames the quality steps up or down. Don't copy it for anything that changes more often.
 - Build three.js objects once (in `useMemo`), and change them per frame through refs or in plain functions that `useFrame` calls; the React Compiler's lint rules reject mutating a memoized value inside the component itself. **(lint)**
 - Don't allocate in the frame loop when reusing an object is easy.
 - Motion that can make players dizzy (camera shake, motion blur, speed lines) checks the Reduce motion setting.
-- Touch browser APIs (`window`, `document`, `localStorage`, `navigator`) only in client code, inside effects or event handlers. The site is prerendered as a static export.
+- Touch browser APIs (`window`, `document`, `localStorage`, `navigator`) only in client code, inside effects or event handlers. The site is prerendered as a static export. Two places may also read them while rendering, because the prerender never runs them: a `useSyncExternalStore` snapshot that has a server snapshot for the prerender, and a component loaded only in the browser with `dynamic(…, { ssr: false })`, such as `Game` and everything it renders.
 - Every effect that adds a listener, loop or timer removes it in its cleanup. Strict Mode runs effects twice in development.
 
 ## TypeScript

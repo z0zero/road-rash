@@ -25,6 +25,9 @@ export const FULL_THROTTLE: PlayerInput = { ...NO_INPUT, throttle: 1 };
 /** Sets a race up on a closed road, with no traffic. */
 export const CLOSED_ROAD = { traffic: false } as const;
 
+/** Sets a race up with no cops, so that nobody is busted. */
+export const NO_COPS = { cops: false } as const;
+
 /** km/h in metres per second. */
 export function kmh(value: number) {
   return value / 3.6;
@@ -318,19 +321,20 @@ export function nearestOpponent(race: Race, temperament?: Temperament): RiderId 
 /**
  * A started race in which the player has ridden up alongside a racer (an
  * opponent who rarely attacks): the racer is the nearest rider within reach.
+ * The race is set up with `options` besides the seed.
  */
-export function alongsideARacer(seed = 1) {
-  return alongsideAn("racer", seed);
+export function alongsideARacer(seed = 1, options: Omit<RaceOptions, "seed"> = {}) {
+  return alongsideAn("racer", seed, options);
 }
 
 /**
  * A started race in which the player has ridden up alongside the opponent of
  * a temperament who lined up nearest them: that opponent is the nearest rider
  * within reach. The race is on a closed road, so that no car comes between
- * them.
+ * them, and set up with `options` besides.
  */
-export function alongsideAn(temperament: Temperament, seed = 1) {
-  const race = startedRace(seed, CLOSED_ROAD);
+export function alongsideAn(temperament: Temperament, seed = 1, options: Omit<RaceOptions, "seed"> = {}) {
+  const race = startedRace(seed, { ...CLOSED_ROAD, ...options });
   const target = nearestOpponent(race, temperament);
   const input = rideAlongside(race, target);
   const racerNearest = () => {
@@ -384,4 +388,56 @@ export function chase(race: Race, target: RiderId, closing: number) {
       brake: me.speed > wanted + 1 ? 0.5 : 0,
     };
   };
+}
+
+/** Metres between two things in track space: along the track and across it. */
+export const apart = (a: { distance: number; offset: number }, b: { distance: number; offset: number }) =>
+  Math.hypot(a.distance - b.distance, a.offset - b.offset);
+
+/**
+ * Scripted input that rides the player up alongside the first cop, 1.4 m to
+ * its side (towards the middle of the road) and level with it, and holds them
+ * there. It closes in on the cop at no more than 5 m/s.
+ */
+function rideAlongsideTheFirstCop(race: Race) {
+  let lastOffset = player(race).offset;
+  return (): PlayerInput => {
+    const me = player(race);
+    const cop = race.snapshot().cops[0];
+    const sideways = (me.offset - lastOffset) / STEP_SECONDS;
+    lastOffset = me.offset;
+    const lane = cop.offset + (cop.offset > 0 ? -1.4 : 1.4);
+    const closing = Math.max(-5, Math.min(5, 0.8 * (cop.distance - me.distance)));
+    const wanted = Math.max(0, cop.speed + closing);
+    return {
+      ...NO_INPUT,
+      steer: Math.max(-1, Math.min(1, 0.8 * (lane - me.offset) - 0.25 * sideways)),
+      throttle: me.speed < wanted ? 1 : 0,
+      brake: me.speed > wanted + 0.5 ? Math.min(1, (me.speed - wanted) / 3) : 0,
+    };
+  };
+}
+
+/**
+ * A started race on a closed road in which the player has passed the first
+ * cop, so that it has joined the race, and ridden up alongside it: the cop is
+ * within the reach of a punch, and nearer the player than any rider.
+ */
+export function alongsideTheFirstCop(seed = 1) {
+  const race = startedRace(seed, CLOSED_ROAD);
+  const waitingAt = race.snapshot().cops[0].distance;
+  secondsUntil(race, autopilot(race), () => player(race).distance >= waitingAt, 120);
+  const input = rideAlongsideTheFirstCop(race);
+  const withinReach = () => {
+    const { riders, cops } = race.snapshot();
+    const me = riders[PLAYER];
+    const cop = cops[0];
+    const reached = Math.abs(cop.offset - me.offset) <= 1.8 && Math.abs(cop.distance - me.distance) <= 2;
+    const riding = riders.filter((rider) => rider.id !== PLAYER && rider.status === "racing" && !rider.crash);
+    const nearer = riding.some((rider) => apart(rider, me) <= apart(cop, me));
+    return reached && !nearer;
+  };
+  secondsUntil(race, input, withinReach, 30);
+  race.drainEvents();
+  return { race, input };
 }

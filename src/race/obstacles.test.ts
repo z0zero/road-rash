@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { NO_INPUT, PLAYER, type ObstaclePlacement, type PlayerInput, type Race, type RaceEvent } from ".";
-import { autopilot, eventsDuring, eventsUntil, player, secondsUntil, startedRace, stepFor, STEPS_PER_SECOND } from "./test-helpers";
+import {
+  autopilot,
+  eventsDuring,
+  eventsUntil,
+  NO_COPS,
+  player,
+  secondsUntil,
+  startedRace,
+  stepFor,
+  STEPS_PER_SECOND,
+} from "./test-helpers";
 
 type Crash = Extract<RaceEvent, { type: "crash" }>;
 const playerCrashed = (event: RaceEvent): event is Crash => event.type === "crash" && event.rider === PLAYER;
@@ -21,9 +31,13 @@ function rideInto(race: Race, obstacle: ObstaclePlacement, speed: number) {
   };
 }
 
-/** A started race in which the field has ridden off, leaving the player on their own on the start line, and the first obstacle of a kind ahead of them. */
+/**
+ * A started race in which the field has ridden off, leaving the player on
+ * their own on the start line, and the first obstacle of a kind ahead of
+ * them. There are no cops, who would bust the player for crashing into it.
+ */
 function onTheirOwn(isKind: (obstacle: ObstaclePlacement) => boolean) {
-  const race = startedRace();
+  const race = startedRace(1, NO_COPS);
   stepFor(race, 40);
   const obstacle = race.track.obstacles.find((other) => isKind(other) && other.distance > player(race).distance + 100);
   if (!obstacle) throw new Error("no such obstacle");

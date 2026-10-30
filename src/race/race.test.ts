@@ -4,6 +4,7 @@ import {
   autopilot,
   FULL_THROTTLE,
   kmh,
+  NO_COPS,
   player,
   secondsUntil,
   startedRace,
@@ -208,7 +209,11 @@ describe("riding", () => {
   });
 });
 
-/** Rides a started race to the finish line, returning the race clock just before the crossing step. */
+/**
+ * Rides a started race to the finish line, returning the race clock just
+ * before the crossing step. Give it a race with no cops: the player crashes
+ * in traffic now and then, and a cop nearby would bust them.
+ */
 function rideToTheFinish(race: Race) {
   const pilot = autopilot(race);
   let clockBefore = 0;
@@ -222,7 +227,7 @@ function rideToTheFinish(race: Race) {
 
 describe("the finish", () => {
   it("ends the player's race when they cross the finish line", () => {
-    const race = startedRace();
+    const race = startedRace(1, NO_COPS);
 
     const clockBefore = rideToTheFinish(race);
 
@@ -240,7 +245,7 @@ describe("the finish", () => {
   });
 
   it("lets the finished bike coast to a stop before the road runs out, whatever the input", () => {
-    const race = startedRace();
+    const race = startedRace(1, NO_COPS);
     rideToTheFinish(race);
     race.drainEvents();
 
@@ -264,7 +269,7 @@ describe("fast-forwarding to the results", () => {
   });
 
   it("gives the final results once the player's race is over", () => {
-    const race = startedRace();
+    const race = startedRace(1, NO_COPS);
     rideToTheFinish(race);
     const { finishTime: time, position } = player(race);
 
