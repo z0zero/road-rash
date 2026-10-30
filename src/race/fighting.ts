@@ -1,8 +1,11 @@
 import type { Cop } from "./cops";
+import { crash, throwOff } from "./crashing";
 import type { AttackKind, RiderOrCop } from "./events";
-import type { Rider } from "./riders";
+import { breatherAfterHitting } from "./opponent-fighting";
+import { copsInTheRace, onTheirBikes, type RaceState } from "./race-state";
+import { PLAYER, type Rider } from "./riders";
 import type { Motion } from "./riding";
-import { stepsIn } from "./steps";
+import { STEP_SECONDS, stepsIn } from "./steps";
 import { TUNING } from "./tuning";
 
 /** Anyone who fights: a rider, or a cop. */
@@ -89,4 +92,120 @@ export function nearestWithinReach<T extends { readonly motion: Readonly<Motion>
     }
   }
   return nearest;
+}
+
+/** Stamina starts recovering once a rider has gone this many steps without being hit. */
+const RECOVERY_DELAY_STEPS = stepsIn(TUNING.staminaRecoveryDelay);
+
+/** Whether a fighter is in a fight: on their bike in the race. */
+function canFight(fighter: Fighter) {
+  return fighter.kind === "rider" ? fighter.status === "racing" && !fighter.crash : fighter.status === "riding";
+}
+
+/** Whom a fighter's attacks can land on: riders on their bikes, and cops in the race too for a rider. */
+export function targetsFor(race: RaceState, attacker: Fighter): Fighter[] {
+  return attacker.kind === "rider" ? [...onTheirBikes(race), ...copsInTheRace(race)] : onTheirBikes(race);
+}
+
+/** A fighter's punch: a club holder swings their club instead. */
+export function punchOf(fighter: Fighter): AttackKind {
+  return fighter.weapon === "club" ? "club-swing" : "punch";
+}
+
+/**
+ * Starts an attack's wind-up, aimed at the nearest rider or cop within reach
+ * (if any): towards them, or else to the right. A punch from a club holder
+ * is a club swing.
+ */
+export function throwAttack(race: RaceState, attacker: Fighter, thrown: AttackKind) {
+  const kind = thrown === "punch" ? punchOf(attacker) : thrown;
+  const target = nearestWithinReach(attacker.motion, targetsFor(race, attacker), kind);
+  attacker.attack = {
+    kind,
+    steps: 0,
+    side: target ? awayFrom(attacker.motion, target.motion) : 1,
+    thrownMidSwingAt: target && isMidSwing(target.attack) ? who(target) : null,
+  };
+  race.events.push({ type: "attack-thrown", attacker: who(attacker), target: target && who(target), kind });
+}
+
+/** Moves every attack on by a step: each strikes at the end of its wind-up and is over after its recovery. */
+export function advanceAttacks(race: RaceState) {
+  for (const attacker of [...race.riders, ...race.cops]) {
+    const attack = attacker.attack;
+    if (!attack) continue;
+    attack.steps++;
+    if (attack.steps === windUpSteps(attack.kind) && canFight(attacker)) {
+      const target = nearestWithinReach(attacker.motion, targetsFor(race, attacker), attack.kind);
+      if (target) {
+        attack.side = awayFrom(attacker.motion, target.motion);
+        land(race, attacker, target, attack);
+      }
+    }
+    if (attack.steps >= attackSteps(attack.kind)) attacker.attack = null;
+  }
+}
+
+function land(race: RaceState, attacker: Fighter, target: Fighter, { kind, thrownMidSwingAt }: Attack) {
+  race.events.push({ type: "attack-landed", attacker: who(attacker), target: who(target), kind });
+  // An opponent whose hit lands on a player who doesn't fight it back gives them a breather before its next attack.
+  if (attacker.kind === "rider" && target.kind === "rider") {
+    if (attacker.id === PLAYER) target.stepsSinceThePlayerHitIt = 0;
+    else if (target.id === PLAYER) attacker.breatherSteps = breatherAfterHitting(attacker.stepsSinceThePlayerHitIt);
+  }
+  takeTheClub(race, attacker, target, thrownMidSwingAt);
+  const { stamina, shove } = TUNING.attacks[kind];
+  // A kick shoves its target sideways, away from the attacker.
+  if (shove > 0) target.motion.kickShove = awayFrom(attacker.motion, target.motion) * shove;
+  // A hit on a rider or cop with no stamina left knocks them off their bike.
+  if (target.stamina <= 0) {
+    if (target.kind === "rider") crash(race, target, "knocked-off", target.motion.speed);
+    else knockOff(race, target);
+  }
+  target.stamina = Math.max(0, target.stamina - stamina);
+  target.stepsSinceHit = 0;
+  if (target.kind === "cop" && attacker.kind === "rider" && target.status === "riding") fightBack(race, target, attacker);
+}
+
+/**
+ * Any hit a rider throws at another rider winding up a club swing (`thrownMidSwingAt` them) takes the club, and the
+ * swing, if it hasn't struck, never does. Cops neither take clubs nor lose them.
+ */
+function takeTheClub(race: RaceState, attacker: Fighter, target: Fighter, thrownMidSwingAt: RiderOrCop | null) {
+  const intoTheSwing = thrownMidSwingAt?.kind === target.kind && thrownMidSwingAt.id === target.id;
+  if (attacker.kind === "rider" && target.kind === "rider" && intoTheSwing && target.weapon === "club") {
+    target.weapon = null;
+    target.attack = null;
+    attacker.weapon = "club";
+    race.events.push({ type: "weapon-stolen", from: who(target), by: who(attacker) });
+  }
+}
+
+/** Knocks a cop off their bike and out of the race for good, dropping their club. */
+function knockOff(race: RaceState, cop: Cop) {
+  race.events.push({ type: "cop-knocked-off", cop: cop.id, impactSpeed: cop.motion.speed });
+  cop.status = "knocked-off";
+  cop.crash = throwOff(cop.motion);
+  cop.attack = null;
+  cop.weapon = null;
+  cop.busting = null;
+  cop.fightingBack = null;
+}
+
+/** A cop hit by a rider fights back against them, until a while after it was last hit. */
+function fightBack(race: RaceState, cop: Cop, rider: Rider) {
+  if (cop.fightingBack !== rider.id) race.events.push({ type: "cop-retaliating", cop: cop.id, target: rider.id });
+  cop.fightingBack = rider.id;
+  cop.fightingBackSteps = stepsIn(TUNING.cops.fightingBackSeconds);
+}
+
+/** Riders and cops who have gone long enough without being hit get their stamina back, a little every step. */
+export function recoverStamina(race: RaceState) {
+  for (const fighter of [...race.riders, ...race.cops]) {
+    fighter.stepsSinceHit++;
+    if (fighter.stepsSinceHit > RECOVERY_DELAY_STEPS) {
+      const full = fighter.kind === "rider" ? TUNING.fullStamina : TUNING.cops.fullStamina;
+      fighter.stamina = Math.min(full, fighter.stamina + TUNING.staminaRecovery * STEP_SECONDS);
+    }
+  }
 }
