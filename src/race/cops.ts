@@ -4,7 +4,7 @@ import type { Attack, Weapon } from "./fighting";
 import type { Footprint } from "./footprint";
 import { lineAround, safeSpeedAt, type BendLimits } from "./opponent-riding";
 import { clamp, maxSidewaysSpeed, type Motion } from "./riding";
-import { STEP_SECONDS } from "./steps";
+import { STEP_SECONDS, stepsIn } from "./steps";
 import type { Track } from "./track";
 import { TUNING } from "./tuning";
 
@@ -46,6 +46,10 @@ export interface Cop {
   standingBySteps: number;
   /** Whether the cop is in the race near the player, as the race last said with cop-near or cop-gone. */
   near: boolean;
+  /** Whether it is the cop's turn to follow the player; otherwise it holds back, well out of their way. */
+  following: boolean;
+  /** Steps the cop has still to follow the player for, unless something happens. */
+  followingSteps: number;
 }
 
 /** The cops, each waiting on the right-hand shoulder at its waiting point, fresh. */
@@ -68,6 +72,8 @@ export function lineUpCops(track: Track): Cop[] {
     busting: null,
     standingBySteps: 0,
     near: false,
+    following: false,
+    followingSteps: 0,
   }));
 }
 
@@ -99,16 +105,14 @@ const EDGE_MARGIN = 0.8;
 const COP_LIMITS: BendLimits = { topSpeed: TUNING.cops.topSpeed, grip: 0.95, braking: 16 };
 /** Cops slow for what lies this many seconds ahead, to allow for the time braking takes to bite. */
 const BRAKING_LEAD = 0.3;
-/** On patrol, a cop rides at this share of the fastest it can safely go... */
-const PATROL_PACE = 0.93;
-/** ...while it is no more than this many metres behind the player; further behind, it rides flat out to catch them up... */
-const PATROL_BEHIND = 60;
-/** ...and while it is no more than this many metres ahead of them; further ahead, it eases off to let them come up... */
-const PATROL_AHEAD = 20;
-/** ...riding slower than them by this many metres per second for every metre beyond that... */
-const PATROL_EASING = 0.5;
-/** ...up to this many. */
-const PATROL_MOST_EASING = 20;
+/** A cop following the player rides about this many seconds behind them: further back the faster they ride... */
+const FOLLOW_SECONDS = 1;
+/** ...faster than them by this many m/s for every metre it is further back, flat out if need be, or slower for every metre nearer... */
+const FOLLOW_GAIN = 1;
+/** ...but no more than this many m/s slower. */
+const FOLLOW_MOST_EASING = 20;
+/** A cop holding back keeps about this many metres behind the player, well out of their way. */
+const HOLD_BACK_GAP = 400;
 
 /** Cops pull away hard, at up to this many m/s²... */
 const ACCELERATION = 14;
@@ -129,49 +133,57 @@ const HURRIED_LINE_RESPONSE = 4;
 const HURRIED_LINE_CHANGE_SPEED = 7;
 /** A cop riding to bust a crashed rider pulls up this many metres to their side, nearer the middle of the road... */
 const PULL_UP_BESIDE = 1.2;
-/** ...slowing as it gets there to stop by them, as if braking at this rate (m/s²). */
+/** ...slowing as it gets there to stop by them, as if braking at this rate (m/s²)... */
 const PULL_UP_BRAKING = 12;
+/** ...and, for the last this many metres, to an arrest pace... */
+const ARREST_STRETCH = 30;
+/** ...riding no faster than this (m/s)... */
+const ARREST_PACE = 13;
+/** ...which it brakes down to at this rate (m/s²). */
+const ARREST_BRAKING = 12;
 
 /**
- * Where a cop on patrol rides: near the player, who can't outride it. It
- * rides at its own pace, a little short of flat out, while it is between
- * `PATROL_BEHIND` metres behind the player and `PATROL_AHEAD` ahead, so it
- * drops back behind a player who rides fast and comes past one who rides
- * slowly. Further behind, it rides flat out, up to its top speed, to catch
- * them up; further ahead, it eases off to let them come up. It keeps to its
- * lane, finding its way around the riders on the road (`field`, the motions
- * of everyone on their bikes) and the cars and obstacles on it as opponents
- * do, hurrying out of the way of one it is about to run into.
+ * Where a cop on patrol rides: behind the player, `FOLLOW_SECONDS` back
+ * while it is following them, coming up to one who stops, or else
+ * `HOLD_BACK_GAP` metres back, well out of their way. Further back than that, it rides faster than
+ * them, flat out if need be, up to its top speed, to catch them up; nearer,
+ * it eases off to let them get ahead. It keeps to its lane, finding its way
+ * around the riders on the road (`field`, the motions of everyone on their
+ * bikes) and the cars and obstacles on it as opponents do, hurrying out of
+ * the way of one it is about to run into.
  */
 export function patrolIntent(
   me: Readonly<Motion>,
   player: Place,
+  following: boolean,
   track: Track,
   field: readonly Readonly<Motion>[],
   carsAndObstacles: readonly Footprint[],
 ): CopIntent {
   const edge = track.roadHalfWidth - EDGE_MARGIN;
   const safe = safeSpeedAt(track, me.distance + me.speed * BRAKING_LEAD, COP_LIMITS);
-  const ahead = me.distance - player.distance;
-  let speed = PATROL_PACE * safe;
-  if (-ahead > PATROL_BEHIND) speed = safe;
-  else if (ahead > PATROL_AHEAD) {
-    speed = Math.min(speed, player.speed - Math.min(PATROL_MOST_EASING, PATROL_EASING * (ahead - PATROL_AHEAD)));
-  }
+  const behind = player.distance - me.distance;
+  const gap = following ? FOLLOW_SECONDS * Math.max(0, player.speed) : HOLD_BACK_GAP;
+  const speed = Math.min(safe, player.speed + Math.max(-FOLLOW_MOST_EASING, FOLLOW_GAIN * (behind - gap)));
   const { line, holdBehind, evading } = lineAround(me, PATROL_LINE, field, carsAndObstacles, edge);
   return { speed: clamp(Math.min(speed, holdBehind), 0, TUNING.cops.topSpeed), line, hurrying: evading };
 }
 
 /**
  * Where a cop rides to bust a crashed rider, who is at `rider` (tumbling
- * along the road or on foot): to them, slowing as it gets there to pull up
- * beside them, on the side nearer the middle of the road. If they are behind
- * it, it stops and rides back down the road to them. Offsets stay within
- * `edge`.
+ * along the road or on foot): to them, at no more than an arrest pace over
+ * the last `ARREST_STRETCH` metres of the way, and slowing as it gets there to
+ * pull up beside them, on the side nearer the middle of the road. So a rider
+ * who crashes near a cop is caught, and one who crashes further off has a
+ * chance to get back on their bike first. If they are behind it, it stops and
+ * rides back down the road to them. Offsets stay within `edge`.
  */
 export function bustingIntent(me: Readonly<Motion>, rider: Place, edge: number): CopIntent {
   const gap = rider.distance - me.distance;
-  const speed = rider.speed + Math.sign(gap) * Math.sqrt(2 * PULL_UP_BRAKING * Math.abs(gap));
+  const far = Math.abs(gap);
+  const arrestPace = ARREST_PACE + Math.sqrt(2 * ARREST_BRAKING * Math.max(0, far - ARREST_STRETCH));
+  const pullingUp = rider.speed + Math.sign(gap) * Math.sqrt(2 * PULL_UP_BRAKING * far);
+  const speed = clamp(pullingUp, -arrestPace, arrestPace);
   const line = rider.offset - (rider.offset >= 0 ? 1 : -1) * PULL_UP_BESIDE;
   return { speed, line: clamp(line, -edge, edge), hurrying: true };
 }
@@ -237,4 +249,46 @@ export function moveCop(motion: Motion, intent: CopIntent, edge: number): void {
   motion.distance += motion.speed * STEP_SECONDS;
   motion.offset = clamp(motion.offset + (motion.steering + motion.shove) * STEP_SECONDS, -edge, edge);
   motion.shove *= Math.exp(-TUNING.shoveDecay * STEP_SECONDS);
+}
+
+/** A cop follows the player for this many seconds near them after anything last happened to it (a crash it rode to, a fight)... */
+const FOLLOWING_STEPS = stepsIn(30);
+/** ...then falls back, and no cop comes to follow them again for this many seconds. */
+const BREAK_STEPS = stepsIn(80);
+
+/** The cops' turns at following the player: one at a time, with a break between turns. */
+export interface Rota {
+  /** Steps until a cop comes to follow the player again. */
+  breakSteps: number;
+}
+
+/**
+ * Moves the cops' turns at following the player on by a step. The cop
+ * following them follows them for `FOLLOWING_STEPS` near them (as the race
+ * last said), counted from when it was last `busy` (riding to bust someone,
+ * fighting back or standing by a rider it busted), then falls back; so does
+ * one knocked out of the race. Either way
+ * a break follows, and then the cop in the race nearest the player comes to
+ * follow them. The first cop to join the race follows them at once; others
+ * hold back while it does, or during a break.
+ */
+export function takeTurns(cops: readonly Cop[], rota: Rota, player: Place, busy: (cop: Cop) => boolean): void {
+  for (const cop of cops) {
+    if (!cop.following) continue;
+    if (cop.status !== "riding") cop.following = false;
+    else if (busy(cop)) cop.followingSteps = FOLLOWING_STEPS;
+    else if (cop.near && --cop.followingSteps <= 0) cop.following = false;
+    if (!cop.following) rota.breakSteps = BREAK_STEPS;
+  }
+  if (cops.some((cop) => cop.following)) return;
+  if (rota.breakSteps > 0) {
+    rota.breakSteps--;
+    return;
+  }
+  const next = cops
+    .filter((cop) => cop.status === "riding")
+    .sort((a, b) => Math.abs(a.motion.distance - player.distance) - Math.abs(b.motion.distance - player.distance))[0];
+  if (!next) return;
+  next.following = true;
+  next.followingSteps = FOLLOWING_STEPS;
 }
