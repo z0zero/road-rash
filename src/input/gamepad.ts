@@ -1,29 +1,53 @@
 import { clamp } from "@/math";
 import { NO_INPUT, type PlayerInput } from "@/race";
+import type { Control } from "./bindings";
 import { Presses } from "./presses";
 
-// Buttons and axes of the standard gamepad mapping (https://w3c.github.io/gamepad/#remapping),
-// buttons named as on an Xbox controller: A is the bottom face button, B the right one, X the left one.
-const A = 0;
-const B = 1;
-const X = 2;
-const LEFT_TRIGGER = 6;
-const RIGHT_TRIGGER = 7;
-const START = 9;
-const D_PAD: Readonly<Record<Direction, number>> = { up: 12, down: 13, left: 14, right: 15 };
+/**
+ * A gamepad's control: a button of the standard mapping
+ * (https://w3c.github.io/gamepad/#remapping), or its left stick or D-pad, with
+ * its name on screen. Buttons are named as on an Xbox controller: A is the
+ * bottom face button, B the right one and X the left one.
+ */
+export type PadControl =
+  | { readonly button: number; readonly name: string }
+  | { readonly stick: "left"; readonly name: string }
+  | { readonly dPad: true; readonly name: string };
+
+const A = { button: 0, name: "A" } as const;
+const B = { button: 1, name: "B" } as const;
+const X = { button: 2, name: "X" } as const;
+const LEFT_TRIGGER = { button: 6, name: "Left trigger" } as const;
+const RIGHT_TRIGGER = { button: 7, name: "Right trigger" } as const;
+const START = { button: 9, name: "Start" } as const;
+const LEFT_STICK = { stick: "left", name: "Left stick" } as const;
+const D_PAD = { dPad: true, name: "D-pad" } as const;
+/** The D-pad's buttons, by the way each points. */
+const D_PAD_BUTTONS: Readonly<Record<Direction, number>> = { up: 12, down: 13, left: 14, right: 15 };
 /** The left stick: across, -1 is full left and 1 full right; up and down, -1 is full up and 1 full down. */
 const LEFT_STICK_X = 0;
 const LEFT_STICK_Y = 1;
 
-/** How the screens name the controls above for each thing they do. */
-export const GAMEPAD_NAMES = {
-  throttle: ["Right trigger", "A"],
-  brake: ["Left trigger"],
-  steer: ["Left stick", "D-pad"],
-  punch: ["X"],
-  kick: ["B"],
-  pause: ["Start"],
-} as const satisfies Record<string, readonly string[]>;
+/**
+ * The gamepad's controls for each thing the player does, any one of which
+ * will do: the gamepad reads them from here, and the Controls screen names
+ * them from here. Throttle and brake are pulled as far as the furthest of
+ * theirs is (a button is all or nothing); the others are pressed.
+ */
+export const GAMEPAD: { readonly [C in Control]: readonly PadControl[] } = {
+  throttle: [RIGHT_TRIGGER, A],
+  brake: [LEFT_TRIGGER],
+  steer: [LEFT_STICK, D_PAD],
+  punch: [X],
+  kick: [B],
+  pause: [START],
+};
+
+/** Getting round the screens with a gamepad: what moves between their buttons, and what presses one. */
+export const GAMEPAD_MENUS: { readonly move: readonly PadControl[]; readonly press: readonly PadControl[] } = {
+  move: [D_PAD, LEFT_STICK],
+  press: [A],
+};
 
 /** The left stick steers only once pushed this far from the middle, so a stick that doesn't quite centre doesn't drift. */
 const STICK_DEAD_ZONE = 0.15;
@@ -129,16 +153,16 @@ export function listenToGamepads(target: Window, handlers: GamepadHandlers): Gam
         seen.set(pad.index, now);
         // Without focus, only what the gamepad is doing is kept, so that a button held all along isn't taken for a new press.
         if (!focused) continue;
-        throttle = Math.max(throttle, triggerPull(pad, RIGHT_TRIGGER), now.pressed[A] ? 1 : 0);
-        brake = Math.max(brake, triggerPull(pad, LEFT_TRIGGER));
+        throttle = Math.max(throttle, pullOf(pad, GAMEPAD.throttle));
+        brake = Math.max(brake, pullOf(pad, GAMEPAD.brake));
         steer += steeringOf(pad, now);
         // A gamepad seen for the first time is compared with one doing nothing, so what it is holding counts as
         // just pressed: browsers show a gamepad to the page only once one of its buttons is pressed, and that press
         // should do what it says, not just wake the gamepad.
-        if (justPressed(X, now, before)) presses.press("punch");
-        if (justPressed(B, now, before)) presses.press("kick");
-        if (justPressed(START, now, before)) handlers.onPause();
-        if (justPressed(A, now, before)) handlers.onMenuPress();
+        if (anyJustPressed(GAMEPAD.punch, now, before)) presses.press("punch");
+        if (anyJustPressed(GAMEPAD.kick, now, before)) presses.press("kick");
+        if (anyJustPressed(GAMEPAD.pause, now, before)) handlers.onPause();
+        if (anyJustPressed(GAMEPAD_MENUS.press, now, before)) handlers.onMenuPress();
         for (const direction of DIRECTIONS) {
           if (isPointing(now, direction) && !isPointing(before, direction)) handlers.onMenuMove(direction);
         }
@@ -163,9 +187,19 @@ export function listenToGamepads(target: Window, handlers: GamepadHandlers): Gam
   };
 }
 
-/** Whether `button` is down `now`, and wasn't `before`. */
-function justPressed(button: number, now: PadState, before: Readonly<PadState>): boolean {
-  return now.pressed[button] && !before.pressed[button];
+/** Whether any of the buttons among `controls` is down `now`, and wasn't `before`. */
+function anyJustPressed(controls: readonly PadControl[], now: PadState, before: Readonly<PadState>): boolean {
+  for (const control of controls) {
+    if ("button" in control && now.pressed[control.button] && !before.pressed[control.button]) return true;
+  }
+  return false;
+}
+
+/** How far the furthest pulled of the buttons among `controls` is pulled, from 0 to 1, past their dead zone. */
+function pullOf(pad: Gamepad, controls: readonly PadControl[]): number {
+  let pull = 0;
+  for (const control of controls) if ("button" in control) pull = Math.max(pull, triggerPull(pad, control.button));
+  return pull;
 }
 
 /**
@@ -190,7 +224,7 @@ function triggerPull(pad: Gamepad, trigger: number): number {
 
 /** Steering from -1 (full left) to 1 (full right): the D-pad if it is pressed, otherwise the left stick past its dead zone. */
 function steeringOf(pad: Gamepad, state: PadState): number {
-  const dPad = (state.pressed[D_PAD.right] ? 1 : 0) - (state.pressed[D_PAD.left] ? 1 : 0);
+  const dPad = (state.pressed[D_PAD_BUTTONS.right] ? 1 : 0) - (state.pressed[D_PAD_BUTTONS.left] ? 1 : 0);
   if (dPad !== 0) return dPad;
   const across = pad.axes[LEFT_STICK_X] ?? 0;
   const beyond = Math.abs(across) - STICK_DEAD_ZONE;
@@ -214,5 +248,5 @@ function isPushed(push: number, wasPushed: boolean): boolean {
 
 /** Whether a gamepad points `direction`, on its D-pad or with its left stick. */
 function isPointing(state: Readonly<PadState>, direction: Direction): boolean {
-  return Boolean(state.pressed[D_PAD[direction]]) || state.stick[direction];
+  return Boolean(state.pressed[D_PAD_BUTTONS[direction]]) || state.stick[direction];
 }
