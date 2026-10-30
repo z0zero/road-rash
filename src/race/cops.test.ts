@@ -447,7 +447,7 @@ describe("busting", () => {
     expect(them().status).toBe("racing");
   });
 
-  it("leaves alone a rider who crashes more than 80 m from it: a cop following the player then pulls over until they are back on their bike", () => {
+  it("leaves alone a rider who crashes more than 80 m from it: a cop following the player then pulls over onto the shoulder until they are back on their bike", () => {
     // Following 1.5 s behind a player riding 54 m/s or more, the cop is over 80 m behind them.
     const { race, cop, speed, behind } = crashedAtSpeedAheadOfTheFollowingCop([5, 4, 6, 2]);
     expect(speed).toBeGreaterThanOrEqual(54);
@@ -469,6 +469,8 @@ describe("busting", () => {
     // Stopped within 3 s of the crash, it stayed put while they ran back to their bike, and never rode up to them.
     expect(moving).toEqual([]);
     expect(player(race).distance - cop().distance).toBeGreaterThan(10);
+    // It waited on the shoulder, clear of the road, out of the field's way.
+    expect(Math.abs(cop().offset)).toBeGreaterThan(race.track.roadHalfWidth + 0.4);
   });
 
   it("ends the player's race as Busted, which the results say", () => {
@@ -490,6 +492,16 @@ describe("busting", () => {
     expect(results.standings).toContainEqual({ rider: PLAYER, name: "You", status: "busted", position: null, time: null });
     const firstUnplaced = results.standings.findIndex((standing) => standing.position === null);
     expect(results.standings.slice(firstUnplaced).every((standing) => standing.position === null)).toBe(true);
+  });
+
+  it("has the cop stand by a rider it has busted on the shoulder, clear of the road, out of the field's way", () => {
+    const { race, input, cop } = racerKnockedOffJustPastTheFirstCop();
+    eventsUntil(race, input, (event) => event.type === "busted", 10);
+
+    eventsDuring(race, 3, input);
+
+    expect(cop().speed).toBeLessThan(0.5);
+    expect(Math.abs(cop().offset)).toBeGreaterThan(race.track.roadHalfWidth + 0.4);
   });
 
   it("takes a busted opponent out of the race for good, with no position", () => {
@@ -582,6 +594,22 @@ describe("cops on the road", () => {
 
     expect(copSteps).toBeGreaterThan(90 * STEPS_PER_SECOND);
     expect(through).toEqual([]);
+  });
+});
+
+describe("cops on the road, as the opponents see them", () => {
+  it("are slowed down for in time and ridden round, as a slower car is: no opponent runs into a cop pulling out to join the race, or riding slowly", () => {
+    const intoACop: string[] = [];
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      // The player rides on past the cops, so that each pulls out in front of the field coming up behind them.
+      const race = startedRace(seed);
+      eventsDuring(race, 150, autopilot(race)).forEach((event) => {
+        if (event.type === "crash" && event.cause === "cop" && event.rider !== PLAYER) intoACop.push(`seed ${seed}: rider ${event.rider}`);
+      });
+      expect(player(race).distance).toBeGreaterThan(race.snapshot().cops[0].distance);
+    }
+
+    expect(intoACop).toEqual([]);
   });
 });
 

@@ -114,7 +114,7 @@ export interface Traffic {
   readonly cars: readonly Car[];
   /**
    * Moves every car on by a step, then lets the cars that have left the
-   * window around the player go and brings new ones in at its far end. Cars
+   * window around the player go and brings new ones in at its ends. Cars
    * come onto the road, and change lanes, out of the way of the `riders`, and
    * slow down behind a slower one on their bike.
    */
@@ -144,10 +144,12 @@ interface NextCar {
  * Traffic on `track` around the player: cars in the race direction in the two
  * right lanes and oncoming cars in the two left lanes, about one car per 120 m
  * in each direction from 150 m behind the player to 600 m ahead. New cars
- * come onto the road only at the far end of that window, as in the original
+ * come onto the road at the far end of that window, as in the original
  * game: oncoming cars whenever there is room, and cars in the race direction
- * when the player is catching them up; but never right in front of a rider,
- * so in the other lane, or later, when a rider is about to ride up to one.
+ * when the player is catching them up; cars in the race direction that the
+ * player isn't catching up come on at its near end instead, behind them, and
+ * catch them up. Never right in front of a rider, though: in the other lane,
+ * or later, when a rider is about to ride up to one.
  * Cars keep their distance from the car ahead of them in their lane, and
  * cars in the race direction from a slower rider on their bike ahead of them
  * too. Some change lanes now and then, when no car is close by in the lane they
@@ -325,19 +327,24 @@ export function createTraffic(track: Track, random: Random, player: Around, clea
 
       for (const oncoming of [false, true]) {
         const { gap, speed } = oncoming ? next.oncoming : next.raceDirection;
-        // A car in the race direction comes into the window only if the player is catching it up, and never at the road's end.
-        if (!oncoming && (speed >= player.speed || player.distance + AHEAD >= track.length)) continue;
-        let furthest = -Infinity;
-        for (const car of cars) if (car.oncoming === oncoming) furthest = Math.max(furthest, car.distance);
-        if (front - furthest < gap || cars.length >= MOST_CARS) continue;
+        // A car in the race direction comes into the window where the player will meet it: at its far end if the player
+        // is catching it up, and never at the road's end; otherwise at its near end, behind them, to catch them up.
+        const behind = !oncoming && speed >= player.speed;
+        if (!oncoming && !behind && player.distance + AHEAD >= track.length) continue;
+        const at = behind ? back : front;
+        let nearest = behind ? Infinity : -Infinity;
+        for (const car of cars) {
+          if (car.oncoming === oncoming) nearest = behind ? Math.min(nearest, car.distance) : Math.max(nearest, car.distance);
+        }
+        if (Math.abs(at - nearest) < gap || cars.length >= MOST_CARS) continue;
         // Never in front of a rider, or a fallen rock: in its own lane, or else the other, where there is room.
         const velocity = oncoming ? -speed : speed;
         const { kind } = oncoming ? next.oncoming : next.raceDirection;
         const own = laneOfNext(oncoming);
         const offset = [own, ...lanes(oncoming).filter((lane) => lane !== own)].find(
-          (lane) => ridersGiveRoom(riders, front, lane, velocity) && !rockAhead({ oncoming, ...kind }, front, lane),
+          (lane) => ridersGiveRoom(riders, at, lane, velocity) && !rockAhead({ oncoming, ...kind }, at, lane),
         );
-        if (offset !== undefined) bringOn(oncoming, front, offset);
+        if (offset !== undefined) bringOn(oncoming, at, offset);
       }
     },
   };
