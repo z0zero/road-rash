@@ -11,7 +11,7 @@ import {
   TRAFFIC_AHEAD,
   type Race,
 } from ".";
-import { autopilot, kmh, NO_COPS, startedRace, STEPS_PER_SECOND } from "./test-helpers";
+import { autopilot, kmh, NO_COPS, startedRace, STEPS_PER_SECOND, WHOLE_RACES } from "./test-helpers";
 
 describe("the race's limits, which the game shows", () => {
   it("are a bike's top speed: 225 km/h", () => {
@@ -59,7 +59,7 @@ describe("the race's limits, which the game shows", () => {
     return most;
   }
 
-  it("are the most cars the road ever holds at once, whether the player rides flat out or stands still", () => {
+  it("are the most cars the road ever holds at once, whether the player rides flat out or stands still", WHOLE_RACES, () => {
     const flatOut = startedRace(1, NO_COPS);
     const standingStill = startedRace(2, NO_COPS);
 

@@ -14,6 +14,7 @@ import {
   type PlayerInput,
   type Race,
   type RaceEvent,
+  type RaceSnapshot,
   type RiderId,
   type RiderSnapshot,
   type Moving,
@@ -40,6 +41,13 @@ export type AttackThrown = Extract<RaceEvent, { type: "attack-thrown" }>;
 export type Crash = Extract<RaceEvent, { type: "crash" }>;
 export const isCrash = (event: RaceEvent): event is Crash => event.type === "crash";
 export const playerCrashed = (event: RaceEvent): event is Crash => isCrash(event) && event.rider === PLAYER;
+
+/**
+ * The time limit of a test that rides whole races, or most of one: a race
+ * takes a few seconds on a quiet machine and several times as long on a busy
+ * one, so these get far more than the 30 s every other test gets.
+ */
+export const WHOLE_RACES = { timeout: 300_000 } as const;
 
 /** Sets a race up on a closed road, with no traffic. */
 export const CLOSED_ROAD: TestSetup = { traffic: false };
@@ -104,16 +112,17 @@ export function secondsUntil(
 export function autopilot(race: Race, { targetSpeed = Infinity, lane = 0 } = {}) {
   let lastOffset = player(race).offset;
   return (): PlayerInput => {
-    const { riders, traffic } = race.snapshot();
-    const me = riders[PLAYER];
+    // One snapshot a step: everything below reads it.
+    const snapshot = race.snapshot();
+    const me = snapshot.riders[PLAYER];
     const sideways = (me.offset - lastOffset) / STEP_SECONDS;
     lastOffset = me.offset;
-    let wanted = Math.min(targetSpeed, bendSpeed(race));
+    let wanted = Math.min(targetSpeed, bendSpeed(race, me));
     // What it must not steer across, what it can follow until it gets past, and what ahead it may have to slow down for.
     const keepOut: KeepOut[] = [];
     const following: Stretch[] = [];
     const ahead: { readonly offset: number; readonly halfWidth: number; readonly velocity: number; readonly room: number }[] = [];
-    for (const thing of thingsOnTheRoad(race, riders, traffic)) {
+    for (const thing of thingsOnTheRoad(race, snapshot)) {
       const gap = thing.distance - me.distance;
       const reach = thing.halfLength + 1;
       const closing = me.speed - thing.velocity;
@@ -136,16 +145,16 @@ export function autopilot(race: Race, { targetSpeed = Infinity, lane = 0 } = {})
     }
     return {
       ...NO_INPUT,
-      steer: steerTowards(race, line, sideways),
+      steer: steerTowards(race, line, sideways, me),
       throttle: me.speed < wanted - 0.5 ? 1 : 0,
       brake: me.speed > wanted + 1 ? Math.min(1, (me.speed - wanted) / 4) : 0,
     };
   };
 }
 
-/** The fastest the player can ride now and still slow down in time for the bends in the next 200 m. */
-export function bendSpeed(race: Race): number {
-  const { distance } = player(race);
+/** The fastest the player (`me`, as the race's snapshot has them now) can ride and still slow down in time for the bends in the next 200 m. */
+export function bendSpeed(race: Race, me: Moving = player(race)): number {
+  const { distance } = me;
   let fastest = Infinity;
   for (let ahead = 0; ahead <= 200; ahead += 5) {
     const curvature = Math.abs(race.track.sampleAt(distance + ahead).curvature);
@@ -156,12 +165,12 @@ export function bendSpeed(race: Race): number {
 }
 
 /**
- * Steering that moves the player towards `line`, allowing for how hard the
- * bend pushes the bike outwards and how far steering reaches, with the bike
- * moving across the road at `sideways` (m/s) now.
+ * Steering that moves the player (`me`, as the race's snapshot has them now)
+ * towards `line`, allowing for how hard the bend pushes the bike outwards and
+ * how far steering reaches, with the bike moving across the road at
+ * `sideways` (m/s) now.
  */
-export function steerTowards(race: Race, line: number, sideways: number): number {
-  const me = player(race);
+export function steerTowards(race: Race, line: number, sideways: number, me: Moving = player(race)): number {
   const share = me.speed / 62.5;
   const reach = Math.max(1, Math.min(1.6 * me.speed, 8 - 3.5 * share * share));
   const push = -0.3 * me.speed * me.speed * race.track.sampleAt(me.distance).curvature;
@@ -182,17 +191,17 @@ interface KeepOut {
 
 /**
  * The other riders' bikes (ridden, or lying where they slid to, to be got back
- * on any moment), the cops' bikes, the cars and the obstacles: where they
- * are, how fast they go along the track (m/s), and half their size.
+ * on any moment), the cops' bikes, the cars and the obstacles, as the race's
+ * `snapshot` has them: where they are, how fast they go along the track
+ * (m/s), and half their size.
  */
-function thingsOnTheRoad(race: Race, riders: readonly RiderSnapshot[], traffic: readonly CarSnapshot[]) {
+function thingsOnTheRoad(race: Race, { riders, cops, traffic }: RaceSnapshot) {
   return [
     ...riders
       .filter((rider) => rider.id !== PLAYER && rider.status === "racing")
       .map(({ bike: { distance, offset, speed } }) => ({ distance, offset, velocity: speed, halfLength: 1, halfWidth: 0.4 })),
-    ...race
-      .snapshot()
-      .cops.filter((cop) => cop.status !== "knocked-off")
+    ...cops
+      .filter((cop) => cop.status !== "knocked-off")
       .map(({ bike: { distance, offset, speed } }) => ({ distance, offset, velocity: speed, halfLength: 1, halfWidth: 0.4 })),
     ...carsAndObstacles(race.track, traffic),
   ];

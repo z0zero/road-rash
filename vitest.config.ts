@@ -9,7 +9,8 @@ export default defineConfig({
     include: ["src/**/*.test.ts"],
     exclude: [...configDefaults.exclude, ".claude/**", "e2e/**", "out/**", ".next/**"],
     environment: "node",
-    // Race tests simulate whole races, with their traffic, step by step: give them time on a busy machine.
+    // Race tests simulate races, with their traffic, step by step: give them time on a busy machine. Those that ride
+    // whole races take far longer, and say so with a time limit of their own (`WHOLE_RACES` in the test helpers).
     testTimeout: 30_000,
   },
 });

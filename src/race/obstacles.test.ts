@@ -11,6 +11,7 @@ import {
   rideInto,
   secondsUntil,
   stepFor,
+  WHOLE_RACES,
 } from "./test-helpers";
 
 
@@ -52,7 +53,7 @@ describe("an obstacle", () => {
     expect(player(race).distance).toBeGreaterThan(distance);
   });
 
-  it("crashes a rider who rides into a fallen rock on the road", () => {
+  it("crashes a rider who rides into a fallen rock on the road", WHOLE_RACES, () => {
     const { race, obstacle } = onTheirOwn((other) => other.kind === "fallen-rock");
     // Up to it like a careful rider, round the traffic, then straight at it for the last few metres.
     secondsUntil(race, autopilot(race), () => player(race).distance > obstacle.distance - 40, 300);
