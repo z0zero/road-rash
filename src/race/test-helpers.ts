@@ -466,3 +466,15 @@ export function alongsideTheFirstCop(seed = 1) {
   race.drainEvents();
   return { race, input };
 }
+
+/**
+ * A started race on a closed road in which the player has ridden to within
+ * `before` metres of the first cop, waiting on the shoulder.
+ */
+export function nearingTheWaitingCop(before: number, seed = 1) {
+  const race = startedRace(seed, CLOSED_ROAD);
+  const waitingAt = race.snapshot().cops[0].distance;
+  secondsUntil(race, autopilot(race), () => player(race).distance >= waitingAt - before, 120);
+  race.drainEvents();
+  return { race, cop: () => race.snapshot().cops[0] };
+}
