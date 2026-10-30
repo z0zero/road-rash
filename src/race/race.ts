@@ -16,8 +16,8 @@ import { PLAYER, whereIs } from "./riders";
 import { ride, type Controls } from "./riding";
 import { snapshotOf, type RaceSnapshot } from "./snapshot";
 import { STEP_SECONDS, STEPS_PER_SECOND } from "./steps";
-import type { Track } from "./track";
-import { CLOSED_ROAD, createTraffic, type RiderOrCopOnTheRoad, type Traffic } from "./traffic";
+import type { Track, TrackPosition } from "./track";
+import { CLOSED_ROAD, createTraffic, parkedCars, type RiderOrCopOnTheRoad, type Traffic } from "./traffic";
 
 /** Once over the finish line, a rider lets go of the throttle and brakes to a stop. */
 const FINISHED_CONTROLS: Controls = { throttle: 0, brake: 0.7, steer: 0 };
@@ -73,6 +73,12 @@ export interface TestSetup {
   readonly playerCondition?: number;
   /** Whether cars drive on the road (the default). Without them, the race runs on a closed road. */
   readonly traffic?: boolean;
+  /**
+   * Cars standing still on the road, where a test puts them, so that it can
+   * put one in a rider's way. The road is closed to every other car, and
+   * these never move.
+   */
+  readonly parkedCars?: readonly TrackPosition[];
   /** Whether cops wait along the track to join the race (the default). Without them, nobody is busted. */
   readonly cops?: boolean;
 }
@@ -169,8 +175,9 @@ export function setUpRace({ seed, difficulty = DEFAULT_DIFFICULTY }: RaceOptions
   const track = getCoastalTrack();
   const tuning = DIFFICULTY_TUNING[difficulty];
   const riders = lineUpRiders(track, random, tuning, setup.playerCondition);
-  const traffic: Traffic =
-    setup.traffic === false
+  const traffic: Traffic = setup.parkedCars
+    ? parkedCars(setup.parkedCars)
+    : setup.traffic === false
       ? CLOSED_ROAD
       : createTraffic(
           track,

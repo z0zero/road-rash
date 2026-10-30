@@ -113,7 +113,7 @@ A rider off their bike after a crash, once they have stopped tumbling along the 
 _Avoid_: Running, walking, dismounted
 
 **Knock-down**:
-A car running into a rider on foot and throwing them to the ground: they tumble again, then get up and carry on back to their bike. It is not a crash, so it costs their bike nothing. Not a knock-off, which a hit does.
+A car driving into a rider on foot and throwing them to the ground: they tumble again, then get up and carry on back to their bike. It is not a crash, so it costs their bike nothing. Not a knock-off, which a hit does. Only a car closing in on them along its own way, at over 1 m/s, knocks them down: one standing still, or going slower than them, that they run into only pushes them clear of it, and they go round it.
 _Avoid_: Run over, hit
 
 **Wrecked**:
@@ -173,7 +173,7 @@ One of the traffic's cars: a hatchback, saloon, van or pickup, driving in the ra
 _Avoid_: Vehicle, NPC
 
 **Closed road**:
-A road with no traffic, which a test can set a race up on; the game's races always run in traffic.
+A road with no traffic, which a test can set a race up on, with cars parked where it puts them if it needs one in a rider's way; the game's races always run in traffic.
 _Avoid_: Empty road, private road
 
 **Traffic**:

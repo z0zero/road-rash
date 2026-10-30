@@ -11,7 +11,9 @@ import {
   NO_COPS,
   player,
   playerCrashed,
+  rideInto,
   secondsUntil,
+  setUpRace,
   startedRace,
   steerOnto,
   steerTowards,
@@ -540,7 +542,60 @@ function standingInTheOncomingLane(seeds = [1, 4, 2, 3]) {
   throw new Error(`the player never stood in the oncoming lane on foot in seeds ${seeds.join(", ")}`);
 }
 
+/**
+ * A started race with no cops, on a road closed to every car but one pulled
+ * over onto the shoulder 5 m past the first roadside sign at least 100 m
+ * ahead of the player's start line, in which the field has ridden off and the
+ * player has ridden into the sign at about 15 m/s: their bike stops against
+ * it, and they are thrown on past it and the car. Returns the car.
+ */
+function thrownPastAParkedCar() {
+  const { track } = setUpRace({ seed: 1 }, CLOSED_ROAD);
+  const sign = track.obstacles.find((obstacle) => obstacle.kind === "sign" && obstacle.distance > track.startDistance + 100);
+  if (!sign) throw new Error("no sign near the start");
+  const race = leftOnTheirOwn(1, { ...NO_COPS, parkedCars: [{ distance: sign.distance + 5, offset: track.roadHalfWidth + 1.5 }] });
+  eventsUntil(race, rideInto(race, sign, 15), playerCrashed, 60);
+  const [car] = race.snapshot().traffic;
+  return { race, car };
+}
+
 describe("a rider on foot", () => {
+  it("is pushed clear of a car standing still that they run into on the way back to their bike, never knocked down by it", () => {
+    const { race, car } = thrownPastAParkedCar();
+    /** When the rider on foot touched the car and was inside it, when they were knocked down, and when they got to their feet. */
+    const touching: number[] = [];
+    const inside: number[] = [];
+    const knockedDown: number[] = [];
+    let onTheirFeet = Infinity;
+
+    // The rider tumbles to a stop past the car, then runs straight back to their bike behind it.
+    secondsUntil(
+      race,
+      NO_INPUT,
+      () => {
+        const me = player(race);
+        const { clock } = race.snapshot();
+        if (race.drainEvents().some((event) => event.type === "knocked-down")) knockedDown.push(clock);
+        if (me.crash !== "on-foot") return me.crash === null;
+        onTheirFeet = Math.min(onTheirFeet, clock);
+        // A rider on foot takes up about 0.6 m either way.
+        const along = Math.abs(car.distance - me.distance) - car.length / 2 - 0.3;
+        const across = Math.abs(car.offset - me.offset) - car.width / 2 - 0.3;
+        if (along < 0.05 && across < 0.05) touching.push(clock);
+        if (along < -0.02 && across < -0.02) inside.push(clock);
+        return false;
+      },
+      10,
+    );
+
+    expect(touching.length).toBeGreaterThan(0);
+    expect(knockedDown).toEqual([]);
+    expect(inside).toEqual([]);
+    // Round it and back on their bike about as soon as with nothing in the way: 9 m or so at a run.
+    expect(race.snapshot().clock - onTheirFeet).toBeLessThan(2.5);
+    expect(race.snapshot().traffic).toEqual([car]);
+  });
+
   it("is knocked down by a car that runs into them: they tumble again, at no cost to their bike", () => {
     const { race, standing } = standingInTheOncomingLane();
     const condition = player(race).condition;
