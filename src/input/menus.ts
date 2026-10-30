@@ -8,8 +8,11 @@ import type { Direction } from "./gamepad";
  * count while one is open; otherwise the whole page's, as on the title screen.
  */
 
-/** What can take the focus on the game's screens. */
-const FOCUSABLE = "button:not(:disabled), a[href], input:not(:disabled)";
+/**
+ * What a gamepad can move the focus to on the game's screens: buttons and
+ * sliders, not links, which open pages a gamepad can't get back from.
+ */
+const FOCUSABLE = "button:not(:disabled), input:not(:disabled)";
 
 /** Focus that a gamepad moves shows its ring, as focus the keyboard moves does. */
 const SHOW_FOCUS: FocusOptions & { focusVisible: boolean } = { focusVisible: true };
@@ -30,10 +33,10 @@ export function moveThroughMenu(document: Document, direction: Direction) {
   items[next].focus(SHOW_FOCUS);
 }
 
-/** Presses the button or link in focus, if any: during a race nothing is in focus, so nothing happens. */
+/** Presses the button in focus, if any: during a race nothing is in focus, so nothing happens. */
 export function pressInMenu(document: Document) {
   const focused = document.activeElement;
-  if (focused instanceof HTMLButtonElement || focused instanceof HTMLAnchorElement) focused.click();
+  if (focused instanceof HTMLButtonElement) focused.click();
 }
 
 /** Turns a slider one step, as its arrow keys would, and says so as they would, so React's onChange hears it. */
