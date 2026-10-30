@@ -80,8 +80,12 @@ function fragmentShader(sun: Vector3) {
         float near = (0.004 + 0.06 * pow(ridge(around, 5.5, 11.0), 1.8)) * inlandness;
         vec3 farColor = mix(sunsetHaze(haze, direction), vec3(0.42, 0.23, 0.36), 0.38);
         vec3 nearColor = mix(sunsetHaze(haze, direction), vec3(0.22, 0.12, 0.22), 0.55);
-        color = mix(color, farColor, smoothstep(far + 0.002, far - 0.002, up));
-        color = mix(color, nearColor, smoothstep(near + 0.002, near - 0.002, up));
+        // They stand on the horizon at eye level, their feet lost in the haze. Below it, the sky
+        // shows only where the draw distance cuts off the land or the sea, and there it is haze in
+        // every direction, as the fog has it, not a wall of hill.
+        float standing = smoothstep(-0.03, 0.005, up);
+        color = mix(color, farColor, smoothstep(far + 0.002, far - 0.002, up) * standing);
+        color = mix(color, nearColor, smoothstep(near + 0.002, near - 0.002, up) * standing);
       }
 
       // The sun's disc and a bright halo: far brighter than white, so they bloom.
