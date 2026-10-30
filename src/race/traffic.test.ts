@@ -13,6 +13,7 @@ import {
   playerCrashed,
   secondsUntil,
   startedRace,
+  steerOnto,
   steerTowards,
   STEPS_PER_SECOND,
   WHOLE_RACES,
@@ -49,14 +50,12 @@ function behindACar(seed = 1) {
 }
 
 /**
- * A started race with no cops in which the player, riding with the
- * autopilot, has come up to a car going their way that stands still in the
- * road, as cars do short of the fallen rock near 4 km while they can't change
- * lanes, and has run into the middle of its back at about 15 m/s while it
- * still stood there; returns the car's id. The first of `seeds` in which
- * that happens.
+ * A started race with no cops, ridden with the autopilot until a car going
+ * the riders' way stands still in the road 20 to 200 m ahead of the player,
+ * as cars do short of the fallen rock near 4 km while they can't change
+ * lanes; returns the car's id. The first of `seeds` in which one does.
  */
-function rearEndedAStoppedCar(seeds = [10, 16]) {
+function behindAStoppedCar(seeds = [10, 16]) {
   for (const seed of seeds) {
     const race = startedRace(seed, NO_COPS);
     const pilot = autopilot(race);
@@ -71,8 +70,28 @@ function rearEndedAStoppedCar(seeds = [10, 16]) {
     };
     secondsUntil(race, pilot, standingAhead, 300);
     race.drainEvents();
-    if (!stopped) continue;
-    const car = stopped.id;
+    if (stopped) return { race, car: stopped.id, pilot };
+  }
+  throw new Error(`no car stood still ahead of the player in seeds ${seeds.join(", ")}`);
+}
+
+/**
+ * A started race with no cops in which the player, riding with the
+ * autopilot, has come up to a car going their way that stands still in the
+ * road, as cars do short of the fallen rock near 4 km while they can't change
+ * lanes, and has run into the middle of its back at about 15 m/s while it
+ * still stood there; returns the car's id. The first of `seeds` in which
+ * that happens.
+ */
+function rearEndedAStoppedCar(seeds = [10, 16]) {
+  for (const seed of seeds) {
+    let found;
+    try {
+      found = behindAStoppedCar([seed]);
+    } catch {
+      continue;
+    }
+    const { race, car, pilot } = found;
     eventsUntil(race, rideIntoTheBackOf(race, car, 15, pilot), playerCrashed, 60);
     if (carOf(race, car)?.speed === 0) return { race, car };
   }
@@ -255,6 +274,32 @@ describe("traffic", () => {
 
     expect(queued).toBeGreaterThanOrEqual(2);
     expect([...new Set(inEachOther.map((entry) => entry.split(": ")[1]))]).toEqual([]);
+  });
+
+  it("pulls out round a rider standing still behind it while it waits short of the fallen rock, rather than wait for good", WHOLE_RACES, () => {
+    // The player comes up behind a car waiting short of the fallen rock near 4 km and stops just behind its back, a
+    // little to its right, in the other lane, the one it is waiting for room in.
+    const { race, car } = behindAStoppedCar();
+    let lastOffset = player(race).offset;
+    const stopBehindIt = (): PlayerInput => {
+      const me = player(race);
+      const sideways = (me.offset - lastOffset) / STEP_SECONDS;
+      lastOffset = me.offset;
+      const them = carOf(race, car);
+      if (!them) return { ...NO_INPUT, brake: 1 };
+      const room = them.distance - them.length / 2 - 2 - me.distance;
+      return steerOnto(me, them.offset + 1.25, Math.min(15, Math.sqrt(2 * 4 * Math.max(0, room))), sideways);
+    };
+    secondsUntil(race, stopBehindIt, () => player(race).speed < 0.1 && carOf(race, car)?.speed === 0, 60);
+    const them = carOf(race, car);
+    const me = player(race);
+    expect(them).toBeDefined();
+    expect((them?.distance ?? NaN) - (them?.length ?? NaN) / 2 - me.distance).toBeGreaterThan(1);
+    expect(Math.abs(me.offset - (them?.offset ?? NaN))).toBeLessThan(2);
+
+    const waited = secondsUntil(race, { ...NO_INPUT, brake: 1 }, () => (carOf(race, car)?.speed ?? Infinity) > 1, 60);
+
+    expect(waited).toBeLessThan(20);
   });
 
   it("stays off a closed road", () => {
@@ -476,14 +521,29 @@ function standIn(race: Race, where: () => number) {
   };
 }
 
-describe("a rider on foot", () => {
-  it("is knocked down by a car that runs into them: they tumble again, at no cost to their bike", () => {
-    const { race, car } = behindACar(4);
+/**
+ * A started race in which the player has crashed into the back of a car,
+ * got to their feet and run across the road into the nearer oncoming lane,
+ * where they stand still, on foot (the first of `seeds` in which they get
+ * there without passing close enough to their bike to get back on it); and
+ * the input that keeps them standing there.
+ */
+function standingInTheOncomingLane(seeds = [1, 4, 2, 3]) {
+  for (const seed of seeds) {
+    const { race, car } = behindACar(seed);
     eventsUntil(race, chaseCar(race, car, 12), playerCrashed);
     secondsUntil(race, { ...NO_INPUT, brake: 1 }, () => player(race).crash === "on-foot", 3);
-    const condition = player(race).condition;
-    // The player gets into the nearer oncoming lane and stands still there until a car comes along it.
     const standing = standIn(race, () => -race.track.laneWidth / 2);
+    secondsUntil(race, standing, () => player(race).crash !== "on-foot" || standing().brake === 1, 10);
+    if (player(race).crash === "on-foot") return { race, standing };
+  }
+  throw new Error(`the player never stood in the oncoming lane on foot in seeds ${seeds.join(", ")}`);
+}
+
+describe("a rider on foot", () => {
+  it("is knocked down by a car that runs into them: they tumble again, at no cost to their bike", () => {
+    const { race, standing } = standingInTheOncomingLane();
+    const condition = player(race).condition;
     let standingStill = false;
     const waiting = () => {
       const input = standing();
