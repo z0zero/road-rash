@@ -40,12 +40,12 @@ export function catchUpFor(gap: number): number {
 const CORNER_GRIP = 0.78;
 /** ...and plan to brake for the bends ahead at this rate (m/s²), short of the bike's full braking. */
 const PLANNED_BRAKING = 8;
-/** Opponents brake for what lies this many seconds ahead, to allow for the time braking takes to bite. */
-const BRAKING_LEAD = 0.3;
+/** Opponents, and cops, brake for what lies this many seconds ahead, to allow for the time braking takes to bite. */
+export const BRAKING_LEAD = 0.3;
 /** How hard an opponent opens the throttle per m/s below the speed it wants, and brakes per m/s above it. */
 const THROTTLE_PER_SPEED = 0.5;
 const BRAKE_PER_SPEED = 0.25;
-/** How quickly an opponent steers back to its line (1/s)... */
+/** How quickly an opponent, or a cop, steers back to its line (1/s)... */
 const LINE_RESPONSE = 1.5;
 /** ...at up to this many metres per second sideways. */
 const LINE_CHANGE_SPEED = 4;
@@ -55,8 +55,8 @@ const APEX_LOOK_AHEAD = 0.7;
 const APEX_SHIFT_PER_CURVATURE = 120;
 /** ...by up to this many metres. */
 const MAX_APEX_SHIFT = 2;
-/** Opponents keep their line at least this far inside the road's edges (metres). */
-const EDGE_MARGIN = 0.8;
+/** Opponents, and cops, keep their line at least this far inside the road's edges (metres). */
+export const EDGE_MARGIN = 0.8;
 /** Opponents pass other riders with this many metres between their offsets... */
 const PASSING_CLEARANCE = 1.6;
 /** ...looking this many seconds ahead for riders they are catching. */
@@ -84,7 +84,10 @@ const ONCOMING_LOOK_AHEAD = 3;
 const CROSSING_TIME = 1.5;
 /** An opponent shoved sideways by a kick faster than this (m/s) rides the kick out before it steers back to its line. */
 const RIDING_OUT_A_KICK = 1;
-/** Getting out of the way of a car or an obstacle, an opponent steers this much more quickly to its line (1/s)... */
+/**
+ * Getting out of the way of a car or an obstacle, an opponent steers this
+ * much more quickly to its line (1/s), and so does a cop in a hurry...
+ */
 const EVASIVE_RESPONSE = 4;
 /** ...at up to this many metres per second sideways. */
 const EVASIVE_SPEED = 6;
@@ -100,7 +103,7 @@ export interface Intent {
 /** Just racing. */
 export const RACING: Intent = { alongside: null, paceShare: 1 };
 
-/** An opponent riding alongside a rider to fight them keeps this many metres to their side, within reach... */
+/** An opponent, or a cop, riding alongside a rider to fight them keeps this many metres to their side, within reach... */
 const FIGHTING_GAP = 1.4;
 /** ...closing in on them along the track at this many metres per second for every metre between them... */
 const LEVEL_GAIN = 0.8;
@@ -130,24 +133,19 @@ export function opponentControls(
   const bendAhead = track.sampleAt(motion.distance + motion.speed * APEX_LOOK_AHEAD).curvature;
   const apexShift = clamp(bendAhead * APEX_SHIFT_PER_CURVATURE, -MAX_APEX_SHIFT, MAX_APEX_SHIFT);
   const racingLine = clamp(riding.lane + apexShift, -edge, edge);
-  const { alongside } = intent;
-  const wantedLine = alongside ? lineBeside(motion, alongside, edge) : racingLine;
-  const { line, holdBehind, evading } = lineAround(motion, wantedLine, field, carsAndObstacles, edge);
+  const level = intent.alongside ? levelWith(motion, intent.alongside, edge) : null;
+  const { line, holdBehind, evading } = lineAround(motion, level ? level.line : racingLine, field, carsAndObstacles, edge);
 
   const safe = safeSpeedAt(track, motion.distance + motion.speed * BRAKING_LEAD);
   let wanted = Math.min(riding.pace * intent.paceShare * catchUp * Math.min(TUNING.topSpeed, safe), holdBehind);
-  if (alongside) {
-    const closing = clamp(LEVEL_GAIN * (alongside.distance - motion.distance), -MAX_CLOSING, MAX_CLOSING);
-    wanted = Math.min(wanted, Math.max(0, alongside.speed + closing));
-  }
+  if (level) wanted = Math.min(wanted, level.speed);
   const throttle = clamp((wanted - motion.speed) * THROTTLE_PER_SPEED, 0, 1);
   const brake = clamp((motion.speed - wanted) * BRAKE_PER_SPEED, 0, 1);
 
   // Steer towards the line, and against the curve's outward push (the same law riding follows).
   const push = -TUNING.curvePush * motion.speed * motion.speed * track.sampleAt(motion.distance).curvature;
   // Out of the way of a car or an obstacle, briskly.
-  const [response, most] = evading ? [EVASIVE_RESPONSE, EVASIVE_SPEED] : [LINE_RESPONSE, LINE_CHANGE_SPEED];
-  let sideways = clamp(response * (line - motion.offset), -most, most);
+  let sideways = sidewaysTowards(line, motion.offset, evading);
   // Kicked off its line, it lets the kick carry it, holding only against the curve, until the shove dies down.
   if (Math.abs(motion.kickShove) > RIDING_OUT_A_KICK && sideways * motion.kickShove < 0) sideways = 0;
   const reach = maxSidewaysSpeed(motion.speed);
@@ -155,11 +153,33 @@ export function opponentControls(
   return { throttle, brake, steer };
 }
 
-/** The line `FIGHTING_GAP` to the side of `rider` that `me` is on, or their other side if that one is off the road. */
-function lineBeside(me: Readonly<Motion>, rider: Readonly<Motion>, edge: number) {
+/**
+ * Where a bike rides to fight `rider` alongside them: on the line
+ * `FIGHTING_GAP` to the side of them it is on, or their other side if that one
+ * is off the road (offsets within `edge`), and at the speed that brings it
+ * level with them, closing in at no more than `MAX_CLOSING`. Opponents ride
+ * there to pick a fight with the player, and cops to fight back.
+ */
+export function levelWith(
+  me: Readonly<Motion>,
+  rider: { readonly distance: number; readonly offset: number; readonly speed: number },
+  edge: number,
+): { line: number; speed: number } {
   const side = me.offset >= rider.offset ? 1 : -1;
-  const line = rider.offset + side * FIGHTING_GAP;
-  return clamp(Math.abs(line) <= edge ? line : rider.offset - side * FIGHTING_GAP, -edge, edge);
+  const beside = rider.offset + side * FIGHTING_GAP;
+  const line = clamp(Math.abs(beside) <= edge ? beside : rider.offset - side * FIGHTING_GAP, -edge, edge);
+  const closing = clamp(LEVEL_GAIN * (rider.distance - me.distance), -MAX_CLOSING, MAX_CLOSING);
+  return { line, speed: Math.max(0, rider.speed + closing) };
+}
+
+/**
+ * How fast (m/s, positive to the right) an opponent or a cop steers sideways
+ * from `offset` towards `line`: at an easy pace, or `briskly`, getting out of
+ * the way of a car or an obstacle, or in a hurry.
+ */
+export function sidewaysTowards(line: number, offset: number, briskly: boolean): number {
+  const [response, most] = briskly ? [EVASIVE_RESPONSE, EVASIVE_SPEED] : [LINE_RESPONSE, LINE_CHANGE_SPEED];
+  return clamp(response * (line - offset), -most, most);
 }
 
 /** A stretch of offsets, from left to right. */
