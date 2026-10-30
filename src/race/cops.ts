@@ -105,8 +105,11 @@ const EDGE_MARGIN = 0.8;
 const COP_LIMITS: BendLimits = { topSpeed: TUNING.cops.topSpeed, grip: 0.95, braking: 16 };
 /** Cops slow for what lies this many seconds ahead, to allow for the time braking takes to bite. */
 const BRAKING_LEAD = 0.3;
-/** A cop following the player rides about this many seconds behind them: further back the faster they ride... */
-const FOLLOW_SECONDS = 1;
+/**
+ * A cop following the player rides about this many seconds behind them: further back the faster they ride, far
+ * enough that a rider who crashes in front of it and runs straight back to their bike usually gets away...
+ */
+const FOLLOW_SECONDS = 1.5;
 /** ...faster than them by this many m/s for every metre it is further back, flat out if need be, or slower for every metre nearer... */
 const FOLLOW_GAIN = 1;
 /** ...but no more than this many m/s slower. */
@@ -121,9 +124,7 @@ const BRAKING = 30;
 /** ...and settle on the speed they want this quickly (1/s), or this quickly in a hurry. */
 const SPEED_RESPONSE = 4;
 const HURRIED_SPEED_RESPONSE = 8;
-/** A cop rides back down the road, to a crashed rider behind it, gingerly: no faster than this (m/s)... */
-const BACK_SPEED = 8;
-/** ...speeding up to it at this many m/s². */
+/** A cop rides back down the road, to a crashed rider behind it, speeding up to its arrest pace at this many m/s². */
 const BACK_ACCELERATION = 4;
 /** Cops steer for the line they want this quickly (1/s)... */
 const LINE_RESPONSE = 1.5;
@@ -133,14 +134,10 @@ const HURRIED_LINE_RESPONSE = 4;
 const HURRIED_LINE_CHANGE_SPEED = 7;
 /** A cop riding to bust a crashed rider pulls up this many metres to their side, nearer the middle of the road... */
 const PULL_UP_BESIDE = 1.2;
-/** ...slowing as it gets there to stop by them, as if braking at this rate (m/s²)... */
+/** ...slowing as it gets there to stop by them, as if braking at this rate (m/s²). */
 const PULL_UP_BRAKING = 12;
-/** ...and, for the last this many metres, to an arrest pace... */
-const ARREST_STRETCH = 30;
-/** ...riding no faster than this (m/s)... */
-const ARREST_PACE = 13;
-/** ...which it brakes down to at this rate (m/s²). */
-const ARREST_BRAKING = 12;
+/** The arrest pace (m/s): the fastest a cop rides to a crashed rider to bust them, either way along the road. */
+const ARREST_PACE = TUNING.cops.arrestPace;
 
 /**
  * Where a cop on patrol rides: behind the player, `FOLLOW_SECONDS` back
@@ -171,19 +168,18 @@ export function patrolIntent(
 
 /**
  * Where a cop rides to bust a crashed rider, who is at `rider` (tumbling
- * along the road or on foot): to them, at no more than an arrest pace over
- * the last `ARREST_STRETCH` metres of the way, and slowing as it gets there to
- * pull up beside them, on the side nearer the middle of the road. So a rider
- * who crashes near a cop is caught, and one who crashes further off has a
- * chance to get back on their bike first. If they are behind it, it stops and
- * rides back down the road to them. Offsets stay within `edge`.
+ * along the road or on foot): to them, braking down to the arrest pace at once
+ * and riding no faster all the way, and slowing as it gets there to pull up
+ * beside them, on the side nearer the middle of the road. So a rider who
+ * crashes close in front of a cop is caught, and one who crashes with it
+ * following at its usual gap gets back on their bike first if they run
+ * straight back to it. If they are behind it, it stops and rides back down the
+ * road to them. Offsets stay within `edge`.
  */
 export function bustingIntent(me: Readonly<Motion>, rider: Place, edge: number): CopIntent {
   const gap = rider.distance - me.distance;
-  const far = Math.abs(gap);
-  const arrestPace = ARREST_PACE + Math.sqrt(2 * ARREST_BRAKING * Math.max(0, far - ARREST_STRETCH));
-  const pullingUp = rider.speed + Math.sign(gap) * Math.sqrt(2 * PULL_UP_BRAKING * far);
-  const speed = clamp(pullingUp, -arrestPace, arrestPace);
+  const pullingUp = rider.speed + Math.sign(gap) * Math.sqrt(2 * PULL_UP_BRAKING * Math.abs(gap));
+  const speed = clamp(pullingUp, -ARREST_PACE, ARREST_PACE);
   const line = rider.offset - (rider.offset >= 0 ? 1 : -1) * PULL_UP_BESIDE;
   return { speed, line: clamp(line, -edge, edge), hurrying: true };
 }
@@ -229,12 +225,12 @@ export function standingByIntent(me: Readonly<Motion>): CopIntent {
 
 /**
  * Moves a riding cop by a step towards the speed and line it wants: forwards
- * at up to its top speed, or back down the road, slowly. Braking stops the
- * bike before it can go the other way. Like any bike, it can't move sideways
- * while it stands still. Offsets stay within `edge`.
+ * at up to its top speed, or back down the road at no more than the arrest
+ * pace. Braking stops the bike before it can go the other way. Like any bike,
+ * it can't move sideways while it stands still. Offsets stay within `edge`.
  */
 export function moveCop(motion: Motion, intent: CopIntent, edge: number): void {
-  const wanted = clamp(intent.speed, -BACK_SPEED, TUNING.cops.topSpeed);
+  const wanted = clamp(intent.speed, -ARREST_PACE, TUNING.cops.topSpeed);
   const change = (intent.hurrying ? HURRIED_SPEED_RESPONSE : SPEED_RESPONSE) * (wanted - motion.speed);
   const braking = motion.speed !== 0 && Math.sign(change) !== Math.sign(motion.speed);
   const most = braking ? BRAKING : change > 0 ? ACCELERATION : BACK_ACCELERATION;

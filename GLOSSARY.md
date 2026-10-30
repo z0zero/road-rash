@@ -177,7 +177,7 @@ A police officer on a motorcycle who rides among the riders and busts anyone who
 _Avoid_: Police, officer
 
 **Patrol**:
-What a cop in the race does when nobody needs busting: riding near the player, dropping back behind one who rides fast and coming past one who rides slowly.
+What a cop in the race does when nobody needs busting: riding near the player, the cops taking turns to follow them about 1.5 s behind while the other holds well back. A cop following the player pulls over while they are down after a crash it isn't riding to.
 _Avoid_: Chase, pursuit
 
 **Standing by**:
@@ -193,5 +193,9 @@ A cop hit by a rider coming after them and swinging its club at them, until a wh
 _Avoid_: Revenge, aggro
 
 **Busted**:
-The end of a rider's race because a cop caught them after a crash.
+The end of a rider's race because a cop caught them after a crash: a cop within 80 m of a rider who crashes rides to them at the arrest pace, and busts them if it reaches them, once they are on their feet, before they are back on their bike.
 _Avoid_: Arrested, caught, jailed
+
+**Arrest pace**:
+How fast a cop rides to a crashed rider to bust them: braking down to 8 m/s at once, and no faster all the way, so that a rider who crashes close in front of a cop is caught, and one who crashes with it following at its usual gap can run back to their bike first.
+_Avoid_: Chase speed, pursuit speed
