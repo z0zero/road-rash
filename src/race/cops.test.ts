@@ -10,6 +10,7 @@ import {
   eventsDuring,
   eventsUntil,
   FIRST_COP,
+  isCrash,
   kmh,
   ME,
   nearestWithinReach,
@@ -648,6 +649,52 @@ describe("cops", () => {
     expect(following).toBeGreaterThan(30);
     expect(following).toBeLessThan(45);
     expect(away).toBeGreaterThan(45);
+  });
+});
+
+describe("a cop holding back", () => {
+  it("never stands still in the race's lanes: dropping back from a player who rides slowly, it waits on the shoulder", WHOLE_RACES, () => {
+    // On a closed road, the first cop follows the player for its turn, then holds back while they ride at 10 m/s.
+    const race = startedRace(1, CLOSED_ROAD);
+    const first = race.snapshot().cops[0];
+    secondsUntil(race, autopilot(race), () => player(race).distance >= first.distance, 120);
+    secondsUntil(race, autopilot(race), () => !race.snapshot().cops[0].near, 60);
+    const slowly = autopilot(race, { targetSpeed: 10 });
+    const stoodInALane: number[] = [];
+    let onTheShoulder = 0;
+
+    for (let step = 0; step < 40 * STEPS_PER_SECOND; step++) {
+      race.step(slowly());
+      const { clock, cops } = race.snapshot();
+      const offRoad = Math.abs(cops[0].offset) > race.track.roadHalfWidth;
+      if (cops[0].speed < 1 && !offRoad) stoodInALane.push(clock);
+      if (offRoad) onTheShoulder++;
+    }
+
+    expect(stoodInALane).toEqual([]);
+    expect(onTheShoulder).toBeGreaterThan(0);
+    // It is back behind the player once they have ridden on.
+    expect(race.snapshot().cops[0]).toMatchObject({ status: "riding" });
+  });
+});
+
+describe("a cop moving across the road", () => {
+  it("never pulls across the path of a rider coming up behind it, pulling over or pulling out to join the race: no rider runs into a cop", WHOLE_RACES, () => {
+    // In these races, ridden with the autopilot, an opponent ran into a cop pulling over onto the shoulder across its
+    // lane (seed 10), and into one pulling out from the shoulder to join the race (seed 11).
+    const intoACop: string[] = [];
+    for (const seed of [10, 11]) {
+      const race = startedRace(seed);
+      const pilot = autopilot(race);
+      for (let step = 0; step < 150 * STEPS_PER_SECOND && player(race).status === "racing"; step++) {
+        race.step(pilot());
+        for (const event of race.drainEvents()) {
+          if (isCrash(event) && event.cause === "cop") intoACop.push(`seed ${seed} at ${race.snapshot().clock.toFixed(1)} s: rider ${event.rider}`);
+        }
+      }
+    }
+
+    expect(intoACop).toEqual([]);
   });
 });
 
