@@ -11,11 +11,11 @@ export interface Place {
   readonly speed: number;
 }
 
-/** Riders the player should know are there, on either side of them. */
+/** Riders and cops the player should know are there, on either side of them. */
 export interface Warnings {
-  /** A rider is alongside the player, or coming up from behind, on their left. */
+  /** A rider or cop is alongside the player, or coming up from behind, on their left. */
   readonly left: boolean;
-  /** A rider is alongside the player, or coming up from behind, on their right. */
+  /** A rider or cop is alongside the player, or coming up from behind, on their right. */
   readonly right: boolean;
 }
 
@@ -48,16 +48,16 @@ export function nearestOpponentOrCop(player: Place, others: readonly Someone[]):
   return nearest;
 }
 
-/** Which sides of the player have an opponent alongside them, or coming up from behind. */
-export function warningsFor(player: Place, opponents: readonly Place[]): Warnings {
+/** Which sides of the player have an opponent or a cop (`others`) alongside them, or coming up from behind. */
+export function warningsFor(player: Place, others: readonly Omit<Place, "id">[]): Warnings {
   let left = false;
   let right = false;
-  for (const opponent of opponents) {
-    const behind = player.distance - opponent.distance;
-    const alongside = Math.abs(behind) <= ALONGSIDE_ALONG && Math.abs(opponent.offset - player.offset) <= ALONGSIDE_ACROSS;
-    const comingUp = behind > 0 && behind <= COMING_UP && opponent.speed > player.speed;
+  for (const other of others) {
+    const behind = player.distance - other.distance;
+    const alongside = Math.abs(behind) <= ALONGSIDE_ALONG && Math.abs(other.offset - player.offset) <= ALONGSIDE_ACROSS;
+    const comingUp = behind > 0 && behind <= COMING_UP && other.speed > player.speed;
     if (!alongside && !comingUp) continue;
-    if (opponent.offset < player.offset) left = true;
+    if (other.offset < player.offset) left = true;
     else right = true;
   }
   return { left, right };
