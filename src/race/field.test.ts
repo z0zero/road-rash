@@ -427,9 +427,10 @@ describe("catch-up", () => {
 
 describe("the results", () => {
   it("qualify a player who finishes third or better, and only them", () => {
-    // On a closed road, where how fast the player rides alone decides their position.
+    // On a closed road, where how fast the player rides alone decides their position, with no cops, who would bust a
+    // player knocked off near one.
     const results = [Infinity, 52, 45].map(
-      (targetSpeed) => rideToTheResults(1, (race) => autopilot(race, { targetSpeed }), CLOSED_ROAD).results,
+      (targetSpeed) => rideToTheResults(1, (race) => autopilot(race, { targetSpeed }), { ...CLOSED_ROAD, ...NO_COPS }).results,
     );
 
     for (const { outcome, position, qualified } of results) {

@@ -6,11 +6,13 @@ import {
   fightingBackIntent,
   lineUpCops,
   moveCop,
+  takeTurns,
   patrolIntent,
   standingByIntent,
   type Cop,
   type CopIntent,
   type CopStatus,
+  type Rota,
 } from "./cops";
 import {
   canRemount,
@@ -394,6 +396,8 @@ export function createRace(options: RaceOptions): Race {
   const cops = options.cops === false ? [] : lineUpCops(track);
   /** The cop who busted the player, once one has. */
   let playerBustedBy: Cop | null = null;
+  /** The cops' turns at following the player. */
+  const rota: Rota = { breakSteps: 0 };
 
   const clock = () => Math.max(0, stepsTaken - COUNTDOWN_STEPS) / STEPS_PER_SECOND;
 
@@ -446,8 +450,9 @@ export function createRace(options: RaceOptions): Race {
 
   function land(attacker: Fighter, target: Fighter, kind: AttackKind) {
     events.push({ type: "attack-landed", attacker: who(attacker), target: who(target), kind });
-    // Any hit in the middle of a club swing takes the club from its holder, and their swing never lands.
-    if (isMidSwing(target.attack)) {
+    // Any hit by a rider in the middle of another rider's club swing takes the club, and the swing never lands. Cops
+    // neither take clubs nor lose them.
+    if (attacker.kind === "rider" && target.kind === "rider" && isMidSwing(target.attack)) {
       target.weapon = null;
       target.attack = null;
       attacker.weapon = "club";
@@ -510,6 +515,7 @@ export function createRace(options: RaceOptions): Race {
       cop.attackCooldownSteps = stepsIn(COP_ATTACK_EVERY_SECONDS);
     }
     const player = whereIs(riders[PLAYER]);
+    takeTurns(cops, rota, player, (cop) => cop.busting !== null || cop.fightingBack !== null || cop.standingBySteps > 0);
     const everyoneOnABike = [...field, ...copsInTheRace().map((cop) => cop.motion)];
     return cops.map((cop) => {
       if (cop.status !== "riding") return null;
@@ -519,7 +525,7 @@ export function createRace(options: RaceOptions): Race {
         return fightingBackIntent(cop.motion, fighting.motion, track, everyoneOnABike, carsAndObstacles);
       }
       if (cop.standingBySteps > 0) return standingByIntent(cop.motion);
-      return patrolIntent(cop.motion, player, track, everyoneOnABike, carsAndObstacles);
+      return patrolIntent(cop.motion, player, cop.following, track, everyoneOnABike, carsAndObstacles);
     });
   }
 
@@ -562,11 +568,15 @@ export function createRace(options: RaceOptions): Race {
     }
   }
 
-  /** A cop that has reached the crashed rider it was riding to busts them, ending their race. */
+  /**
+   * A cop that has reached the crashed rider it was riding to busts them,
+   * ending their race, once they are on their feet: never while they tumble.
+   */
   function bustTheCaught() {
     for (const cop of cops) {
       const rider = cop.busting === null ? null : riders[cop.busting];
-      if (!rider?.crash || rider.status !== "racing" || apart(cop.motion, whereIs(rider)) > TUNING.cops.bustingReach) continue;
+      if (rider?.crash?.phase !== "on-foot" || rider.status !== "racing") continue;
+      if (apart(cop.motion, whereIs(rider)) > TUNING.cops.bustingReach) continue;
       rider.status = "busted";
       cop.busting = null;
       cop.standingBySteps = stepsIn(TUNING.cops.standingBySeconds);
