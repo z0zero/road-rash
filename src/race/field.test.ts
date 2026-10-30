@@ -14,13 +14,17 @@ import {
   bendSpeed,
   chase,
   CLOSED_ROAD,
+  nearestOpponent,
+  nearestWithinReach,
   NO_COPS,
   player,
+  rideAlongside,
   secondsUntil,
   startedRace,
   steerTowards,
   STEPS_PER_SECOND,
   type TestSetup,
+  WHOLE_RACES,
 } from "./test-helpers";
 
 type RiderFinished = Extract<RaceEvent, { type: "rider-finished" }>;
@@ -187,7 +191,7 @@ describe("the opponents", () => {
     expect(riders[PLAYER].temperament).toBeNull();
   });
 
-  it("race to the finish line by themselves, in finishing order", () => {
+  it("race to the finish line by themselves, in finishing order", WHOLE_RACES, () => {
     const { finished } = raceWithoutThePlayer(1, 300);
 
     expect(finished.map((event) => event.position)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
@@ -240,6 +244,30 @@ describe("the opponents", () => {
     expect(atApexes.size).toBe(14);
   });
 
+  it("get going again from a standstill behind a roadside sign on the shoulder, once nobody rides beside them", () => {
+    // The player kicks the racer who lined up nearest them off the road, ahead of a sign on the shoulder, and rides beside
+    // it on its inside, so that it can't come back onto the road, until it stops behind the sign; then the player rides on.
+    const race = startedRace(8, { ...CLOSED_ROAD, ...NO_COPS });
+    const target = nearestOpponent(race, "racer");
+    const them = () => race.snapshot().riders[target];
+    const alongside = rideAlongside(race, target);
+    secondsUntil(race, alongside, () => nearestWithinReach(race.snapshot().riders, player(race)) === target, 60);
+    const signAhead = () =>
+      race.track.obstacles.find(({ kind, offset, distance }) => kind === "sign" && offset > 6.5 && distance - them().distance > 80 && distance - them().distance < 200);
+    secondsUntil(race, alongside, () => signAhead() !== undefined, 60);
+    const sign = signAhead();
+    secondsUntil(race, () => ({ ...alongside(), kick: player(race).attack === null }), () => them().offset > 7, 10);
+    secondsUntil(race, rideAlongside(race, target, { across: 3.5 }), () => them().speed < 0.5, 30);
+    expect(them()).toMatchObject({ status: "racing", crash: null });
+    expect(them().offset).toBeGreaterThan(race.track.roadHalfWidth);
+    expect((sign?.distance ?? NaN) - them().distance).toBeLessThan(5);
+
+    const pilot = autopilot(race, { lane: 1.5 });
+    const seconds = secondsUntil(race, pilot, () => them().speed > 5 && them().offset < race.track.roadHalfWidth, 20);
+
+    expect(seconds).toBeLessThan(10);
+  });
+
   it("ride at their own pace, so faster riders pass slower ones", () => {
     const start = startOrder(1).filter((id) => id !== PLAYER);
 
@@ -250,7 +278,7 @@ describe("the opponents", () => {
     expect(passes.length).toBeGreaterThanOrEqual(10);
   });
 
-  it("steer around each other: no two opponents ever ride into each other, unless a kick shoves one into another", () => {
+  it("steer around each other: no two opponents ever ride into each other, unless a kick shoves one into another", WHOLE_RACES, () => {
     for (const seed of [1, 2, 3]) {
       let overlaps = 0;
       let step = 0;
@@ -273,7 +301,7 @@ describe("the opponents", () => {
     }
   });
 
-  it("have a pace of their own: the same riders are the fastest and the slowest whatever their start order", () => {
+  it("have a pace of their own: the same riders are the fastest and the slowest whatever their start order", WHOLE_RACES, () => {
     const { track } = createRace({ seed: 1 });
     /** Each opponent's average speed from their place on the grid to the finish line, fastest first. */
     const fastestFirst = (seed: number) => {
@@ -381,7 +409,7 @@ function stretchTime(seed: number, rider: number, from: number, to: number, make
 // closed road: traffic only fills the road around the player, so it would hold up an opponent near the player and not
 // one far from them.
 describe("catch-up", () => {
-  it("slows opponents far ahead of the player by up to 8%", () => {
+  it("slows opponents far ahead of the player by up to 8%", WHOLE_RACES, () => {
     const seed = 1;
     const target = startOrder(seed).filter((id) => createRace({ seed }).snapshot().riders[id].temperament === "racer").at(-1) ?? PLAYER;
     const { startDistance } = createRace({ seed }).track;
@@ -396,7 +424,7 @@ describe("catch-up", () => {
     expect(slowdown).toBeLessThanOrEqual(0.081);
   });
 
-  it("speeds up opponents far behind the player by up to 8%", () => {
+  it("speeds up opponents far behind the player by up to 8%", WHOLE_RACES, () => {
     const seed = 1;
     // Find the longest stretch a racer rides more than 300 m behind the player, who rides well.
     const race = startedRace(seed, CLOSED_ROAD);
@@ -426,7 +454,7 @@ describe("catch-up", () => {
 });
 
 describe("the results", () => {
-  it("qualify a player who finishes third or better, and only them", () => {
+  it("qualify a player who finishes third or better, and only them", WHOLE_RACES, () => {
     // On a closed road, where how fast the player rides alone decides their position, with no cops, who would bust a
     // player knocked off near one.
     const results = [Infinity, 52, 45].map(
@@ -441,7 +469,7 @@ describe("the results", () => {
     expect(results.map(({ qualified }) => qualified)).toContain(false);
   });
 
-  it("list every rider by name, position and time once the rest of the field is raced to the finish", () => {
+  it("list every rider by name, position and time once the rest of the field is raced to the finish", WHOLE_RACES, () => {
     // With no cops, who would bust the riders who crash near the player.
     const { results, events } = rideToTheResults(1, (race) => autopilot(race), NO_COPS);
     const names = createRace({ seed: 1 }).snapshot().riders.map((rider) => rider.name);
@@ -473,7 +501,7 @@ describe("determinism with a full field", () => {
     return { results, events, final: race.snapshot() };
   };
 
-  it("replays the whole field, its events and its results identically from the same seed and inputs", () => {
+  it("replays the whole field, its events and its results identically from the same seed and inputs", WHOLE_RACES, () => {
     const first = record(7);
     const second = record(7);
 
@@ -483,7 +511,7 @@ describe("determinism with a full field", () => {
     expect(first.final.riders.filter((rider) => rider.status === "racing")).toEqual([]);
   });
 
-  it("races differently from a different seed", () => {
+  it("races differently from a different seed", WHOLE_RACES, () => {
     expect(record(8).results.standings).not.toEqual(record(7).results.standings);
   });
 });

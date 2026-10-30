@@ -89,7 +89,7 @@ How intact a bike is, from full to empty. It drops with every crash, and a bike 
 _Avoid_: Damage, durability, bike health
 
 **Bump**:
-A rider on their bike running into another rider on a bike, a cop, a car or an obstacle at a small speed difference (under 8 m/s) and being pushed apart, without crashing. A cop bumps off whatever it runs into, whatever the speed difference.
+A rider on their bike running into another rider on a bike, a cop, a car or an obstacle at a small speed difference (under 8 m/s) and being pushed apart, without crashing. A cop bumps off whatever it runs into, whatever the speed difference. A bike that bumps a car or an obstacle with no room to pass it on one side, before the edge of the shoulder, is pushed to its other side.
 _Avoid_: Nudge, collision
 
 **Run-in**:

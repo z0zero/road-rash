@@ -12,6 +12,7 @@ import {
   setUpRace,
   startedRace,
   stepFor,
+  WHOLE_RACES,
 } from "./test-helpers";
 
 /** The results of a race (on a closed road) that the player rode to the finish at up to `targetSpeed`. */
@@ -80,7 +81,7 @@ function speakerOf(results: RaceResults) {
 }
 
 describe("the remark on the results", () => {
-  it("comes from an opponent when the player finished", () => {
+  it("comes from an opponent when the player finished", WHOLE_RACES, () => {
     const results = winningRace(1);
 
     expect(results.outcome).toBe("finished");
@@ -98,7 +99,7 @@ describe("the remark on the results", () => {
     expect(speakerOf(results).standing?.position).toBeGreaterThan(results.position ?? Infinity);
   });
 
-  it("comes from an opponent who beat the player, when the player finished without qualifying", () => {
+  it("comes from an opponent who beat the player, when the player finished without qualifying", WHOLE_RACES, () => {
     for (const seed of SLOW_SEEDS) {
       const results = slowRace(seed);
 
@@ -107,7 +108,7 @@ describe("the remark on the results", () => {
     }
   });
 
-  it("comes from an opponent still in the race when the player's bike was wrecked", () => {
+  it("comes from an opponent still in the race when the player's bike was wrecked", WHOLE_RACES, () => {
     for (const seed of [1, 2, 3]) {
       const results = wreckedRace(seed);
 

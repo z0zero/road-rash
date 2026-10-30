@@ -122,10 +122,13 @@ function contactWith(bike: Motion, footprint: Footprint): Contact | null {
 }
 
 function bumpOff(bike: Motion, footprint: Footprint, { along, across, overlapAlong, overlapAcross }: Contact, edge: number) {
-  // Which way the bike is pushed: away from what it touched, to the right when dead behind it.
-  const side = across !== 0 ? -Math.sign(across) : 1;
+  // Which way the bike is pushed: away from what it touched, to the right when dead behind it; but the other way if a
+  // bike has no room to pass it on that side, between it and the edge.
+  const away = across !== 0 ? -Math.sign(across) : 1;
+  const room = (side: number) => edge - side * footprint.offset - footprint.halfWidth >= BIKE_WIDTH;
+  const side = room(away) || !room(-away) ? away : -away;
   if (overlapAcross <= overlapAlong) {
-    bike.offset = clamp(bike.offset + side * overlapAcross, -edge, edge);
+    bike.offset = clamp(footprint.offset + side * (footprint.halfWidth + BIKE_HALF_WIDTH), -edge, edge);
   } else if (along > 0) {
     bike.distance -= overlapAlong;
     bike.speed = Math.max(0, Math.min(bike.speed, footprint.velocity));
@@ -137,14 +140,15 @@ function bumpOff(bike: Motion, footprint: Footprint, { along, across, overlapAlo
 }
 
 /**
- * After a rider has run into a car or an obstacle (its `footprint`): their
- * bike stops against it, clear of it on the side it came from, going no
- * faster than it; and the rider is thrown clear of it, sideways away from it,
- * and on along the road, at least as fast as a car that caught them from
- * behind. A rider who runs into the back of a car going their way lands
- * behind it, going no faster than it, so it drives on away from them.
+ * After a rider has run into a car or an obstacle (its `footprint`, a car's
+ * if `isACar`): their bike stops against it, clear of it on the side it came
+ * from, going no faster than it; and the rider is thrown clear of it,
+ * sideways away from it, and on along the road, at least as fast as a car
+ * that caught them from behind. A rider who runs into the back of a car going
+ * their way, or standing still, lands behind it, going no faster than it, so
+ * it drives on away from them, or they stay clear of it.
  */
-function throwClearOf(footprint: Footprint, bike: Motion, body: Body, edge: number) {
+function throwClearOf(footprint: Footprint, isACar: boolean, bike: Motion, body: Body, edge: number) {
   const along = footprint.distance - bike.distance;
   const { velocity } = footprint;
   bike.distance = footprint.distance - Math.sign(along || 1) * (footprint.halfLength + BIKE_HALF_LENGTH + 0.05);
@@ -155,7 +159,7 @@ function throwClearOf(footprint: Footprint, bike: Motion, body: Body, edge: numb
   bike.offset = clamp(bike.offset, -edge, edge);
   const away = Math.sign(body.offset - footprint.offset) || 1;
   body.sideways = away * Math.max(Math.abs(body.sideways), THROWN_SIDEWAYS);
-  if (along > 0 && velocity > 0) {
+  if (along > 0 && (velocity > 0 || (isACar && velocity === 0))) {
     body.distance = Math.min(body.distance, footprint.distance - footprint.halfLength - BODY_SIZE / 2 - 0.05);
     body.speed = Math.min(body.speed, velocity);
   } else {
@@ -241,7 +245,7 @@ export function runIntoCarsAndObstacles(race: RaceState, cars: readonly Footprin
   ] as const) {
     for (const { rider, footprint, speedDifference } of settleImpacts(onTheirBikes(race), footprints, edge)) {
       crash(race, rider, cause, speedDifference);
-      if (rider.crash) throwClearOf(footprint, rider.motion, rider.crash.body, edge);
+      if (rider.crash) throwClearOf(footprint, cause === "traffic", rider.motion, rider.crash.body, edge);
     }
     settleImpacts(copsInTheRace(race), footprints, edge, () => false);
   }
