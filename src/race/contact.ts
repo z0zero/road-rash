@@ -4,6 +4,7 @@ import type { Footprint } from "./footprint";
 import { copsInTheRace, onTheirBikes, type RaceState } from "./race-state";
 import type { Rider } from "./riders";
 import { BIKE_LENGTH, BIKE_WIDTH, clamp, type Motion } from "./riding";
+import { STEP_SECONDS } from "./steps";
 import { TUNING } from "./tuning";
 
 /** A bike reaches this many metres ahead of and behind its middle... */
@@ -14,6 +15,8 @@ const BIKE_HALF_WIDTH = BIKE_WIDTH / 2;
 const BODY_SIZE = 0.6;
 /** A rider who runs into a car or an obstacle is thrown sideways off it at least this fast (m/s), so they land beside it, not on it. */
 const THROWN_SIDEWAYS = 3;
+/** A car knocks a rider on foot down only by driving into them: closing in on them along its own way faster than this (m/s). */
+const DRIVING_INTO = 1;
 
 /** A rider who ran into another bike too fast to bump it: they crash. */
 interface RunIn<T> {
@@ -167,15 +170,43 @@ function throwClearOf(footprint: Footprint, isACar: boolean, bike: Motion, body:
   }
 }
 
-/** The car (one of `cars`, by their footprints) running into a rider on foot at `body`, if any. */
-function carRunningInto(body: Readonly<Body>, cars: readonly Footprint[]): Footprint | null {
+/** Whether a car (by its footprint) and a rider on foot at `body` touch. */
+function touching(car: Footprint, body: Readonly<Body>): boolean {
   return (
-    cars.find(
-      (car) =>
-        Math.abs(car.distance - body.distance) < car.halfLength + BODY_SIZE / 2 &&
-        Math.abs(car.offset - body.offset) < car.halfWidth + BODY_SIZE / 2,
-    ) ?? null
+    Math.abs(car.distance - body.distance) < car.halfLength + BODY_SIZE / 2 &&
+    Math.abs(car.offset - body.offset) < car.halfWidth + BODY_SIZE / 2
   );
+}
+
+/**
+ * How fast (m/s) a car (by its footprint) drives into a rider on foot at
+ * `body`: its own speed, less however fast they get away from it its way. A
+ * car standing still drives into nobody, and nor does one going slower than
+ * them that they run into.
+ */
+function drivingInto(car: Footprint, body: Readonly<Body>): number {
+  return Math.abs(car.velocity) - Math.max(0, Math.sign(car.velocity) * body.speed);
+}
+
+/**
+ * Pushes a rider on foot at `body` clear of a car (by its footprint) that
+ * isn't driving into them: out the shorter way, off its side, or off its end,
+ * where they step round it at a run, to the side of it they are on, or to the
+ * other if there is no room on theirs before `edge`.
+ */
+function pushClearOf(car: Footprint, body: Body, edge: number) {
+  const along = body.distance - car.distance;
+  const across = body.offset - car.offset;
+  const [reachAlong, reachAcross] = [car.halfLength + BODY_SIZE / 2, car.halfWidth + BODY_SIZE / 2];
+  const away = Math.sign(across) || 1;
+  const room = (side: number) => edge - side * car.offset - reachAcross >= BODY_SIZE / 2;
+  const side = room(away) || !room(-away) ? away : -away;
+  if (reachAcross - Math.abs(across) <= reachAlong - Math.abs(along)) {
+    body.offset = clamp(car.offset + side * reachAcross, -edge, edge);
+  } else {
+    body.distance = car.distance + (Math.sign(along) || 1) * reachAlong;
+    body.offset = clamp(body.offset + side * TUNING.runSpeed * STEP_SECONDS, -edge, edge);
+  }
 }
 
 /**
@@ -251,11 +282,23 @@ export function runIntoCarsAndObstacles(race: RaceState, cars: readonly Footprin
   }
 }
 
-/** A car (one of `cars`, by their footprints) that runs into a rider on foot knocks them down. */
+/**
+ * A car (one of `cars`, by their footprints) that drives into a rider on foot
+ * knocks them down: one closing in on them along its own way at over
+ * `DRIVING_INTO`. A car standing still, or going slower than them, that they
+ * run into only pushes them clear of it, and they go round it.
+ */
 export function knockDownRidersOnFoot(race: RaceState, cars: readonly Footprint[]) {
   for (const rider of race.riders) {
     if (rider.status !== "racing" || rider.crash?.phase !== "on-foot") continue;
-    const car = carRunningInto(rider.crash.body, cars);
-    if (car) race.events.push({ type: "knocked-down", rider: rider.id, impactSpeed: knockDownBy(car, rider.crash) });
+    const { crash } = rider;
+    for (const car of cars) {
+      if (!touching(car, crash.body)) continue;
+      if (drivingInto(car, crash.body) > DRIVING_INTO) {
+        race.events.push({ type: "knocked-down", rider: rider.id, impactSpeed: knockDownBy(car, crash) });
+        break;
+      }
+      pushClearOf(car, crash.body, race.edge);
+    }
   }
 }
