@@ -2,7 +2,7 @@ import { useFrame } from "@react-three/fiber";
 import { useEffect } from "react";
 import { type Camera, PerspectiveCamera } from "three";
 import type { GameSession } from "@/game/session";
-import { PLAYER, type AttackKind, type RaceEvent, type RiderOrCop } from "@/race";
+import { PLAYER, TOP_SPEED, type AttackKind, type RaceEvent, type RiderOrCop } from "@/race";
 import type { CameraShake } from "./camera-shake";
 import type { RiderMotion } from "./rider-motion";
 
@@ -20,17 +20,15 @@ const TITLE: Framing = { behind: 17, above: 6.5, lookAhead: 30 };
 
 /** The camera's vertical field of view when standing still, in degrees... */
 export const FIELD_OF_VIEW_DEGREES = 64;
-/** ...and how many degrees wider it is at full speed. */
+/** ...and how many degrees wider it is at the bike's top speed. */
 const FIELD_OF_VIEW_GAIN_DEGREES = 13;
-/** Metres per second at which the field of view is widest: 225 km/h. */
-const FULL_SPEED = 62.5;
 /** How quickly the field of view follows the speed (1/s). */
 const FIELD_OF_VIEW_RESPONSE = 3;
 /** The camera rolls with this share of the bike's lean. */
 const TILT = 0.32;
 /** Above this speed (m/s, about 160 km/h) the road starts to rumble the camera... */
 const RUMBLE_SPEED = 45;
-/** ...up to this much trauma at full speed. */
+/** ...up to this much trauma at the bike's top speed. */
 const RUMBLE = 0.32;
 /** Riding off the road at speed rattles the camera this hard. */
 const OFF_ROAD_RUMBLE = 0.55;
@@ -94,7 +92,7 @@ function aim(
   const framing = racing ? CHASE : TITLE;
   const { distance, offset, speed } = player.pose;
 
-  const rumble = speed > RUMBLE_SPEED ? (RUMBLE * (speed - RUMBLE_SPEED)) / (FULL_SPEED - RUMBLE_SPEED) : 0;
+  const rumble = speed > RUMBLE_SPEED ? (RUMBLE * (speed - RUMBLE_SPEED)) / (TOP_SPEED - RUMBLE_SPEED) : 0;
   const offRoad = current.riders[PLAYER].offRoad && speed > 8 ? OFF_ROAD_RUMBLE : 0;
   shake.update(screen === "paused" ? 0 : delta, racing ? Math.max(rumble, offRoad) : 0, reduceMotion || screen === "paused");
 
@@ -108,7 +106,7 @@ function aim(
   camera.rotateZ(-player.lean * (racing ? TILT : 0) + shake.offset.roll);
 
   if (camera instanceof PerspectiveCamera) {
-    const share = racing ? Math.min(1, speed / FULL_SPEED) : 0;
+    const share = racing ? Math.min(1, speed / TOP_SPEED) : 0;
     const wanted = FIELD_OF_VIEW_DEGREES + FIELD_OF_VIEW_GAIN_DEGREES * share * share;
     const fov = camera.fov + (wanted - camera.fov) * (1 - Math.exp(-FIELD_OF_VIEW_RESPONSE * delta));
     if (Math.abs(fov - camera.fov) > 1e-3) {

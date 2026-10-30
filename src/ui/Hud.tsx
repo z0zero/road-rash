@@ -1,7 +1,15 @@
 import { useEffect, useRef, type RefObject } from "react";
 import type { GameSession } from "@/game/session";
 import { clamp } from "@/math";
-import { COP_FULL_STAMINA, PLAYER, type RaceEvent, type RaceSnapshot, type RiderSnapshot } from "@/race";
+import {
+  COP_FULL_STAMINA,
+  FULL_CONDITION,
+  FULL_STAMINA,
+  PLAYER,
+  type RaceEvent,
+  type RaceSnapshot,
+  type RiderSnapshot,
+} from "@/race";
 import { liveryOf } from "@/renderer/liveries";
 import { ClubIcon } from "./ClubIcon";
 import { formatRaceTime, toKmh } from "./format";
@@ -11,9 +19,6 @@ const GO_SECONDS = 0.8;
 
 /** How long a callout, such as a club changing hands, stays up, in seconds of race time. */
 const CALLOUT_SECONDS = 1.8;
-
-/** Stamina and condition run from 0 to this. */
-const FULL = 100;
 
 /**
  * Position, speed, race time, progress along the track with a marker for
@@ -75,15 +80,15 @@ export function Hud({ session, reduceMotion }: { session: GameSession; reduceMot
         }
         const call = current.countdown > 0 ? String(Math.ceil(current.countdown)) : current.clock < GO_SECONDS ? "GO!" : "";
         setText(countdown.current, call);
-        setBar(stamina.current, player.stamina, staminaColour);
-        setBar(condition.current, player.condition, conditionColour);
+        setBar(stamina.current, player.stamina, FULL_STAMINA, staminaColour);
+        setBar(condition.current, player.condition, FULL_CONDITION, conditionColour);
         const nearest = current.nearestOpponentOrCop;
         setShown(nearestPanel.current, nearest !== null);
         if (nearest) {
           const isCop = nearest.kind === "cop";
           const them = isCop ? current.cops[nearest.id] : current.riders[nearest.id];
           setText(nearestName.current, them.name);
-          setBar(nearestStamina.current, them.stamina, staminaColour, isCop ? COP_FULL_STAMINA : FULL);
+          setBar(nearestStamina.current, them.stamina, isCop ? COP_FULL_STAMINA : FULL_STAMINA, staminaColour);
           setShown(nearestClub.current, them.weapon === "club");
           setShown(nearestIsCop.current, isCop);
         }
@@ -191,7 +196,7 @@ export function Hud({ session, reduceMotion }: { session: GameSession; reduceMot
           </span>
           <div ref={nearestName} data-testid="nearest-opponent-name" className="truncate text-3xl italic leading-tight" />
         </div>
-        <Bar fill={nearestStamina} label="Their stamina" />
+        <Bar fill={nearestStamina} label="Their stamina" full={FULL_STAMINA} />
       </div>
       <div className="absolute bottom-6 left-8 flex w-64 flex-col gap-2 drop-shadow-[0_3px_0_rgba(27,16,38,0.85)]">
         <div ref={playerClub} data-testid="club" className="hidden">
@@ -207,11 +212,11 @@ export function Hud({ session, reduceMotion }: { session: GameSession; reduceMot
         </div>
         <div>
           <div className="text-sm uppercase tracking-widest text-sand/90">Stamina</div>
-          <Bar fill={stamina} label="Stamina" testId="stamina" />
+          <Bar fill={stamina} label="Stamina" full={FULL_STAMINA} testId="stamina" />
         </div>
         <div>
           <div className="text-sm uppercase tracking-widest text-sand/90">Bike</div>
-          <Bar fill={condition} label="Bike condition" testId="condition" />
+          <Bar fill={condition} label="Bike condition" full={FULL_CONDITION} testId="condition" />
         </div>
       </div>
       <div className="absolute bottom-6 right-8 text-right drop-shadow-[0_3px_0_rgba(27,16,38,0.85)]">
@@ -240,15 +245,25 @@ export function Hud({ session, reduceMotion }: { session: GameSession; reduceMot
   );
 }
 
-/** A meter from 0 to its full value (100, unless the frame loop says otherwise) whose fill the frame loop sizes and colours. */
-function Bar({ fill, label, testId }: { fill: RefObject<HTMLDivElement | null>; label: string; testId?: string }) {
+/** A meter from 0 to `full`, at first full, whose fill the frame loop sizes and colours (and refills to its own full value). */
+function Bar({
+  fill,
+  label,
+  full,
+  testId,
+}: {
+  fill: RefObject<HTMLDivElement | null>;
+  label: string;
+  full: number;
+  testId?: string;
+}) {
   return (
     <div
       role="meter"
       aria-label={label}
       aria-valuemin={0}
-      aria-valuemax={FULL}
-      aria-valuenow={FULL}
+      aria-valuemax={full}
+      aria-valuenow={full}
       data-testid={testId}
       className="mt-1 h-3.5 overflow-hidden rounded-sm border border-sand/70 bg-night/70"
     >
@@ -306,7 +321,7 @@ function conditionColour(share: number): string {
 }
 
 /** Fills a meter to `value` out of `full`, coloured by how full it is. */
-function setBar(fill: HTMLDivElement | null, value: number, colour: (share: number) => string, full = FULL) {
+function setBar(fill: HTMLDivElement | null, value: number, full: number, colour: (share: number) => string) {
   if (!fill) return;
   const share = clamp(value / full, 0, 1);
   const width = `${(share * 100).toFixed(1)}%`;
