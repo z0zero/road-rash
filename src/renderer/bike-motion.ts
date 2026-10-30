@@ -1,7 +1,7 @@
 import type { RaceView } from "@/game/session";
-import type { AttackSnapshot, CopId, CrashPhase, RaceSnapshot, RiderId, RiderSnapshot, Weapon } from "@/race";
+import type { AttackSnapshot, CopId, CopSnapshot, CrashPhase, RaceSnapshot, RiderId, RiderSnapshot, Weapon } from "@/race";
 import { Vector3 } from "three";
-import { bikePoseOf, createPose, poseOf, type RiderPose } from "./rider-pose";
+import { bikePoseOf, createTrackPose, poseOf, type TrackPose } from "./track-pose";
 
 const GRAVITY = 9.81;
 /** Radians. */
@@ -23,9 +23,6 @@ const BACKING_SPEED = 0.5;
 /** ...turning round at this many radians a second. */
 const TURN_ROUND_RATE = 4;
 
-/** Someone drawn on a bike, as a snapshot shows them: a rider or a cop. */
-type OnABike = Pick<RiderSnapshot, "distance" | "offset" | "speed" | "bike" | "crash" | "attack" | "weapon">;
-
 /**
  * How someone on a bike, a rider or a cop, is drawn this frame: where their
  * bike is, which way it faces, how far it leans into the corner (or lies on
@@ -36,9 +33,9 @@ type OnABike = Pick<RiderSnapshot, "distance" | "offset" | "speed" | "bike" | "c
  */
 export abstract class BikeMotion {
   /** Where they are: on their bike, or wherever they are after a crash. The camera follows the player's. */
-  readonly pose: RiderPose = createPose();
+  readonly pose: TrackPose = createTrackPose();
   /** Where their bike is. */
-  readonly bikePose: RiderPose = createPose();
+  readonly bikePose: TrackPose = createTrackPose();
   /** Where the bike is, on the road's surface: world coordinates, metres. */
   readonly bikeAt = new Vector3();
   /** Radians about the vertical, as three.js turns an object: facing along the road, turned towards its sideways motion. */
@@ -78,7 +75,7 @@ export abstract class BikeMotion {
   /** Where they and their bike were drawn last frame, so the wheels, tumble and stride turn with the ground covered. */
   private readonly last = { distance: 0, offset: 0, bikeDistance: 0 };
   /** Their entry in a snapshot. */
-  protected abstract readonly entryIn: (snapshot: RaceSnapshot) => OnABike;
+  protected abstract readonly entryIn: (snapshot: RaceSnapshot) => RiderSnapshot | CopSnapshot;
 
   /** Moves on to this frame's view, `delta` seconds after the last. */
   update(view: RaceView, delta: number, wheelRadius: number) {
