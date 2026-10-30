@@ -9,6 +9,7 @@ import {
   eventsDuring,
   eventsUntil,
   kmh,
+  nearestWithinReach,
   player,
   secondsUntil,
   startedRace,
@@ -137,6 +138,42 @@ function crashedAtSpeedAheadOfTheFollowingCop(seeds: readonly number[]) {
   }
   throw new Error(`no race with seeds ${seeds.join(", ")} has the player crash at speed with the cop following`);
 }
+
+/**
+ * A started race on a closed road in which the player has ridden to within
+ * `before` metres of the first cop, waiting on the shoulder.
+ */
+function nearingTheWaitingCop(before: number, seed = 1) {
+  const race = startedRace(seed, CLOSED_ROAD);
+  const waitingAt = race.snapshot().cops[0].distance;
+  secondsUntil(race, autopilot(race), () => player(race).distance >= waitingAt - before, 120);
+  race.drainEvents();
+  return { race, cop: () => race.snapshot().cops[0] };
+}
+
+/** Input that rides at about `speed` straight at the first cop, lined up with it. */
+function rideIntoTheFirstCop(race: Race, speed: number) {
+  let lastOffset = player(race).offset;
+  return (): PlayerInput => {
+    const me = player(race);
+    const cop = race.snapshot().cops[0];
+    const sideways = (me.offset - lastOffset) * STEPS_PER_SECOND;
+    lastOffset = me.offset;
+    return {
+      ...NO_INPUT,
+      steer: Math.max(-1, Math.min(1, 0.8 * (cop.offset - me.offset) - 0.25 * sideways)),
+      throttle: me.speed < speed ? 1 : 0,
+      brake: me.speed > speed + 0.5 ? Math.min(1, (me.speed - speed) / 3) : 0,
+    };
+  };
+}
+
+/**
+ * Whether a rider's bike and a cop's overlap, by more than a centimetre: they
+ * are less than a bike's length apart along the track and 0.8 m across it.
+ */
+const touching = (a: { distance: number; offset: number }, b: { distance: number; offset: number }) =>
+  Math.abs(a.distance - b.distance) < 1.99 && Math.abs(a.offset - b.offset) < 0.79;
 
 /**
  * Rides `race` with `input` until `done` holds, for at most `seconds`,
@@ -436,6 +473,84 @@ describe("busting", () => {
 
     expect(later.filter((event: RaceEvent) => "rider" in event && event.rider === target)).toEqual([]);
     expect(them()).toMatchObject({ status: "busted", position: null });
+  });
+});
+
+describe("running into a cop", () => {
+  it("crashes a rider who rides into it at more than 8 m/s, as into another rider, and leaves the cop on its bike", () => {
+    // The first cop, waiting on the shoulder.
+    const { race, cop } = nearingTheWaitingCop(100);
+    const input = rideIntoTheFirstCop(race, 14);
+    let difference = 0;
+    const closingIn = () => ((difference = player(race).speed - cop().speed), input());
+
+    const events = eventsUntil(race, closingIn, (event) => event.type === "crash" && event.rider === PLAYER, 15);
+
+    expect(events.filter((event) => event.type === "crash")).toEqual([
+      { type: "crash", rider: PLAYER, cause: "cop", impactSpeed: expect.closeTo(difference, 0) },
+    ]);
+    expect(difference).toBeGreaterThan(8);
+    expect(cop().crash).toBeNull();
+  });
+
+  it("bumps a rider who rides into it at a small speed difference: neither crashes, and they can't ride through each other", () => {
+    const { race, cop } = nearingTheWaitingCop(40);
+    const input = rideIntoTheFirstCop(race, 4);
+    const crashes: RaceEvent[] = [];
+    let overlapping = 0;
+    let bumped = 0;
+    const watching = (): PlayerInput => {
+      crashes.push(...race.drainEvents().filter((event) => event.type === "crash" || event.type === "cop-knocked-off"));
+      const [me, them] = [player(race), cop()];
+      if (touching(me, them)) overlapping++;
+      // Pushed apart, up against each other: a bike's length apart along the track, or 0.8 m across it.
+      if (Math.abs(me.distance - them.distance) < 2.01 && Math.abs(me.offset - them.offset) < 0.81) bumped++;
+      return input();
+    };
+
+    eventsDuring(race, 12, watching);
+
+    expect(bumped).toBeGreaterThan(0);
+    expect(crashes).toEqual([]);
+    expect(overlapping).toBe(0);
+    expect(cop().crash).toBeNull();
+  });
+});
+
+describe("cops on the road", () => {
+  it("ride round cars and riders, and bump off them, so that nobody passes through a cop: in a race in traffic, no cop's bike ever overlaps a car or a rider's", () => {
+    let copSteps = 0;
+    const through: string[] = [];
+    for (const seed of [1, 2]) {
+      const race = startedRace(seed);
+      const pilot = autopilot(race);
+      // Knocking off any rider within reach, so that cops ride to crashed riders through the traffic too.
+      const fighting = (): PlayerInput => {
+        const { riders } = race.snapshot();
+        return { ...pilot(), punch: nearestWithinReach(riders, riders[PLAYER]) !== null };
+      };
+      const waitingAt = race.snapshot().cops[0].distance;
+      secondsUntil(race, pilot, () => player(race).distance >= waitingAt, 150);
+      eventsDuring(race, 90, () => {
+        const { riders, traffic, cops, clock } = race.snapshot();
+        for (const cop of cops.filter((each) => each.status === "riding")) {
+          copSteps++;
+          const bike = cop.bike;
+          for (const car of traffic) {
+            if (Math.abs(car.distance - bike.distance) < car.length / 2 + 0.99 && Math.abs(car.offset - bike.offset) < car.width / 2 + 0.39) {
+              through.push(`seed ${seed} at ${clock.toFixed(2)} s: cop ${cop.id} in car ${car.id}`);
+            }
+          }
+          for (const rider of riders.filter((each) => each.status === "racing" && each.crash === null)) {
+            if (touching(rider.bike, bike)) through.push(`seed ${seed} at ${clock.toFixed(2)} s: cop ${cop.id} in rider ${rider.id}`);
+          }
+        }
+        return player(race).status === "racing" ? fighting() : NO_INPUT;
+      });
+    }
+
+    expect(copSteps).toBeGreaterThan(90 * STEPS_PER_SECOND);
+    expect(through).toEqual([]);
   });
 });
 

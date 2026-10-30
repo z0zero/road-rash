@@ -85,11 +85,11 @@ How intact a bike is, from full to empty. It drops with every crash, and a bike 
 _Avoid_: Damage, durability, bike health
 
 **Bump**:
-A rider on their bike running into another rider on a bike, a car or an obstacle at a small speed difference (under 8 m/s) and being pushed apart, without crashing.
+A rider on their bike running into another rider on a bike, a cop, a car or an obstacle at a small speed difference (under 8 m/s) and being pushed apart, without crashing. A cop bumps off whatever it runs into, whatever the speed difference.
 _Avoid_: Nudge, collision
 
 **Run-in**:
-Two riders on their bikes running into each other at a larger speed difference than a bump: the faster of the two crashes.
+Two riders on their bikes, or a rider and a cop, running into each other at a larger speed difference than a bump: the faster rider crashes. A cop never does: the spec puts a cop out of the race only when it is beaten in a fight, so a cop that runs into a rider only bumps them.
 _Avoid_: Collision, impact
 
 **Crash**:
