@@ -2,12 +2,16 @@ import { describe, expect, it } from "vitest";
 import { createRace, NO_INPUT, PLAYER, type AttackKind, type RaceEvent, type RiderId } from ".";
 import {
   alongsideAn,
+  autopilot,
   eventsDuring,
   eventsUntil,
+  nearestWithinReach,
   player,
   punchedMidSwing,
   rideAlongside,
   secondsUntil,
+  startedRace,
+  STEPS_PER_SECOND,
 } from "./test-helpers";
 
 type AttackThrown = Extract<RaceEvent, { type: "attack-thrown" }>;
@@ -100,6 +104,38 @@ describe("clubs", () => {
     const near = aimedAt(2.0, 2.3);
     expect(near.aimedAt).toEqual(rider(near.target));
     expect(aimedAt(2.5, 2.9).aimedAt).toBeNull();
+  });
+});
+
+describe("holding a club", () => {
+  it("lasts while the player keeps swinging it: opponents seldom throw a hit into a swing, so a holding usually lasts 10 s or more", () => {
+    // Whole races in which the player rides on autopilot and mashes the punch button whenever anyone is within reach.
+    const holdings: { seconds: number; stolen: boolean }[] = [];
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      const race = startedRace(seed);
+      const riding = autopilot(race);
+      let heldFrom: number | null = null;
+      let { riders } = race.snapshot();
+      for (let step = 0; riders[PLAYER].status === "racing" && step < 300 * STEPS_PER_SECOND; step++) {
+        const me = riders[PLAYER];
+        const someoneInReach = nearestWithinReach(riders, me, me.weapon === "club" ? "club-swing" : "punch") !== null;
+        race.step({ ...riding(), punch: someoneInReach && step % 8 === 0 });
+        const stolen = race.drainEvents().some((event) => event.type === "weapon-stolen" && event.from.id === PLAYER);
+        ({ riders } = race.snapshot());
+        const holding = riders[PLAYER].weapon === "club";
+        if (holding && heldFrom === null) heldFrom = step;
+        if (!holding && heldFrom !== null) {
+          holdings.push({ seconds: (step - heldFrom) / STEPS_PER_SECOND, stolen });
+          heldFrom = null;
+        }
+      }
+      // Held to the end of the player's race.
+      if (heldFrom !== null) holdings.push({ seconds: Infinity, stolen: false });
+    }
+
+    expect(holdings.length).toBeGreaterThanOrEqual(5);
+    expect(holdings.filter((holding) => holding.seconds >= 10).length).toBeGreaterThanOrEqual(0.75 * holdings.length);
+    expect(holdings.filter((holding) => holding.stolen).length).toBeLessThanOrEqual(0.25 * holdings.length);
   });
 });
 
