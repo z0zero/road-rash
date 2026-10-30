@@ -94,8 +94,10 @@ describe("traffic", () => {
   });
 
   it("fills a window around the player, from 150 m behind them to 600 m ahead, with about one car per 120 m in each direction", () => {
-    // With no cops, who would bust the player if they crashed in traffic, ending their ride through it.
-    const race = startedRace(1, NO_COPS);
+    // With no cops, who would bust the player if they crashed in traffic, ending their ride through it; and on a seed
+    // the player rides without a crash, since cars in the race direction come onto the road only while the player is
+    // catching them up.
+    const race = startedRace(5, NO_COPS);
     const pilot = autopilot(race);
     const counts = { oncoming: [] as number[], raceDirection: [] as number[] };
     const gaps: number[] = [];
@@ -185,6 +187,32 @@ describe("running into a car", () => {
     ]);
     expect(difference).toBeGreaterThan(8);
     expect(player(race).crash).toBe("tumbling");
+  });
+
+  it("throws a rider who runs into the back of it down behind it, not through it, and drives on without running them down", () => {
+    const { race, car } = behindACar();
+    eventsUntil(race, chaseCar(race, car, 12), playerCrashed);
+    /** When the rider, tumbling or on foot, was inside the car they ran into, and when it knocked them down. */
+    const inside: number[] = [];
+    const knockedDownByIt: number[] = [];
+
+    // The rider stands still once on their feet, while the car drives on.
+    for (let step = 0; step < 4 * STEPS_PER_SECOND; step++) {
+      race.step({ ...NO_INPUT, brake: 1 });
+      const me = player(race);
+      const them = carOf(race, car);
+      if (!them) continue;
+      const along = Math.abs(them.distance - me.distance);
+      const across = Math.abs(them.offset - me.offset);
+      // A rider on the ground takes up about 0.6 m either way.
+      if (along < them.length / 2 + 0.3 && across < them.width / 2 + 0.3) inside.push(race.snapshot().clock);
+      const knockedDown = race.drainEvents().some((event) => event.type === "knocked-down" && event.rider === PLAYER);
+      if (knockedDown && along < them.length) knockedDownByIt.push(race.snapshot().clock);
+    }
+
+    expect(player(race).crash).not.toBeNull();
+    expect(inside).toEqual([]);
+    expect(knockedDownByIt).toEqual([]);
   });
 
   it("head on, crashes a rider at the two speeds added together", () => {
