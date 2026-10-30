@@ -40,7 +40,7 @@ See ADR 0004.
 ## Tests
 
 - Test only at the agreed seams:
-  - **The Race module.** Create a race with a seed, feed it scripted input step by step, and assert on snapshots, events and results. To try one rule at a time, a test may set the race up on a closed road, without cops or on a worn bike, through the test helpers' `setUpRace`; `@/race` doesn't offer that, since the game never does it.
+  - **The Race module.** Create a race with a seed, feed it scripted input step by step, and assert on snapshots, events and results. To try one rule at a time, a test may set the race up on a closed road (with cars parked where it puts them, if it needs any), without cops or on a worn bike, through the test helpers' `setUpRace`; `@/race` doesn't offer that, since the game never does it.
   - **Save data.**
   - **The browser smoke test** against the static export.
 - Rendering, input mapping and audio have no unit tests; the smoke test and play-testing cover them.
