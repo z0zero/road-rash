@@ -66,8 +66,6 @@ const RUN_STRAIGHT_BACK: OnFootControls = { steer: 0, brake: 0 };
 /** A rider whose race is over stays where they are once they are on their feet. */
 const STAND_STILL: OnFootControls = { steer: 0, brake: 1 };
 
-const KMH_PER_METRE_PER_SECOND = 3.6;
-
 /** Fast-forwarding races the rest of the field for at most three extra simulated minutes. */
 const FAST_FORWARD_STEPS = 180 * STEPS_PER_SECOND;
 
@@ -551,7 +549,7 @@ export function createRace(options: RaceOptions): Race {
     rider.attack = null;
     rider.weapon = null;
     rider.crash = throwOff(rider.motion);
-    const loss = TUNING.crashConditionLoss + TUNING.crashConditionLossPerKmh * impactSpeed * KMH_PER_METRE_PER_SECOND;
+    const loss = TUNING.crashConditionLoss + TUNING.crashConditionLossPerImpactSpeed * impactSpeed;
     rider.condition = Math.max(0, rider.condition - loss);
     if (rider.condition === 0) {
       rider.status = "wrecked";
