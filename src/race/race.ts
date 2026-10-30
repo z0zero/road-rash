@@ -39,7 +39,18 @@ import {
 } from "./fighting";
 import { footprintOfCar, footprintOfObstacle, type Footprint } from "./footprint";
 import { QUALIFYING_POSITION } from "./limits";
-import { isDroppingBack, opponentAttack, opponentIntent, wearPatience, wholePatience, type Patience } from "./opponent-fighting";
+import {
+  breatherAfterHitting,
+  isDroppingBack,
+  isFightingBack,
+  opponentAttack,
+  opponentIntent,
+  waitingIntent,
+  wearPatience,
+  whoseTurn,
+  wholePatience,
+  type Patience,
+} from "./opponent-fighting";
 import { catchUpFor, opponentControls, paceAt, paceFor, type Intent, type OpponentRiding } from "./opponent-riding";
 import { OPPONENTS, PLAYER_NAME, type Temperament } from "./opponents";
 import { createRandom } from "./random";
@@ -332,6 +343,10 @@ interface Rider {
   droppingBack: boolean;
   /** How long an opponent will still ride alongside the player if they ride slowly, and whether it has given up on them. */
   readonly patience: Patience;
+  /** Steps since the player last hit the rider (Infinity if never). */
+  stepsSinceThePlayerHitIt: number;
+  /** Steps an opponent still gives the player, after its last hit landed on them, before it attacks them again. */
+  breatherSteps: number;
 }
 
 /** Where a rider is: on their bike, or wherever they are after being thrown off it. */
@@ -389,6 +404,8 @@ export function createRace(options: RaceOptions): Race {
     crash: null,
     droppingBack: false,
     patience: wholePatience(),
+    stepsSinceThePlayerHitIt: Infinity,
+    breatherSteps: 0,
   });
   // The player starts on the start line, between the two lanes that run in the race direction.
   const riders: Rider[] = [
@@ -418,6 +435,8 @@ export function createRace(options: RaceOptions): Race {
   let playerBustedBy: Cop | null = null;
   /** The cops' turns at following the player. */
   const rota: Rota = { breakSteps: 0 };
+  /** The brawler or bully whose turn it is to fight the player, if any. */
+  let playersFighter: Rider | null = null;
 
   const clock = () => Math.max(0, stepsTaken - COUNTDOWN_STEPS) / STEPS_PER_SECOND;
 
@@ -478,6 +497,11 @@ export function createRace(options: RaceOptions): Race {
 
   function land(attacker: Fighter, target: Fighter, { kind, thrownMidSwingAt }: Attack) {
     events.push({ type: "attack-landed", attacker: who(attacker), target: who(target), kind });
+    // An opponent whose hit lands on a player who doesn't fight it back gives them a breather before its next attack.
+    if (attacker.kind === "rider" && target.kind === "rider") {
+      if (attacker.id === PLAYER) target.stepsSinceThePlayerHitIt = 0;
+      else if (target.id === PLAYER) attacker.breatherSteps = breatherAfterHitting(attacker.stepsSinceThePlayerHitIt);
+    }
     // Any hit a rider throws at another rider winding up a club swing takes the club, and the swing, if it hasn't
     // struck, never does. Cops neither take clubs nor lose them.
     const intoTheSwing = thrownMidSwingAt?.kind === target.kind && thrownMidSwingAt.id === target.id;
@@ -772,6 +796,10 @@ export function createRace(options: RaceOptions): Race {
         const catchUp = (rider: Rider) =>
           player.status === "racing" ? catchUpFor(rider.motion.distance - whereIs(player).distance) : 1;
         const playerToFight = player.status === "racing" && !player.crash ? player.motion : null;
+        for (const rider of riders) {
+          rider.stepsSinceThePlayerHitIt++;
+          rider.breatherSteps = Math.max(0, rider.breatherSteps - 1);
+        }
         // What each opponent is up to: brawlers and bullies lose patience with a player who rides slowly beside them.
         const intents = new Map<Rider, Intent>();
         for (const rider of riding) {
@@ -781,6 +809,11 @@ export function createRace(options: RaceOptions): Race {
           wearPatience(rider.patience, intent.alongside !== null, playerToFight?.speed ?? null, paceAt(rider.motion, rider.riding, track));
           intents.set(rider, intent);
         }
+        // Brawlers and bullies take turns at the player: any that want to fight them while another has its turn wait theirs.
+        const wanting = playerToFight ? riding.filter((rider) => intents.get(rider)?.alongside === playerToFight) : [];
+        playersFighter = playerToFight ? whoseTurn(playersFighter, wanting, playerToFight) : null;
+        const waiting = new Set(wanting.filter((rider) => rider !== playersFighter));
+        for (const rider of waiting) if (playerToFight) intents.set(rider, waitingIntent(rider.motion, playerToFight));
         const carsAndObstacles = [...traffic.cars.map(footprintOfCar), ...obstacles];
         // Riders off their bikes need no controls: their bikes slide on by themselves.
         const controls = riders.map((rider) => {
@@ -797,6 +830,10 @@ export function createRace(options: RaceOptions): Race {
           const nearest = nearestWithinReach(opponent.motion, targetsFor(opponent), punchOf(opponent));
           // Opponents leave the cops alone.
           if (nearest?.kind !== "rider") continue;
+          // A player who doesn't fight an opponent back gets a breather after each of its hits, and is spared by those
+          // waiting their turn.
+          const spared = opponent.breatherSteps > 0 || waiting.has(opponent);
+          if (nearest.id === PLAYER && spared && !isFightingBack(opponent.stepsSinceThePlayerHitIt)) continue;
           const kind = opponentAttack(opponent.temperament, nearest.id === PLAYER, isMidSwing(nearest.attack), random);
           // A club reaches further than a kick: a club holder swings at a rider its kick can't reach.
           if (kind) throwAttack(opponent, kind === "kick" && !withinReach(opponent.motion, nearest.motion, kind) ? "punch" : kind);

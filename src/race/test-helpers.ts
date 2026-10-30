@@ -10,6 +10,7 @@ import {
   STEP_SECONDS,
   type AttackKind,
   type CarSnapshot,
+  type ObstaclePlacement,
   type PlayerInput,
   type Race,
   type RaceEvent,
@@ -281,6 +282,22 @@ export function rideAlongside(race: Race, target: RiderId, { across = 1.4 } = {}
       steer: Math.max(-1, Math.min(1, 0.8 * (lane - me.offset) - 0.25 * sideways)),
       throttle: me.speed < wanted ? 1 : 0,
       brake: me.speed > wanted + 0.5 ? Math.min(1, (me.speed - wanted) / 3) : 0,
+    };
+  };
+}
+
+/** Input that rides at about `speed` straight at `obstacle`, lined up with it. */
+export function rideInto(race: Race, obstacle: ObstaclePlacement, speed: number) {
+  let lastOffset = player(race).offset;
+  return (): PlayerInput => {
+    const me = player(race);
+    const sideways = (me.offset - lastOffset) * STEPS_PER_SECOND;
+    lastOffset = me.offset;
+    return {
+      ...NO_INPUT,
+      steer: Math.max(-1, Math.min(1, 0.8 * (obstacle.offset - me.offset) - 0.25 * sideways)),
+      throttle: me.speed < speed ? 1 : 0,
+      brake: me.speed > speed + 1 ? Math.min(1, (me.speed - speed) / 4) : 0,
     };
   };
 }
