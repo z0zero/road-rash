@@ -1,6 +1,6 @@
 import { useEffect, useRef, type RefObject } from "react";
 import type { GameSession } from "@/game/session";
-import { PLAYER, type RaceEvent, type RiderSnapshot } from "@/race";
+import { COP_FULL_STAMINA, PLAYER, type RaceEvent, type RaceSnapshot, type RiderSnapshot } from "@/race";
 import { liveryOf } from "@/renderer/liveries";
 import { ClubIcon } from "./ClubIcon";
 import { formatRaceTime, toKmh } from "./format";
@@ -17,11 +17,12 @@ const FULL = 100;
 /**
  * Position, speed, race time, progress along the track with a marker for
  * every rider, the 3-2-1 countdown, the player's stamina and bike condition,
- * a weapon icon while the player holds a club, the nearest opponent's name,
- * stamina and club, warning arrows for riders alongside or coming up from
- * behind, and a callout when the player takes a club or has theirs taken. It
- * is updated straight from the frame loop through refs, never through React
- * state.
+ * a weapon icon while the player holds a club, the nearest opponent's (or
+ * cop's) name, stamina and club, warning arrows for riders alongside or
+ * coming up from behind, the cop alert while a cop is near, and callouts
+ * when a club changes hands with the player or a cop fights back, goes down
+ * or busts someone. It is updated straight from the frame loop through refs,
+ * never through React state.
  */
 export function Hud({ session }: { session: GameSession }) {
   const speed = useRef<HTMLSpanElement>(null);
@@ -40,6 +41,8 @@ export function Hud({ session }: { session: GameSession }) {
   const status = useRef<HTMLDivElement>(null);
   const weapon = useRef<HTMLDivElement>(null);
   const opponentClub = useRef<HTMLSpanElement>(null);
+  const opponentIsCop = useRef<HTMLSpanElement>(null);
+  const copAlert = useRef<HTMLDivElement>(null);
   const callout = useRef<HTMLDivElement>(null);
   /** The stretch of race time the callout shows for. */
   const calloutShown = useRef({ from: 0, until: 0 });
@@ -52,7 +55,7 @@ export function Hud({ session }: { session: GameSession }) {
       session.onRaceEvent((event) => {
         if (event.type === "crash" && event.rider === PLAYER) knockedDown.current = false;
         if (event.type === "knocked-down" && event.rider === PLAYER) knockedDown.current = true;
-        const text = calloutFor(event, session.view.current.riders);
+        const text = calloutFor(event, session.view.current);
         if (!text) return;
         setText(callout.current, text);
         const { clock } = session.view.current;
@@ -77,16 +80,21 @@ export function Hud({ session }: { session: GameSession }) {
         setText(countdown.current, call);
         setBar(stamina.current, player.stamina, staminaColour);
         setBar(condition.current, player.condition, conditionColour);
-        const nearest = current.nearestOpponent === null ? null : current.riders[current.nearestOpponent];
+        const nearest = current.nearestOpponentOrCop;
         setShown(opponent.current, nearest !== null);
         if (nearest) {
-          setText(opponentName.current, nearest.name);
-          setBar(opponentStamina.current, nearest.stamina, staminaColour);
-          setShown(opponentClub.current, nearest.weapon === "club");
+          const isCop = nearest.kind === "cop";
+          const them = isCop ? current.cops[nearest.id] : current.riders[nearest.id];
+          setText(opponentName.current, them.name);
+          setBar(opponentStamina.current, them.stamina, staminaColour, isCop ? COP_FULL_STAMINA : FULL);
+          setShown(opponentClub.current, them.weapon === "club");
+          setShown(opponentIsCop.current, isCop);
         }
         setShown(warnLeft.current, current.warnings.left);
         setShown(warnRight.current, current.warnings.right);
-        setText(status.current, statusOf(player, knockedDown.current));
+        setShown(copAlert.current, current.cops.some((cop) => cop.near));
+        const copComing = current.cops.some((cop) => cop.busting === PLAYER);
+        setText(status.current, statusOf(player, knockedDown.current, copComing));
         setShown(weapon.current, player.weapon === "club");
         // A callout goes once its time is up, or straight away in a race that has started over.
         const { from, until } = calloutShown.current;
@@ -114,6 +122,19 @@ export function Hud({ session }: { session: GameSession }) {
         role="status"
         className="absolute inset-x-0 top-[46%] text-center text-3xl italic text-sun drop-shadow-[0_3px_0_rgba(27,16,38,0.85)] empty:hidden"
       />
+      <div
+        ref={copAlert}
+        data-testid="cop-alert"
+        role="status"
+        aria-label="A cop is near"
+        className="absolute left-1/2 top-[4.75rem] hidden -translate-x-1/2"
+      >
+        <div className="flex items-center gap-3 rounded-full border-2 border-sand/80 bg-night/80 px-4 py-1 shadow-lg">
+          <span className="h-4 w-4 rounded-full bg-[#ff2a3d] shadow-[0_0_14px_4px_#ff2a3d] animate-cop-red motion-reduce:animate-none" />
+          <span className="text-3xl uppercase italic leading-none tracking-wide text-sand">Cop</span>
+          <span className="h-4 w-4 rounded-full bg-[#2a7dff] shadow-[0_0_14px_4px_#2a7dff] animate-cop-blue motion-reduce:animate-none" />
+        </div>
+      </div>
       <div className="absolute left-8 top-4 drop-shadow-[0_3px_0_rgba(27,16,38,0.85)]">
         <div className="text-sm uppercase tracking-widest text-sand/90">Position</div>
         <div data-testid="position" className="text-6xl italic leading-none tabular-nums">
@@ -151,9 +172,18 @@ export function Hud({ session }: { session: GameSession }) {
       <div
         ref={opponent}
         data-testid="nearest-opponent"
-        className="absolute right-8 top-4 hidden w-56 text-right drop-shadow-[0_3px_0_rgba(27,16,38,0.85)]"
+        className="absolute right-8 top-4 hidden w-60 text-right drop-shadow-[0_3px_0_rgba(27,16,38,0.85)]"
       >
-        <div className="text-sm uppercase tracking-widest text-sand/90">Nearest</div>
+        <div className="flex items-center justify-end gap-2 text-sm uppercase tracking-widest text-sand/90">
+          <span
+            ref={opponentIsCop}
+            data-testid="nearest-opponent-cop"
+            className="hidden rounded-sm bg-[#2a5bd7] px-1.5 py-px leading-tight text-sand"
+          >
+            Cop
+          </span>
+          <span>Nearest</span>
+        </div>
         <div className="flex items-center justify-end gap-2">
           <span ref={opponentClub} data-testid="nearest-opponent-club" role="img" aria-label="Holding a club" className="hidden">
             <ClubIcon className="h-7 w-7 text-sun" />
@@ -170,7 +200,7 @@ export function Hud({ session }: { session: GameSession }) {
             </div>
             <div className="leading-none">
               <div className="text-3xl uppercase italic text-sun">Club</div>
-              <div className="mt-1 font-sans text-xs font-semibold uppercase tracking-widest text-sand/90">J or Z swings it</div>
+              <div className="mt-1 font-sans text-xs font-semibold uppercase tracking-widest text-sand/90">Punch to swing it</div>
             </div>
           </div>
         </div>
@@ -209,7 +239,7 @@ export function Hud({ session }: { session: GameSession }) {
   );
 }
 
-/** A meter from 0 to 100 whose fill the frame loop sizes and colours. */
+/** A meter from 0 to its full value (100, unless the frame loop says otherwise) whose fill the frame loop sizes and colours. */
 function Bar({ fill, label, testId }: { fill: RefObject<HTMLDivElement | null>; label: string; testId?: string }) {
   return (
     <div
@@ -226,24 +256,42 @@ function Bar({ fill, label, testId }: { fill: RefObject<HTMLDivElement | null>; 
   );
 }
 
-/** What to call out when a club changes hands to or from the player; null for anything else. */
-function calloutFor(event: RaceEvent, riders: readonly RiderSnapshot[]): string | null {
-  if (event.type !== "weapon-stolen") return null;
-  const { from, by } = event;
-  if (by.kind === "rider" && by.id === PLAYER) {
-    return from.kind === "rider" ? `You took the club from ${riders[from.id].name}!` : "You took the cop's club!";
+/**
+ * What to call out, if anything: a club changing hands with the player, a
+ * cop fighting back against them, a cop going down, or someone busted
+ * (the player's own bust ends their race, which the results screen says).
+ */
+function calloutFor(event: RaceEvent, { riders, cops }: RaceSnapshot): string | null {
+  switch (event.type) {
+    case "weapon-stolen": {
+      const { from, by } = event;
+      const name = (who: typeof from) => (who.kind === "rider" ? riders[who.id].name : cops[who.id].name);
+      if (by.kind === "rider" && by.id === PLAYER) {
+        return from.kind === "rider" ? `You took the club from ${name(from)}!` : `You took ${name(from)}'s club!`;
+      }
+      if (from.kind === "rider" && from.id === PLAYER) return `${name(by)} took your club!`;
+      return null;
+    }
+    case "cop-retaliating":
+      return event.target === PLAYER ? `${cops[event.cop].name} fights back!` : null;
+    case "cop-knocked-off":
+      return `${cops[event.cop].name} is down!`;
+    case "busted":
+      return event.rider === PLAYER ? null : `${riders[event.rider].name} got busted!`;
+    default:
+      return null;
   }
-  if (from.kind === "rider" && from.id === PLAYER) {
-    return by.kind === "rider" ? `${riders[by.id].name} took your club!` : "A cop took your club!";
-  }
-  return null;
 }
 
-/** What the player is doing, if they are off their bike: tumbling after a crash, or after a car `knockedDown` them. */
-function statusOf(player: RiderSnapshot, knockedDown: boolean): string {
+/**
+ * What the player is doing, if they are off their bike: tumbling after a
+ * crash, or after a car `knockedDown` them, then on foot, with a cop riding
+ * to bust them if `copComing`.
+ */
+function statusOf(player: RiderSnapshot, knockedDown: boolean, copComing: boolean): string {
   if (player.status !== "racing") return "";
   if (player.crash === "tumbling") return knockedDown ? "Knocked down!" : "Crash!";
-  if (player.crash === "on-foot") return "Back to your bike!";
+  if (player.crash === "on-foot") return copComing ? "Cop coming! Back to your bike!" : "Back to your bike!";
   return "";
 }
 
@@ -257,9 +305,10 @@ function conditionColour(share: number): string {
   return share > 0.6 ? "#7fb6e0" : share > 0.3 ? "#ff7a3d" : "#ff4d3d";
 }
 
-function setBar(fill: HTMLDivElement | null, value: number, colour: (share: number) => string) {
+/** Fills a meter to `value` out of `full`, coloured by how full it is. */
+function setBar(fill: HTMLDivElement | null, value: number, colour: (share: number) => string, full = FULL) {
   if (!fill) return;
-  const share = Math.max(0, Math.min(1, value / FULL));
+  const share = Math.max(0, Math.min(1, value / full));
   const width = `${(share * 100).toFixed(1)}%`;
   if (fill.style.width !== width) fill.style.width = width;
   const background = colour(share);
@@ -270,6 +319,7 @@ function setBar(fill: HTMLDivElement | null, value: number, colour: (share: numb
   const meter = fill.parentElement;
   const now = String(Math.round(value));
   if (meter && meter.getAttribute("aria-valuenow") !== now) meter.setAttribute("aria-valuenow", now);
+  if (meter && meter.getAttribute("aria-valuemax") !== String(full)) meter.setAttribute("aria-valuemax", String(full));
 }
 
 function setShown(element: HTMLElement | null, shown: boolean) {

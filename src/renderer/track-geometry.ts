@@ -67,8 +67,8 @@ export function buildRoadGeometry(track: Track): BufferGeometry {
     const next = sectionAt(distance);
     const light = Math.floor(distance / 10) % 2 === 0;
     const shoulder = light ? SHOULDER : SHOULDER_DARK;
-    const kerb = Math.round(distance / SECTION) % 2 === 0 ? RUMBLE_RED : RUMBLE_WHITE;
-    const strips = [shoulder, kerb, light ? ASPHALT : ASPHALT_LIGHT, kerb, shoulder];
+    const rumbleStrip = Math.round(distance / SECTION) % 2 === 0 ? RUMBLE_RED : RUMBLE_WHITE;
+    const strips = [shoulder, rumbleStrip, light ? ASPHALT : ASPHALT_LIGHT, rumbleStrip, shoulder];
     strips.forEach((color, strip) => {
       triangles.surface(previous[strip], previous[strip + 1], next[strip + 1], next[strip], color);
     });

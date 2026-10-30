@@ -66,18 +66,16 @@ const TAIL_LAMP = new Color("#ff2a1a").multiplyScalar(1.7);
 
 const WHEEL_RADIUS = 0.32;
 
-/** Builds the model for a kind of car. Each call builds new geometries; dispose of them when done. */
-export function carModel(kind: CarKind): CarModel {
-  switch (kind) {
-    case "hatchback":
-      return hatchback();
-    case "saloon":
-      return saloon();
-    case "van":
-      return van();
-    case "pickup":
-      return pickup();
-  }
+/**
+ * How to build the model of each kind of car the race has, so typecheck
+ * catches a kind with no model. Each call builds new geometries; dispose of
+ * them when done.
+ */
+export const CAR_MODELS: Readonly<Record<CarKind, () => CarModel>> = { hatchback, saloon, van, pickup };
+
+/** Whether `kind` names a kind of car there is a model for. */
+export function isCarKind(kind: string): kind is CarKind {
+  return Object.hasOwn(CAR_MODELS, kind);
 }
 
 /** The three parts a car is built from as it is put together. */

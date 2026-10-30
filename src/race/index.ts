@@ -10,11 +10,13 @@
  *   race.track;                // the road's geometry and placements
  */
 export { createRace, NO_INPUT, PLAYER } from "./race";
+export { COP_FULL_STAMINA } from "./cops";
 export { STEP_SECONDS } from "./steps";
 export type {
   AttackSnapshot,
   BikeSnapshot,
   CarSnapshot,
+  CopSnapshot,
   PlayerInput,
   Race,
   RaceOptions,
@@ -27,7 +29,9 @@ export type {
 export type { Track, TrackSample, WorldPoint } from "./track";
 export type { CarKind } from "./traffic";
 export type { CrashPhase } from "./crashing";
+export type { CopStatus } from "./cops";
 export type { Weapon } from "./fighting";
+export type { Remark } from "./remarks";
 export type { Warnings } from "./surroundings";
 export type { Temperament } from "./opponents";
 export type { ObstacleKind, ObstaclePlacement, SceneryKind, SceneryPlacement } from "./placements";

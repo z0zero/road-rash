@@ -160,6 +160,16 @@ test("starts the player without a club, so the HUD's weapon icon is hidden", asy
   await expect(page.getByTestId("weapon")).toBeHidden();
 });
 
+test("starts with the cops waiting far up the road, so the HUD's cop alert is hidden", async ({ page }) => {
+  await startRacing(page);
+  await page.keyboard.down("w");
+  await play(page, 2);
+  await page.keyboard.up("w");
+
+  await expect(page.getByTestId("cop-alert")).toHaveCount(1);
+  await expect(page.getByTestId("cop-alert")).toBeHidden();
+});
+
 test("punches and kicks with J and K while riding", async ({ page }) => {
   await startRacing(page);
   await page.keyboard.down("w");
@@ -171,6 +181,152 @@ test("punches and kicks with J and K while riding", async ({ page }) => {
   await page.keyboard.up("w");
 
   expect(await hudSpeed(page)).toBeGreaterThan(0);
+});
+
+/** Buttons of the standard gamepad mapping, named as on an Xbox controller. */
+const GAMEPAD = { a: 0, b: 1, x: 2, leftTrigger: 6, rightTrigger: 7, start: 9, up: 12, down: 13, left: 14, right: 15 };
+
+/** What the fake gamepad lets a test do: hold and let go of its buttons, and push its left stick. */
+interface FakeGamepad {
+  press(button: number, value?: number): void;
+  release(button: number): void;
+  push(x: number, y: number): void;
+}
+
+declare global {
+  interface Window {
+    /** Set in the page by `plugInAGamepad`. */
+    fakeGamepad: FakeGamepad;
+  }
+}
+
+/** Runs in the page before its scripts: one gamepad with the standard mapping, which the test works through `window.fakeGamepad`. */
+function plugInAGamepad() {
+  const buttons = Array.from({ length: 17 }, () => ({ pressed: false, touched: false, value: 0 }));
+  const axes = [0, 0, 0, 0];
+  const pad = { id: "Fake gamepad (STANDARD GAMEPAD)", index: 0, connected: true, mapping: "standard", timestamp: 0, axes, buttons };
+  Object.defineProperty(Navigator.prototype, "getGamepads", {
+    configurable: true,
+    value: () => [pad, null, null, null],
+  });
+  window.fakeGamepad = {
+    press: (button, value = 1) => {
+      buttons[button] = { pressed: true, touched: true, value };
+      pad.timestamp++;
+    },
+    release: (button) => {
+      buttons[button] = { pressed: false, touched: false, value: 0 };
+      pad.timestamp++;
+    },
+    push: (x, y) => {
+      axes[0] = x;
+      axes[1] = y;
+      pad.timestamp++;
+    },
+  };
+}
+
+/** The page's fake gamepad, from the test. */
+function gamepad(page: Page) {
+  return {
+    press: (button: number, value = 1) => page.evaluate(([b, v]) => window.fakeGamepad.press(b, v), [button, value]),
+    release: (button: number) => page.evaluate((b) => window.fakeGamepad.release(b), button),
+    push: (x: number, y: number) => page.evaluate(([px, py]) => window.fakeGamepad.push(px, py), [x, y]),
+  };
+}
+
+test.describe("with a gamepad", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(plugInAGamepad);
+    await page.reload();
+  });
+
+  test("throttles on the right trigger or A, brakes on the left trigger and pauses on Start", async ({ page }) => {
+    await startRacing(page);
+
+    await gamepad(page).press(GAMEPAD.rightTrigger);
+    await play(page, 3);
+    const fast = await hudSpeed(page);
+    expect(fast).toBeGreaterThan(40);
+    await gamepad(page).release(GAMEPAD.rightTrigger);
+    await gamepad(page).press(GAMEPAD.leftTrigger);
+    await play(page, 1);
+    const braked = await hudSpeed(page);
+    expect(braked).toBeLessThan(fast - 25);
+    await gamepad(page).release(GAMEPAD.leftTrigger);
+    await gamepad(page).press(GAMEPAD.a);
+    await play(page, 2);
+    expect(await hudSpeed(page)).toBeGreaterThan(braked + 15);
+
+    await gamepad(page).press(GAMEPAD.start);
+    await play(page, 0.2);
+    await gamepad(page).release(GAMEPAD.start);
+    await expect(page.getByRole("dialog", { name: "Paused" })).toBeVisible();
+  });
+
+  test("lets go of every held control while the window has lost focus", async ({ page }) => {
+    await startRacing(page);
+    await page.keyboard.down("w");
+    await gamepad(page).press(GAMEPAD.rightTrigger);
+    await play(page, 3);
+    const riding = await hudSpeed(page);
+
+    await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+    await play(page, 2);
+    const coasting = await hudSpeed(page);
+    expect(coasting).toBeLessThan(riding);
+
+    // The gamepad's trigger, still held, counts again once the window has focus back.
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await play(page, 2);
+    expect(await hudSpeed(page)).toBeGreaterThan(coasting + 10);
+    await page.keyboard.up("w");
+  });
+
+  /**
+   * Waits for the page's next animation frames, by when the game has read the
+   * gamepad again: it reads it once a frame, so a button let go of and pressed
+   * again between two frames would look held all along.
+   */
+  function nextFrames(page: Page) {
+    return page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  }
+
+  /** Presses a gamepad button, waits for what it does, then lets go, and waits for the game to have seen it let go. */
+  async function tap(page: Page, button: number, then: () => Promise<void>) {
+    await gamepad(page).press(button);
+    await then();
+    await gamepad(page).release(button);
+    await nextFrames(page);
+  }
+
+  test("moves between menu buttons with the D-pad or the left stick, and presses them with A", async ({ page }) => {
+    await expect(page.getByRole("button", { name: "Start Race" })).toBeFocused();
+
+    await tap(page, GAMEPAD.down, () => expect(page.getByRole("button", { name: "Controls" })).toBeFocused());
+    await gamepad(page).push(0, 1);
+    await expect(page.getByRole("button", { name: "Settings" })).toBeFocused();
+    await gamepad(page).push(0, 0);
+    await nextFrames(page);
+    await tap(page, GAMEPAD.up, () => expect(page.getByRole("button", { name: "Controls" })).toBeFocused());
+    const controls = page.getByRole("dialog", { name: "Controls" });
+    await tap(page, GAMEPAD.a, () => expect(controls).toBeVisible());
+
+    // Back is in focus on the Controls screen.
+    await tap(page, GAMEPAD.a, () => expect(controls).toBeHidden());
+    await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
+  });
+
+  test("turns a volume slider in focus with the D-pad", async ({ page }) => {
+    await page.getByRole("button", { name: "Settings" }).click();
+    const master = page.getByRole("dialog", { name: "Settings" }).getByRole("slider", { name: "Master volume" });
+
+    // From Back, the last button, down comes round to the first slider.
+    await tap(page, GAMEPAD.down, () => expect(master).toBeFocused());
+    await tap(page, GAMEPAD.left, () => expect(master).toHaveValue("95"));
+    await tap(page, GAMEPAD.left, () => expect(master).toHaveValue("90"));
+    await tap(page, GAMEPAD.right, () => expect(master).toHaveValue("95"));
+  });
 });
 
 test("opens Settings from the title screen and goes back", async ({ page }) => {
@@ -195,6 +351,32 @@ test("credits the music and disclaims any tie to Road Rash, from the title scree
   await expect(credits).toContainText("not affiliated with Road Rash or Electronic Arts");
 
   await credits.getByRole("button", { name: "Back" }).click();
+  await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
+});
+
+test("lists the keyboard and gamepad controls, from the title screen", async ({ page }) => {
+  await page.getByRole("button", { name: "Controls" }).click();
+
+  const controls = page.getByRole("dialog", { name: "Controls" });
+  await expect(controls).toBeVisible();
+  await expect(controls.getByRole("columnheader", { name: "Keyboard" })).toBeVisible();
+  await expect(controls.getByRole("columnheader", { name: "Gamepad" })).toBeVisible();
+  // The bindings from the spec: each action, its keys, then its gamepad controls.
+  const bindings = [
+    ["Throttle", ["W", "↑"], ["Right trigger", "A"]],
+    ["Brake", ["S", "↓"], ["Left trigger"]],
+    ["Steer", ["A", "D", "←", "→"], ["Left stick", "D-pad"]],
+    ["Punch, or swing a club", ["J", "Z"], ["X"]],
+    ["Kick", ["K", "X"], ["B"]],
+    ["Pause", ["Esc", "P"], ["Start"]],
+  ] as const;
+  for (const [action, keys, buttons] of bindings) {
+    const row = controls.getByRole("row").filter({ has: page.getByRole("rowheader", { name: action, exact: true }) });
+    await expect(row.getByRole("cell").nth(0).locator("kbd")).toHaveText(keys);
+    await expect(row.getByRole("cell").nth(1).locator("kbd")).toHaveText(buttons);
+  }
+
+  await controls.getByRole("button", { name: "Back" }).click();
   await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
 });
 
@@ -369,6 +551,57 @@ for (const [behaviour, blockAudio] of [
     await expect(page.getByTestId("countdown")).not.toBeEmpty();
   });
 }
+
+/** Runs in the page before its scripts: a browser without WebGL 2, or with it turned off. */
+function withoutWebGL2() {
+  const getContext = HTMLCanvasElement.prototype.getContext as (this: HTMLCanvasElement, ...args: unknown[]) => unknown;
+  Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+    configurable: true,
+    value(this: HTMLCanvasElement, type: string, ...options: unknown[]) {
+      return type === "webgl2" ? null : getContext.call(this, type, ...options);
+    },
+  });
+}
+
+test("explains that the game needs a newer browser where there is no WebGL 2", async ({ page }) => {
+  await page.addInitScript(withoutWebGL2);
+  await page.reload();
+
+  await expect(page.getByRole("heading", { name: "Rev & Wreck needs a newer browser" })).toBeVisible();
+  await expect(page.getByText(/WebGL\s2/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start Race" })).toHaveCount(0);
+  await expect(page.locator("canvas")).toHaveCount(0);
+});
+
+test.describe("on a touch-only phone or tablet", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+
+  test("explains that the game is made for desktop, with a keyboard or gamepad", async ({ page }) => {
+    await expect(page.getByRole("heading", { name: "Rev & Wreck is made for desktop" })).toBeVisible();
+    await expect(page.getByText(/keyboard or a gamepad/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Start Race" })).toHaveCount(0);
+    await expect(page.locator("canvas")).toHaveCount(0);
+  });
+
+  test("lets a player who has a keyboard or gamepad there play anyway", async ({ page }) => {
+    await page.getByRole("button", { name: /Play anyway/ }).click();
+
+    await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
+  });
+});
+
+test.describe("in a browser that can't run the game's scripts", () => {
+  test.use({ javaScriptEnabled: false });
+
+  test("asks for a recent browser once the game has been loading for a while", async ({ page }) => {
+    const hint = page.getByText(/Still loading\? Rev & Wreck needs/);
+    await expect(page.getByText("Loading…")).toBeVisible();
+    await expect(hint).toBeHidden();
+
+    await expect(hint).toBeVisible({ timeout: 15_000 });
+    await expect(hint).toContainText(/WebGL\s2/);
+  });
+});
 
 test("downloads less than 10 MB to get racing", async ({ browser, baseURL }) => {
   // A fresh browser context, so nothing comes from the cache.

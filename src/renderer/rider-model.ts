@@ -1,6 +1,7 @@
 import {
   BoxGeometry,
   type BufferGeometry,
+  Color,
   type ColorRepresentation,
   ConeGeometry,
   CylinderGeometry,
@@ -55,7 +56,15 @@ export interface RiderModel {
   readonly rest: ReadonlyMap<Group, Quaternion>;
   /** Every mesh, to cast shadows or to swap materials. */
   readonly meshes: readonly Mesh[];
+  /** A cop's bike's lights, which `flashLightBar` lights; null on a rider's bike. */
+  readonly lightBar: LightBar | null;
   dispose(): void;
+}
+
+/** The red and blue lamps of the light bar on a cop's bike, each its own glowing material. */
+export interface LightBar {
+  readonly red: MeshBasicMaterial;
+  readonly blue: MeshBasicMaterial;
 }
 
 const TYRE = "#1b1a1f";
@@ -70,9 +79,22 @@ const VISOR = "#1b2230";
 /** Pale wood, so a club stands out against dark jackets and the road. */
 const WOOD = "#e2b06e";
 const GRIP_TAPE = "#2a2320";
+/** A cop's bike: white panniers either side of the rear wheel, and a black light bar on a mast behind the seat. */
+const PANNIER = "#f2f3f5";
+const LIGHT_BAR = "#16161a";
+/** A light bar's lamps: their colours, and how bright they glow when lit (far brighter than white, so they bloom) and when dark. */
+const LAMP_RED = new Color("#ff1f35");
+const LAMP_BLUE = new Color("#1f63ff");
+const LAMP_LIT = 6;
+const LAMP_DARK = 0.18;
+/** The lamps take turns, each lit for this many seconds. */
+const LAMP_TURN_SECONDS = 0.3;
 
-/** Builds a rider and their bike in a livery. Call `dispose` when done with it. */
-export function createRiderModel(livery: Livery): RiderModel {
+/**
+ * Builds a rider and their bike in a livery: a cop on a police bike, with
+ * panniers and a light bar, if `police`. Call `dispose` when done with it.
+ */
+export function createRiderModel(livery: Livery, { police = false } = {}): RiderModel {
   const geometries: BufferGeometry[] = [];
   const surface = new MeshPhongMaterial({ vertexColors: true, shininess: 38, specular: "#3a3a3a" });
   // The lamps glow far brighter than white, so they bloom.
@@ -178,6 +200,22 @@ export function createRiderModel(livery: Livery): RiderModel {
 
   const arms: [Limb, Limb] = [arm(-1), arm(1)];
   const legs: [Limb, Limb] = [leg(-1), leg(1)];
+
+  let lightBar: LightBar | null = null;
+  if (police) {
+    root.add(mesh(policeGeometry()));
+    lightBar = { red: new MeshBasicMaterial({ color: LAMP_RED }), blue: new MeshBasicMaterial({ color: LAMP_BLUE }) };
+    materials.push(lightBar.red, lightBar.blue);
+    for (const [material, side] of [
+      [lightBar.red, -1],
+      [lightBar.blue, 1],
+    ] as const) {
+      const lamp = mesh(new BoxGeometry(0.17, 0.1, 0.12), material);
+      lamp.position.set(side * 0.13, 1.42, 0.86);
+      root.add(lamp);
+    }
+    flashLightBar(lightBar, false, 0);
+  }
   const joints = [torso.group, head, ...arms.flatMap(({ upper, lower }) => [upper, lower]), ...legs.flatMap(({ upper, lower }) => [upper, lower])];
   return {
     root,
@@ -190,11 +228,22 @@ export function createRiderModel(livery: Livery): RiderModel {
     clubs: [clubs[0], clubs[1]],
     rest: new Map(joints.map((group) => [group, group.quaternion.clone()])),
     meshes,
+    lightBar,
     dispose() {
       geometries.forEach((geometry) => geometry.dispose());
       materials.forEach((material) => material.dispose());
     },
   };
+}
+
+/**
+ * Lights a cop's light bar for the moment `seconds` into the race: red and
+ * blue taking turns while it is `flashing`, both dark otherwise.
+ */
+export function flashLightBar({ red, blue }: LightBar, flashing: boolean, seconds: number) {
+  const redTurn = Math.floor(seconds / LAMP_TURN_SECONDS) % 2 === 0;
+  red.color.copy(LAMP_RED).multiplyScalar(flashing && redTurn ? LAMP_LIT : LAMP_DARK);
+  blue.color.copy(LAMP_BLUE).multiplyScalar(flashing && !redTurn ? LAMP_LIT : LAMP_DARK);
 }
 
 const UP = new Vector3(0, 1, 0);
@@ -272,6 +321,18 @@ function clubGeometry(): BufferGeometry {
     .add(new CylinderGeometry(0.032, 0.032, 0.22, 7), GRIP_TAPE, { at: [0, 0, 0] })
     .add(new CylinderGeometry(0.075, 0.036, 0.58, 7), WOOD, { at: [0, 0.4, 0] }, 0.12)
     .add(new CylinderGeometry(0.06, 0.075, 0.08, 7), WOOD, { at: [0, 0.73, 0] }, 0.12)
+    .build();
+}
+
+/** What makes a bike a police bike: white panniers either side of the rear wheel, and the light bar's mast and housing. */
+function policeGeometry(): BufferGeometry {
+  return new LowPoly()
+    .add(new BoxGeometry(0.2, 0.34, 0.5), PANNIER, { at: [-0.3, 0.66, 0.55] })
+    .add(new BoxGeometry(0.2, 0.34, 0.5), PANNIER, { at: [0.3, 0.66, 0.55] })
+    .add(new BoxGeometry(0.21, 0.05, 0.51), LIGHT_BAR, { at: [-0.3, 0.84, 0.55] })
+    .add(new BoxGeometry(0.21, 0.05, 0.51), LIGHT_BAR, { at: [0.3, 0.84, 0.55] })
+    .add(new BoxGeometry(0.05, 0.3, 0.05), LIGHT_BAR, { at: [0, 1.22, 0.88] })
+    .add(new BoxGeometry(0.46, 0.06, 0.14), LIGHT_BAR, { at: [0, 1.36, 0.86] })
     .build();
 }
 

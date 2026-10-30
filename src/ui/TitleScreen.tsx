@@ -1,3 +1,4 @@
+import { KEYS, namesOf } from "@/input/bindings";
 import type { PersonalBest } from "@/save-data/save-data";
 import { Button } from "./Button";
 import { formatPosition, formatRaceTime } from "./format";
@@ -5,11 +6,13 @@ import { formatPosition, formatRaceTime } from "./format";
 export function TitleScreen({
   personalBest,
   onStart,
+  onControls,
   onSettings,
   onCredits,
 }: {
   personalBest: PersonalBest;
   onStart: () => void;
+  onControls: () => void;
   onSettings: () => void;
   onCredits: () => void;
 }) {
@@ -21,12 +24,13 @@ export function TitleScreen({
         <Button autoFocus onClick={onStart}>
           Start Race
         </Button>
+        <Button onClick={onControls}>Controls</Button>
         <Button onClick={onSettings}>Settings</Button>
         <Button onClick={onCredits}>Credits</Button>
       </div>
       <p className="text-sm text-sand/85 drop-shadow">
-        W/A/S/D or the arrow keys to ride &middot; J or Z to punch, or swing a club &middot; K or X to kick &middot; Esc
-        or P to pause
+        {RIDING_LETTERS} or the arrow keys to ride &middot; {namesOf(KEYS.punch)} to punch, or swing a club &middot;{" "}
+        {namesOf(KEYS.kick)} to kick &middot; {namesOf(KEYS.pause)} to pause
       </p>
       {personalBest.time !== null && (
         <p className="text-sm text-sun drop-shadow">
@@ -38,9 +42,12 @@ export function TitleScreen({
   );
 }
 
+/** The letter keys to ride with, "W/A/S/D": the first key for each way, the arrow keys being the others. */
+const RIDING_LETTERS = [KEYS.throttle, KEYS.steerLeft, KEYS.brake, KEYS.steerRight].map((keys) => keys[0].name).join("/");
+
 export function GameTitle() {
   return (
-    <h1 className="font-display text-7xl uppercase italic tracking-wide text-sun drop-shadow-[0_4px_0_rgba(27,16,38,0.9)] sm:text-8xl">
+    <h1 className="font-display text-6xl uppercase italic tracking-wide text-sun drop-shadow-[0_4px_0_rgba(27,16,38,0.9)] sm:text-8xl">
       Rev &amp; Wreck
     </h1>
   );

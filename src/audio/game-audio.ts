@@ -2,6 +2,7 @@ import type { GameSession, RaceView, Screen, SessionState } from "@/game/session
 import {
   PLAYER,
   STEP_SECONDS,
+  type CopSnapshot,
   type RaceEvent,
   type RaceSnapshot,
   type RiderOrCop,
@@ -45,20 +46,21 @@ export interface GameAudio {
 /** The music's level while the game is paused: it ducks under the pause menu. */
 const PAUSED_MUSIC_LEVEL = 0.3;
 
-/** The nearest opponent's engine is heard within this many metres of the player. */
-const OPPONENT_EARSHOT = 60;
-
 /** The speed of sound, metres per second, for the Doppler shift of a passing opponent's engine. */
 const SPEED_OF_SOUND = 343;
 
 /** A sound this many metres from the player is heard at half strength; further off, fainter still. */
 const HALF_LOUDNESS_METRES = 10;
+/** The nearest opponent's or cop's engine is heard at half strength this many metres from the player. */
+const ENGINE_HALF_LOUDNESS_METRES = 8;
 
 /** Sounds fainter than this aren't worth playing. */
 const FAINTEST = 0.02;
 
-/** A crash this fast (m/s) sounds as hard as a crash can; slower ones are softer, down to a floor. */
+/** A crash this fast (m/s) sounds as hard as a crash can; slower ones are softer... */
 const HARDEST_CRASH_SPEED = 30;
+/** ...down to this share of the hardest. */
+const SOFTEST_CRASH = 0.35;
 
 /** While the player is off the bike, it lies ticking over at this share of the engine's loudness. */
 const FALLEN_ENGINE_LOUDNESS = 0.4;
@@ -69,6 +71,12 @@ const CRASH_DUCK = 0.6;
 
 /** The sound each kind of attack makes when it lands. */
 const LANDING_SOUNDS = { punch: playPunch, kick: playKick, "club-swing": playClubHit } as const;
+
+/** The player, as the race names whoever an event is about. */
+const THE_PLAYER: RiderOrCop = { kind: "rider", id: PLAYER };
+
+/** The sound of someone going down: off their bike in a crash, knocked off it as a cop, or knocked down by a car. */
+const GOING_DOWN_SOUNDS = { crash: playCrash, "cop-knocked-off": playCrash, "knocked-down": playKnockDown } as const;
 
 /** Off the road, gravel crunches at full strength from this speed (m/s). */
 const LOUDEST_GRAVEL_SPEED = 25;
@@ -149,17 +157,17 @@ class Sound {
   private readonly mixer: Mixer;
   private readonly kit: Kit;
   private readonly engine: EngineSound;
-  /** The engine of the opponent nearest the player. */
+  /** The engine of the opponent or cop nearest the player. */
   private readonly opponentEngine: EngineSound;
   private readonly siren: Siren;
   private readonly skid: Skid;
   private readonly gravel: Gravel;
   private screen: Screen = "title";
-  /** The opponent whose engine is heard. */
-  private nearest: number | null = null;
+  /** The opponent or cop whose engine is heard. */
+  private nearest: RiderOrCop | null = null;
   /**
    * The snapshot the last frame heard, and how fast the player's and the
-   * nearest opponent's bikes were gaining speed then (m/s²).
+   * nearest opponent's or cop's bikes were gaining speed then (m/s²).
    */
   private heard: RaceSnapshot | null = null;
   private acceleration = 0;
@@ -241,18 +249,15 @@ class Sound {
       case "weapon-stolen":
         this.play(hearingOf(race, event.by, event.from), (out, loudness) => playGrab(this.kit, out, loudness));
         break;
-      case "crash": {
-        const force = clamp(event.impactSpeed / HARDEST_CRASH_SPEED, 0.35, 1);
-        this.play(hearingOf(race, { kind: "rider", id: event.rider }, null), (out, loudness) => {
-          playCrash(this.kit, out, force * loudness);
-          this.mixer.duck(CRASH_DUCK * force * loudness);
-        });
-        break;
-      }
+      case "crash":
+      case "cop-knocked-off":
       case "knocked-down": {
-        const force = clamp(event.impactSpeed / HARDEST_CRASH_SPEED, 0.35, 1);
-        this.play(hearingOf(race, { kind: "rider", id: event.rider }, null), (out, loudness) => {
-          playKnockDown(this.kit, out, force * loudness);
+        const who: RiderOrCop =
+          event.type === "cop-knocked-off" ? { kind: "cop", id: event.cop } : { kind: "rider", id: event.rider };
+        const force = clamp(event.impactSpeed / HARDEST_CRASH_SPEED, SOFTEST_CRASH, 1);
+        const play = GOING_DOWN_SOUNDS[event.type];
+        this.play(hearingOf(race, who, null), (out, loudness) => {
+          play(this.kit, out, force * loudness);
           this.mixer.duck(CRASH_DUCK * force * loudness);
         });
         break;
@@ -284,11 +289,15 @@ class Sound {
     if (racing) this.countdownCall = call;
 
     const player = current.riders[PLAYER];
-    const opponent = racing ? nearestOpponent(current, player) : null;
+    // The engine heard beside the player's is that of the opponent or cop the race says is nearest them.
+    const nearest = racing ? current.nearestOpponentOrCop : null;
+    const opponent = nearest ? whereIs(current, nearest) : null;
     if (current !== this.heard) {
       // A new step: how fast the bikes are gaining or losing speed.
-      this.acceleration = smooth(this.acceleration, accelerationOf(previous, player));
-      this.opponentAcceleration = opponent ? smooth(this.opponentAcceleration, accelerationOf(previous, opponent)) : 0;
+      this.acceleration = smooth(this.acceleration, accelerationOf(previous, current, THE_PLAYER));
+      this.opponentAcceleration = nearest
+        ? smooth(this.opponentAcceleration, accelerationOf(previous, current, nearest))
+        : 0;
       this.heard = current;
     }
 
@@ -302,8 +311,8 @@ class Sound {
     this.skid.setIntensity(skid);
     this.gravel.setIntensity(racing && onBike && offRoad ? player.speed / LOUDEST_GRAVEL_SPEED : 0);
 
-    if ((opponent?.id ?? null) !== this.nearest) this.opponentEngine.reset();
-    this.nearest = opponent?.id ?? null;
+    if (!isSameOne(nearest, this.nearest)) this.opponentEngine.reset();
+    this.nearest = nearest;
     if (!opponent) {
       this.opponentEngine.follow(0, 0, 0);
       return;
@@ -313,7 +322,7 @@ class Sound {
     // Higher while it comes up on the player, lower as it pulls away.
     const closing = -Math.sign(along) * (opponent.speed - player.speed);
     const doppler = 1 + clamp(closing / SPEED_OF_SOUND, -0.08, 0.08);
-    const loudness = 1 / (1 + (Math.hypot(along, across) / 8) ** 2);
+    const loudness = loudnessAt(along, across, ENGINE_HALF_LOUDNESS_METRES);
     this.opponentEngine.follow(opponent.speed, this.opponentAcceleration, loudness, panFor(along, across), doppler);
   }
 
@@ -349,44 +358,48 @@ class Sound {
 /**
  * How the player hears something happening to `subject`, with `other` the
  * rider or cop at the other end of it, if any: their own fights at full
- * strength from the other rider's side, and everyone else's fainter the
+ * strength from the other side's direction, and everyone else's fainter the
  * further off they are.
  */
 function hearingOf(race: RaceSnapshot, subject: RiderOrCop, other: RiderOrCop | null): Hearing {
   const player = race.riders[PLAYER];
-  const isPlayer = (who: RiderOrCop | null) => who?.kind === "rider" && who.id === PLAYER;
-  const riderOf = (who: RiderOrCop | null) => (who?.kind === "rider" ? race.riders[who.id] : undefined);
+  const isPlayer = (who: RiderOrCop | null) => isSameOne(who, THE_PLAYER);
   if (isPlayer(subject) || isPlayer(other)) {
-    const them = riderOf(isPlayer(subject) ? other : subject);
+    const them = whereIs(race, isPlayer(subject) ? other : subject);
     return { loudness: 1, pan: them ? panFor(them.distance - player.distance, them.offset - player.offset) : 0 };
   }
-  // Cops aren't in the snapshot: a cop's fight is heard where the rider in it is.
-  const where = riderOf(subject) ?? riderOf(other);
+  const where = whereIs(race, subject);
   if (!where) return { loudness: 0.5, pan: 0 };
   const along = where.distance - player.distance;
   const across = where.offset - player.offset;
-  return { loudness: 1 / (1 + (Math.hypot(along, across) / HALF_LOUDNESS_METRES) ** 2), pan: panFor(along, across) };
+  return { loudness: loudnessAt(along, across, HALF_LOUDNESS_METRES), pan: panFor(along, across) };
 }
 
-/** The opponent on their bike nearest the player within earshot, or null. */
-function nearestOpponent(race: RaceSnapshot, player: RiderSnapshot): RiderSnapshot | null {
-  let nearest: RiderSnapshot | null = null;
-  let nearestDistance = OPPONENT_EARSHOT;
-  for (const rider of race.riders) {
-    if (rider.id === PLAYER || rider.crash !== null || rider.status !== "racing") continue;
-    const distance = Math.hypot(rider.distance - player.distance, rider.offset - player.offset);
-    if (distance < nearestDistance) {
-      nearest = rider;
-      nearestDistance = distance;
-    }
-  }
-  return nearest;
+/** The rider or cop `who` in `race`, if there is one. */
+function whereIs(race: RaceSnapshot, who: RiderOrCop | null): RiderSnapshot | CopSnapshot | undefined {
+  if (who === null) return undefined;
+  return who.kind === "rider" ? race.riders[who.id] : race.cops[who.id];
 }
 
-/** How fast `rider` gained speed over the last step, m/s². */
-function accelerationOf(previous: RaceSnapshot, rider: RiderSnapshot): number {
-  const before = previous.riders[rider.id];
-  return before ? (rider.speed - before.speed) / STEP_SECONDS : 0;
+/** Whether `a` and `b` are the same rider or cop, or both no one. */
+function isSameOne(a: RiderOrCop | null, b: RiderOrCop | null): boolean {
+  return a?.kind === b?.kind && a?.id === b?.id;
+}
+
+/**
+ * How loud a sound `along` metres ahead of the player and `across` metres to
+ * their right is heard: in full beside them, at half strength
+ * `halfLoudnessMetres` away, and fainter still further off.
+ */
+function loudnessAt(along: number, across: number, halfLoudnessMetres: number): number {
+  return 1 / (1 + (Math.hypot(along, across) / halfLoudnessMetres) ** 2);
+}
+
+/** How fast the bike of the rider or cop `who` gained speed over the last step, m/s². */
+function accelerationOf(previous: RaceSnapshot, current: RaceSnapshot, who: RiderOrCop): number {
+  const before = whereIs(previous, who);
+  const now = whereIs(current, who);
+  return before && now ? (now.speed - before.speed) / STEP_SECONDS : 0;
 }
 
 /** Eases a running value towards each new reading, so one odd step doesn't jolt the sound. */

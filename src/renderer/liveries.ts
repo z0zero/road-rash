@@ -30,3 +30,6 @@ const LIVERIES: readonly Livery[] = [
 export function liveryOf(rider: RiderId): Livery {
   return LIVERIES[rider % LIVERIES.length];
 }
+
+/** Every cop's colours: a white police bike with blue stripes and rims, a navy uniform and a white helmet. */
+export const COP_LIVERY: Livery = { paint: "#f4f5f7", accent: "#1d4fd8", jacket: "#1b2a4a", helmet: "#f4f5f7" };

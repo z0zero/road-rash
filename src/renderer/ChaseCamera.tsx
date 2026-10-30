@@ -18,10 +18,10 @@ const CHASE: Framing = { behind: 7, above: 2.6, lookAhead: 14 };
 /** Further back and higher on the title screen, so the bike and the start line show below the title. */
 const TITLE: Framing = { behind: 17, above: 6.5, lookAhead: 30 };
 
-/** Degrees of vertical field of view when standing still... */
-const FIELD_OF_VIEW = 64;
-/** ...and how many more at full speed. */
-const FIELD_OF_VIEW_AT_SPEED = 13;
+/** The camera's vertical field of view when standing still, in degrees... */
+export const FIELD_OF_VIEW_DEGREES = 64;
+/** ...and how many degrees wider it is at full speed. */
+const FIELD_OF_VIEW_GAIN_DEGREES = 13;
 /** Metres per second at which the field of view is widest: 225 km/h. */
 const FULL_SPEED = 62.5;
 /** How quickly the field of view follows the speed (1/s). */
@@ -61,7 +61,7 @@ export function ChaseCamera({
   reduceMotion: boolean;
 }) {
   useFrame(({ camera }, delta) => aim(camera, session, player, shake, reduceMotion, delta), -1);
-  useEffect(() => session.onRaceEvent((event) => shake.kick(jolt(event))), [session, shake]);
+  useEffect(() => session.onRaceEvent((event) => shake.jolt(joltOf(event))), [session, shake]);
   return null;
 }
 
@@ -70,7 +70,7 @@ export function ChaseCamera({
  * cars that knock them down and the hits they take, hardest; the hits they
  * land, a little.
  */
-function jolt(event: RaceEvent): number {
+function joltOf(event: RaceEvent): number {
   const isPlayer = (who: RiderOrCop) => who.kind === "rider" && who.id === PLAYER;
   if (event.type === "crash") return event.rider === PLAYER ? CRASH_JOLT : 0;
   if (event.type === "knocked-down") return event.rider === PLAYER ? KNOCKED_DOWN_JOLT : 0;
@@ -109,7 +109,7 @@ function aim(
 
   if (camera instanceof PerspectiveCamera) {
     const share = racing ? Math.min(1, speed / FULL_SPEED) : 0;
-    const wanted = FIELD_OF_VIEW + FIELD_OF_VIEW_AT_SPEED * share * share;
+    const wanted = FIELD_OF_VIEW_DEGREES + FIELD_OF_VIEW_GAIN_DEGREES * share * share;
     const fov = camera.fov + (wanted - camera.fov) * (1 - Math.exp(-FIELD_OF_VIEW_RESPONSE * delta));
     if (Math.abs(fov - camera.fov) > 1e-3) {
       camera.fov = fov;
