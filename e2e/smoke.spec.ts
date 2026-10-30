@@ -601,10 +601,13 @@ test.describe("on a touch-only phone or tablet", () => {
     await expect(page.locator("canvas")).toHaveCount(0);
   });
 
-  test("lets a player who has a keyboard or gamepad there play anyway", async ({ page }) => {
-    await page.getByRole("button", { name: /Play anyway/ }).click();
+  test("lets a player who has a keyboard or gamepad there play anyway, by pressing a key", async ({ page }) => {
+    await expect(page.getByRole("button")).toHaveCount(0);
+
+    await page.keyboard.press("Space");
 
     await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
+    await expect(page.getByTestId("countdown")).toHaveCount(0);
   });
 });
 
