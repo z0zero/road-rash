@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { NO_INPUT, PLAYER, STEP_SECONDS, type CarSnapshot, type PlayerInput, type Race, type RaceEvent } from ".";
+import { createRace, NO_INPUT, PLAYER, STEP_SECONDS, type CarSnapshot, type PlayerInput, type Race, type RaceEvent } from ".";
 import {
   autopilot,
   CLOSED_ROAD,
   eventsDuring,
   eventsUntil,
+  FULL_THROTTLE,
   leftOnTheirOwn,
   NO_COPS,
   player,
@@ -13,7 +14,6 @@ import {
   startedRace,
   STEPS_PER_SECOND,
 } from "./test-helpers";
-
 
 /** The car with this id, while it is on the road. */
 function carOf(race: Race, id: number): CarSnapshot | undefined {
@@ -159,9 +159,27 @@ describe("traffic", () => {
     }
   });
 
+  it("brings no car on behind the riders while they wait for the start, so that none comes up through the grid as they set off", () => {
+    for (let seed = 1; seed <= 12; seed++) {
+      // The player waits out the countdown on the start line, then sets off at full throttle straight ahead.
+      const race = createRace({ seed });
+      let closest = Infinity;
+      for (let step = 0; step < 11 * STEPS_PER_SECOND; step++) {
+        race.step(step < 3 * STEPS_PER_SECOND ? NO_INPUT : FULL_THROTTLE);
+        const me = player(race);
+        for (const car of race.snapshot().traffic) {
+          if (!car.oncoming && car.distance < me.distance + car.length) closest = Math.min(closest, me.distance - car.distance);
+        }
+      }
+
+      // No car going their way comes up from behind within 20 m of them.
+      expect(closest, `seed ${seed}`).toBeGreaterThan(20);
+    }
+  });
+
   it("queues behind a car stopped ahead of it in its lane, rather than running into it", () => {
     // The player stops in a lane going their way and stands there, so that the cars coming up behind them queue up.
-    const race = startedRace(1, NO_COPS);
+    const race = startedRace(5, NO_COPS);
     secondsUntil(race, autopilot(race, { lane: 1.5 }), () => player(race).distance > race.track.startDistance + 1000, 60);
     const inEachOther: string[] = [];
     let queued = 0;
