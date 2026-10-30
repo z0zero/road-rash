@@ -76,8 +76,8 @@ export const TUNING = {
   fullCondition: 100,
   /** Every crash takes this much off the bike's condition... */
   crashConditionLoss: 6,
-  /** ...plus this much per km/h of the impact speed. */
-  crashConditionLossPerKmh: 0.15,
+  /** ...plus this much for every m/s of the impact speed (the spec's 0.15 for every km/h). */
+  crashConditionLossPerImpactSpeed: 0.54,
   cops: {
     /** Where the cops wait on the shoulder for the player to pass, in metres from the start line. */
     waitingPoints: [1800, 4500],
