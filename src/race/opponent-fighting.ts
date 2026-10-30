@@ -43,8 +43,14 @@ export function opponentIntent(
   return { alongside: player, paceShare: FIGHTING_PACE };
 }
 
-/** How many times a second an opponent of each temperament attacks the player when the player is within its reach... */
-const ATTACKS_PER_SECOND: Record<Temperament, number> = { racer: 0.1, brawler: 1.8, bully: 1.8 };
+/**
+ * How many times a second an opponent of each temperament attacks the player
+ * when the player is within its reach and it is free to. A bully attacks less
+ * readily than a brawler, as its club hits hard and is ready again almost as
+ * it strikes: about once every 1.2 s, where a brawler attacks about once a
+ * second...
+ */
+const ATTACKS_PER_SECOND: Record<Temperament, number> = { racer: 0.1, brawler: 1.8, bully: 1.3 };
 /** ...and, as a share of that, another opponent within its reach... */
 const AT_EACH_OTHER = 0.1;
 /**

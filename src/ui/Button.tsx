@@ -1,7 +1,7 @@
-import type { ButtonHTMLAttributes } from "react";
+import type { ComponentProps } from "react";
 
 /** The game's menu button. */
-export function Button({ className = "", ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
+export function Button({ className = "", ...props }: ComponentProps<"button">) {
   return (
     <button
       type="button"

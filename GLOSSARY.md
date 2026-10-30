@@ -73,7 +73,7 @@ The motorcycle a rider races on.
 _Avoid_: Motorcycle, motorbike, vehicle
 
 **Livery**:
-A rider's colours: their bike's paint and stripes, their jacket and their helmet.
+A rider's or a cop's colours: their bike's paint and stripes, their jacket and their helmet. Every cop wears the same one.
 _Avoid_: Skin, colour scheme, paint job
 
 **Stamina**:

@@ -91,11 +91,12 @@ function racerKnockedOffAheadOfTheFollowingCop(seed = 2) {
 
 /**
  * A started race in traffic in which the first cop has joined the race and
- * followed the player for 8 s, and the player, riding at 54 m/s or more, has
- * ridden flat out into the back of a car going their way. Returns how far the
- * cop was behind their bike when they crashed.
+ * followed the player for 8 s, and the player, riding at 55 m/s or more, has
+ * ridden flat out into the back of a car going their way. Returns how fast
+ * they were riding and how far the cop was behind their bike when they
+ * crashed; null if the player never got going that fast with a car ahead.
  */
-function crashedAtSpeedAheadOfTheFollowingCop(seed: number) {
+function crashingAtSpeed(seed: number) {
   const race = startedRace(seed);
   const pilot = autopilot(race);
   const cop = () => race.snapshot().cops[0];
@@ -106,15 +107,35 @@ function crashedAtSpeedAheadOfTheFollowingCop(seed: number) {
       .snapshot()
       .traffic.filter((car) => !car.oncoming && car.distance - player(race).distance > 60 && car.distance - player(race).distance < 200)
       .sort((a, b) => a.distance - b.distance)[0];
-  secondsUntil(race, pilot, () => race.snapshot().clock > joined + 8 && player(race).speed >= 55 && carAhead() !== undefined, 100);
+  const riding = () => player(race).status === "racing" && player(race).crash === null;
+  try {
+    secondsUntil(race, pilot, () => race.snapshot().clock > joined + 8 && riding() && player(race).speed >= 55 && carAhead() !== undefined, 60);
+  } catch {
+    return null;
+  }
+  race.drainEvents();
   const { id } = carAhead();
   const flatOutInto = (): PlayerInput => {
     const car = race.snapshot().traffic.find((each) => each.id === id);
     return { ...NO_INPUT, throttle: 1, steer: car ? Math.max(-1, Math.min(1, 1.5 * (car.offset - player(race).offset))) : 0 };
   };
   let speed = NaN;
-  eventsUntil(race, () => ((speed = player(race).speed), flatOutInto()), (event) => event.type === "crash" && event.rider === PLAYER, 20);
-  return { race, cop, speed, behind: player(race).bike.distance - cop().distance };
+  const crashes = eventsUntil(race, () => ((speed = player(race).speed), flatOutInto()), (event) => event.type === "crash" && event.rider === PLAYER, 20);
+  const intoTheCar = crashes.some((event) => event.type === "crash" && event.rider === PLAYER && event.cause === "traffic");
+  return intoTheCar ? { race, cop, speed, behind: player(race).bike.distance - cop().distance } : null;
+}
+
+/**
+ * The first race, of those `crashingAtSpeed` sets up with these seeds, in
+ * which the player crashed riding at 54 m/s or more with the cop following
+ * them 1.5 s behind: more than 80 m off.
+ */
+function crashedAtSpeedAheadOfTheFollowingCop(seeds: readonly number[]) {
+  for (const seed of seeds) {
+    const crashed = crashingAtSpeed(seed);
+    if (crashed && crashed.speed >= 54 && crashed.behind > 80 && crashed.behind < 1.6 * crashed.speed) return crashed;
+  }
+  throw new Error(`no race with seeds ${seeds.join(", ")} has the player crash at speed with the cop following`);
 }
 
 /**
@@ -318,7 +339,7 @@ describe("busting", () => {
     expect(cop().busting).toBe(target);
 
     const speeds: number[] = [];
-    secondsUntil(race, () => (speeds.push(cop().speed), input()), () => cop().busting === null, 20);
+    secondsUntil(race, () => (speeds.push(cop().speed), input()), () => cop().busting !== target, 20);
 
     // Braking from at most 66 m/s takes about 2 s; a tenth of a metre per second allows for easing into the pace.
     expect(speeds.length).toBeGreaterThan(2.5 * STEPS_PER_SECOND);
@@ -362,7 +383,7 @@ describe("busting", () => {
 
   it("leaves alone a rider who crashes more than 80 m from it: a cop following the player then pulls over until they are back on their bike", () => {
     // Following 1.5 s behind a player riding 54 m/s or more, the cop is over 80 m behind them.
-    const { race, cop, speed, behind } = crashedAtSpeedAheadOfTheFollowingCop(5);
+    const { race, cop, speed, behind } = crashedAtSpeedAheadOfTheFollowingCop([5, 4, 6, 2]);
     expect(speed).toBeGreaterThanOrEqual(54);
     expect(behind).toBeGreaterThan(80);
     expect(cop().busting).toBeNull();

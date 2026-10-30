@@ -2,7 +2,7 @@ import { useFrame } from "@react-three/fiber";
 import { useRef } from "react";
 import type { DirectionalLight, Vector3 } from "three";
 import type { QualityLevel } from "./quality";
-import type { RiderMotion } from "./rider-motion";
+import type { RiderMotion } from "./bike-motion";
 import { SUNSET } from "./sunset";
 
 /** Metres from the player to the light, along the sunlight. */
