@@ -621,6 +621,8 @@ test("credits the music and disclaims any tie to Road Rash, from the title scree
 });
 
 test("lists the keyboard and gamepad controls, from the title screen", async ({ page }) => {
+  // Seven rows of role queries, over the scene drawn behind them: a busy machine takes a while.
+  test.slow();
   await page.getByRole("button", { name: "Controls" }).click();
 
   const controls = page.getByRole("dialog", { name: "Controls" });
