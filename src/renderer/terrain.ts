@@ -1,5 +1,5 @@
 import { type BufferGeometry, Color } from "three";
-import { smoothstep } from "@/math";
+import { clamp, smoothstep } from "@/math";
 import type { Track, WorldPoint } from "@/race";
 import { groundDirection, seaward } from "./geography";
 import { geometryFrom } from "./low-poly";
@@ -67,7 +67,7 @@ function createTerrain(track: Track): Terrain {
   for (let i = 0; i < count; i++) {
     for (let s = 0; s < 2; s++) {
       const side = s === 0 ? -1 : 1;
-      crossSection(track, i, side, reachOf(i, side), shape);
+      crossSection(track, i, side, reachOf(i, side), (l) => spreadAt(i, side, l), shape);
       // Whatever lies further out than the coastline plunges into the sea.
       const top = track.pointAt(i * SPACING, side * (track.roadHalfWidth + track.shoulderWidth)).y + 2;
       for (let k = 2; k < POINTS - 1; k++) {
@@ -99,6 +99,20 @@ function createTerrain(track: Track): Terrain {
       if (crossing < best) best = crossing;
     }
     return best;
+  }
+
+  /**
+   * How far apart the points `l` metres out on one side of section `i` and of its neighbours are,
+   * along the road, as a share of the sections' spacing: 1 on a straight and on the outside of a
+   * bend, less on the inside, where the sections close in on the bend's centre, and 0 there and beyond.
+   */
+  function spreadAt(i: number, side: -1 | 1, l: number) {
+    const before = Math.max(0, i - 1);
+    const after = Math.min(count - 1, i + 1);
+    // Forward is a quarter turn anticlockwise from the right.
+    const dx = xs[after] - xs[before] + side * l * (rightX[after] - rightX[before]);
+    const dz = zs[after] - zs[before] + side * l * (rightZ[after] - rightZ[before]);
+    return clamp((dx * rightZ[i] - dz * rightX[i]) / ((after - before) * SPACING), 0, 1);
   }
 
   /** The ground's height `l` metres out on one side of section `i`, along its cross-section. */
@@ -276,13 +290,15 @@ function coastlineOf(track: Track, xs: Float64Array, zs: Float64Array) {
 /**
  * Fills `shape` with one side's cross-section at section `i`: the inland cliff
  * or the drop to the sea, blended by how squarely that side faces the sea,
- * roughened, flattened where there is little room and cut off at `reach`.
+ * roughened as far as `spread` allows (see `spreadAt`), flattened where there
+ * is little room and cut off at `reach`.
  */
 function crossSection(
   track: Track,
   i: number,
   side: -1 | 1,
   reach: number,
+  spread: (lateral: number) => number,
   shape: { lateral: Float64Array; height: Float64Array },
 ) {
   const distance = i * SPACING;
@@ -321,15 +337,21 @@ function crossSection(
   // Where another stretch of road comes close, keep the land near the road's own level.
   const room = smoothstep(edge + 10, edge + 45, reach);
   const seed = i * POINTS * 2 + (side + 1);
+  const lateralOf = (k: number) => inland[k][0] + (seaSide[k][0] - inland[k][0]) * towardsSea;
   for (let k = 0; k < POINTS - 1; k++) {
-    let l = inland[k][0] + (seaSide[k][0] - inland[k][0]) * towardsSea;
+    let l = lateralOf(k);
     let h = inland[k][1] + (seaSide[k][1] - inland[k][1]) * towardsSea;
     if (k >= 3) {
       // Roughen the rock and the slopes into facets a few cross-sections wide, with a little
-      // jitter on top, so the faces read as rock rather than as stripes.
+      // jitter on top, so the faces read as rock rather than as stripes. Where the sections close
+      // in on the inside of a bend, the faces narrow towards its centre, and a point is roughened
+      // only as much as the narrow end of the face outside it allows: as much as elsewhere would
+      // twist the narrowing faces into a fan of stripes.
+      const rough = spread(k < POINTS - 2 ? lateralOf(k + 1) : l);
       const relief = smoothNoise(distance / 14 + k * 3.7, 10 + side) - 0.5;
-      l += relief * 3 + (hash(seed * 31 + k * 7) - 0.5) * 0.6;
-      h += (smoothNoise(distance / 11 + k * 5.3, 20 + side) - 0.5) * 2.4 + (hash(seed * 17 + k * 13) - 0.5) * 0.5;
+      const bump = smoothNoise(distance / 11 + k * 5.3, 20 + side) - 0.5;
+      l += rough * (relief * 3 + (hash(seed * 31 + k * 7) - 0.5) * 0.6);
+      h += rough * (bump * 2.4 + (hash(seed * 17 + k * 13) - 0.5) * 0.5);
     }
     shape.lateral[k] = k === 0 ? l : Math.max(l, shape.lateral[k - 1] + 0.3);
     shape.height[k] = k < 2 ? h : edgeY + (h - edgeY) * room;
