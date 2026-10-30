@@ -1,7 +1,7 @@
 "use client";
 
 import { advance } from "@react-three/fiber";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { startGameAudio, type GameAudio } from "@/audio/game-audio";
 import { listenToPlayer, type PlayerControls } from "@/input/player-controls";
 import { NO_INPUT } from "@/race";
@@ -65,7 +65,8 @@ export default function Game() {
     audio.current?.unlock();
     session.restart();
   };
-  const inputDevice = () => controls.current?.lastUsed() ?? "keyboard";
+  // The same function every render, so that the HUD subscribes to the race's events once.
+  const inputDevice = useCallback(() => controls.current?.lastUsed() ?? "keyboard", []);
 
   useEffect(() => {
     const pauseWhenHidden = () => {
