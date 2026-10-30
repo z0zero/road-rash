@@ -11,7 +11,7 @@ import {
   sidewaysTowards,
   type BendLimits,
 } from "./opponent-riding";
-import { clamp, maxSidewaysSpeed, type Motion } from "./riding";
+import { BIKE_WIDTH, clamp, maxSidewaysSpeed, type Motion } from "./riding";
 import { STEP_SECONDS, stepsIn } from "./steps";
 import type { Track } from "./track";
 import { TUNING } from "./tuning";
@@ -216,9 +216,19 @@ export function fightingBackIntent(
   return { speed: clamp(Math.min(level.speed, safe, holdBehind), 0, TUNING.cops.topSpeed), line, hurrying: true };
 }
 
-/** A cop standing by a rider it has busted: it stops where it is. */
-export function standingByIntent(me: Readonly<Motion>): CopIntent {
-  return { speed: 0, line: me.offset };
+/** A cop pulling over, or standing by, creeps along at this speed (m/s) until it is on the shoulder, since a bike can't move sideways while it stands still. */
+const CREEP = 3;
+
+/**
+ * Where a cop rides to pull over, or to stand by a rider it has busted: onto
+ * the shoulder on its side of the road, its bike clear of the road, out of
+ * the field's way, braking at once and creeping across at `CREEP` if need be;
+ * then it stops there.
+ */
+export function pullingOverIntent(me: Readonly<Motion>, track: Track): CopIntent {
+  const side = me.offset >= 0 ? 1 : -1;
+  const onTheShoulder = Math.abs(me.offset) >= track.roadHalfWidth + BIKE_WIDTH / 2;
+  return { speed: onTheShoulder ? 0 : CREEP, line: side * (track.roadHalfWidth + BIKE_WIDTH), hurrying: true };
 }
 
 /**
