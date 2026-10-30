@@ -1,3 +1,4 @@
+import type { CatchUp } from "./difficulty";
 import type { Footprint } from "./footprint";
 import { BIKE_LENGTH, BIKE_WIDTH, clamp, maxSidewaysSpeed, type Controls, type Motion } from "./riding";
 import type { Moving, Track } from "./track";
@@ -24,21 +25,16 @@ export function paceAt(motion: Readonly<Motion>, riding: OpponentRiding, track: 
   return riding.pace * Math.min(TUNING.topSpeed, safeSpeedAt(track, motion.distance + motion.speed * BRAKING_LEAD));
 }
 
-/** Catch-up leaves opponents within this many metres of the player at their usual pace... */
-const CATCH_UP_NEAR = 75;
-/** ...and grows with the distance beyond it, to its most at this many metres... */
-const CATCH_UP_FAR = 400;
-/** ...where opponents behind the player ride this share faster than their pace, and those ahead this share slower. */
-const CATCH_UP_MOST = 0.08;
-
 /**
  * The mild catch-up that keeps the field near the player: how many times its
  * usual pace an opponent rides `gap` metres ahead of the player (negative
- * when behind). Up to 1.08 far behind, down to 0.92 far ahead.
+ * when behind), with the difficulty's `catchUp`: on Normal, its usual pace
+ * within 75 m, up to 1.08 times it 400 m behind and more, and down to 0.92
+ * times it 400 m ahead and more.
  */
-export function catchUpFor(gap: number): number {
-  const share = clamp((Math.abs(gap) - CATCH_UP_NEAR) / (CATCH_UP_FAR - CATCH_UP_NEAR), 0, 1);
-  return 1 - Math.sign(gap) * CATCH_UP_MOST * share;
+export function catchUpFor(gap: number, { near, far, most }: CatchUp): number {
+  const share = clamp((Math.abs(gap) - near) / (far - near), 0, 1);
+  return 1 - Math.sign(gap) * most * share;
 }
 
 /** Opponents hold their line through a bend using at most this share of the sideways speed steering gives... */

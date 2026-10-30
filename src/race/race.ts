@@ -3,6 +3,7 @@ import { getCoastalTrack } from "./coastal-track";
 import { knockDownRidersOnFoot, runIntoCarsAndObstacles, runIntoEachOther } from "./contact";
 import { alertThePlayer, decideCops, joinThePlayer, lineUpCops, moveCops } from "./cops";
 import { runBack } from "./crashing";
+import { DEFAULT_DIFFICULTY, DIFFICULTY_TUNING, type Difficulty } from "./difficulty";
 import type { RaceEvent } from "./events";
 import { lineUpRiders } from "./field";
 import { advanceAttacks, recoverStamina, throwAttack } from "./fighting";
@@ -49,10 +50,12 @@ export interface PlayerInput {
 
 export const NO_INPUT: PlayerInput = { throttle: 0, brake: 0, steer: 0, punch: false, kick: false };
 
-/** How the game creates a race: from its seed alone, with the field, the tuning and the track fixed (ADR 0004). */
+/** How the game creates a race: from its seed and difficulty, with the field, the track and the rest of the tuning fixed (ADR 0004). */
 export interface RaceOptions {
-  /** Seeds every random choice the race makes, so the same seed and inputs replay the same race. */
+  /** Seeds every random choice the race makes, so the same seed, difficulty and inputs replay the same race. */
   readonly seed: number;
+  /** How hard the opponents make the race: Normal unless given. */
+  readonly difficulty?: Difficulty;
 }
 
 /**
@@ -167,10 +170,11 @@ export function createRace(options: RaceOptions): Race {
 }
 
 /** A race created from `options` and set up for a test as `setup` says. Only the Race module's tests call it. */
-export function setUpRace({ seed }: RaceOptions, setup: TestSetup): Race {
+export function setUpRace({ seed, difficulty = DEFAULT_DIFFICULTY }: RaceOptions, setup: TestSetup): Race {
   const random = createRandom(seed);
   const track = getCoastalTrack();
-  const riders = lineUpRiders(track, random, setup.playerCondition);
+  const tuning = DIFFICULTY_TUNING[difficulty];
+  const riders = lineUpRiders(track, random, tuning, setup.playerCondition);
   const traffic: Traffic = setup.parkedCars
     ? parkedCars(setup.parkedCars)
     : setup.traffic === false
@@ -183,6 +187,7 @@ export function setUpRace({ seed }: RaceOptions, setup: TestSetup): Race {
         );
   const race: RaceState = {
     seed,
+    difficulty: tuning,
     random,
     track,
     edge: track.roadHalfWidth + track.shoulderWidth,
