@@ -165,7 +165,7 @@ A fixed object on or beside the road, such as a rock or a sign, that makes a rid
 _Avoid_: Hazard, barrier
 
 **Footprint**:
-Where a car or an obstacle is on the road, how much of it it covers and how fast it moves along it: what riders steer around and run into.
+Where a car or an obstacle is on the road, how much of it it covers, how fast it moves along it and, for a car changing lanes, the lane it is moving over to: what riders steer around and run into.
 _Avoid_: Hitbox, bounds
 
 **Scenery**:

@@ -3,6 +3,10 @@ import type { Footprint } from "./footprint";
 import { BIKE_LENGTH, BIKE_WIDTH, clamp, type Motion } from "./riding";
 import { TUNING } from "./tuning";
 
+/** A bike reaches this many metres ahead of and behind its middle... */
+const BIKE_HALF_LENGTH = BIKE_LENGTH / 2;
+/** ...and this many to either side of it. */
+const BIKE_HALF_WIDTH = BIKE_WIDTH / 2;
 /** A rider on foot takes up about this many metres, along the track and across it. */
 const BODY_SIZE = 0.6;
 /** A rider who runs into a car or an obstacle is thrown sideways off it at least this fast (m/s), so they land beside it, not on it. */
@@ -100,8 +104,8 @@ interface Contact {
 function contactWith(bike: Motion, footprint: Footprint): Contact | null {
   const along = footprint.distance - bike.distance;
   const across = footprint.offset - bike.offset;
-  const overlapAlong = footprint.halfLength + BIKE_LENGTH / 2 - Math.abs(along);
-  const overlapAcross = footprint.halfWidth + BIKE_WIDTH / 2 - Math.abs(across);
+  const overlapAlong = footprint.halfLength + BIKE_HALF_LENGTH - Math.abs(along);
+  const overlapAcross = footprint.halfWidth + BIKE_HALF_WIDTH - Math.abs(across);
   return overlapAlong > 0 && overlapAcross > 0 ? { along, across, overlapAlong, overlapAcross } : null;
 }
 
@@ -130,7 +134,7 @@ function bumpOff(bike: Motion, footprint: Footprint, { along, across, overlapAlo
 export function throwClearOf(footprint: Footprint, bike: Motion, body: Body, edge: number) {
   const along = footprint.distance - bike.distance;
   const { velocity } = footprint;
-  bike.distance = footprint.distance - Math.sign(along || 1) * (footprint.halfLength + BIKE_LENGTH / 2 + 0.05);
+  bike.distance = footprint.distance - Math.sign(along || 1) * (footprint.halfLength + BIKE_HALF_LENGTH + 0.05);
   bike.speed = Math.max(0, along > 0 ? Math.min(bike.speed, velocity) : velocity);
   bike.steering = 0;
   bike.shove = 0;
