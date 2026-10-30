@@ -1,5 +1,5 @@
 import type { Random } from "./random";
-import { BIKE_WIDTH, clamp } from "./riding";
+import { BIKE_LENGTH, BIKE_WIDTH, clamp } from "./riding";
 import { STEP_SECONDS } from "./steps";
 import type { Track } from "./track";
 
@@ -104,6 +104,8 @@ export interface RiderOnTheRoad {
   readonly offset: number;
   /** Metres per second along the track. */
   readonly speed: number;
+  /** Whether they are on their bike: a car slows behind a rider on their bike, but runs down one on foot. */
+  readonly onTheirBike: boolean;
 }
 
 /** The cars on the road around the player. */
@@ -113,7 +115,8 @@ export interface Traffic {
   /**
    * Moves every car on by a step, then lets the cars that have left the
    * window around the player go and brings new ones in at its far end. Cars
-   * come onto the road, and change lanes, out of the way of the `riders`.
+   * come onto the road, and change lanes, out of the way of the `riders`, and
+   * slow down behind a slower one on their bike.
    */
   step(player: Around, riders: readonly RiderOnTheRoad[]): void;
 }
@@ -146,7 +149,8 @@ interface NextCar {
  * when the player is catching them up; but never right in front of a rider,
  * so in the other lane, or later, when a rider is about to ride up to one.
  * Cars keep their distance from the car ahead of them in their lane, and
- * some change lanes now and then, when no car is close by in the lane they
+ * cars in the race direction from a slower rider on their bike ahead of them
+ * too. Some change lanes now and then, when no car is close by in the lane they
  * change to and no rider in it is close by or coming up to them. Cars change
  * lanes to get round a fallen rock in theirs, or stop short of it until they
  * can, and never come onto the road just short of one. At the start
@@ -260,13 +264,20 @@ export function createTraffic(track: Track, random: Random, player: Around, clea
 
   /**
    * A car slows to the speed of a car close ahead of it in its lane, so it
-   * never runs into it, and stops short of a fallen rock in its way;
-   * otherwise it drives at its own speed.
+   * never runs into it, and so does a car in the race direction for a slower
+   * rider on their bike ahead of it (`riders`); it stops short of a fallen
+   * rock in its way; otherwise it drives at its own speed.
    */
-  const keepDistance = (car: Car) => {
+  const keepDistance = (car: Car, riders: readonly RiderOnTheRoad[]) => {
     let wanted = car.cruise;
     const rock = rockAhead(car, car.distance, car.offset);
     if (rock) wanted = Math.min(wanted, Math.sqrt(2 * BRAKING * Math.max(0, rock.gap - ROCK_STOP)));
+    for (const rider of car.oncoming ? [] : riders) {
+      const gap = rider.distance - car.distance - car.length / 2 - BIKE_LENGTH / 2;
+      const inItsLane = Math.abs(rider.offset - car.offset) < (car.width + BIKE_WIDTH) / 2;
+      if (!rider.onTheirBike || !inItsLane || gap <= -BIKE_LENGTH || rider.speed >= car.speed) continue;
+      wanted = Math.min(wanted, rider.speed + Math.sqrt(2 * BRAKING * Math.max(0, gap - FOLLOWING_GAP)));
+    }
     for (const them of cars) {
       if (them === car || them.oncoming !== car.oncoming) continue;
       const along = car.oncoming ? car.distance - them.distance : them.distance - car.distance;
@@ -300,7 +311,7 @@ export function createTraffic(track: Track, random: Random, player: Around, clea
     step(player, riders) {
       for (const car of cars) {
         changeLanes(car, riders);
-        keepDistance(car);
+        keepDistance(car, riders);
       }
       for (const car of cars) {
         car.distance += (car.oncoming ? -car.speed : car.speed) * STEP_SECONDS;
