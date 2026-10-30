@@ -13,6 +13,7 @@ import { Hud } from "@/ui/Hud";
 import { PauseMenu } from "@/ui/PauseMenu";
 import { ResultsScreen } from "@/ui/ResultsScreen";
 import { SettingsScreen } from "@/ui/SettingsScreen";
+import { SoundLockedNotice } from "@/ui/SoundLockedNotice";
 import { TitleScreen } from "@/ui/TitleScreen";
 import { GameSession } from "./session";
 
@@ -36,6 +37,8 @@ export default function Game() {
     () => false,
   );
   const reduceMotion = isMotionReduced(state.settings, systemReducesMotion);
+  /** Whether the browser is keeping the sound locked although a race has asked for it. */
+  const [soundLocked, setSoundLocked] = useState(false);
 
   useEffect(() => {
     const listening = listenToPlayer(window, session.togglePause);
@@ -48,7 +51,7 @@ export default function Game() {
 
   // The title screen is up: start the sound, which fetches the music now so it's ready for the race.
   useEffect(() => {
-    const playing = startGameAudio(session);
+    const playing = startGameAudio(session, setSoundLocked);
     audio.current = playing;
     return () => {
       playing.dispose();
@@ -120,6 +123,7 @@ export default function Game() {
       {(state.screen === "racing" || state.screen === "paused") && (
         <Hud session={session} reduceMotion={reduceMotion} inputDevice={inputDevice} />
       )}
+      {soundLocked && (state.screen === "racing" || state.screen === "paused") && <SoundLockedNotice />}
       {state.screen === "paused" && (
         <PauseMenu seed={state.seed} onResume={session.resume} onRestart={restart} onQuit={session.quitToTitle} />
       )}
