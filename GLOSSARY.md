@@ -65,7 +65,7 @@ How fast an opponent rides when nothing gets in its way: a share of the fastest 
 _Avoid_: Target speed, cruising speed
 
 **Intent**:
-What an opponent is riding for at the moment: just racing, riding up alongside a rider to fight them, or dropping back.
+What an opponent is riding for at the moment: just racing, riding up alongside a rider to fight them, waiting its turn to fight the player, or dropping back.
 _Avoid_: AI state, mode, goal
 
 **Patience**:
@@ -133,6 +133,14 @@ _Avoid_: Charge, startup
 **Dropping back**:
 A badly beaten opponent easing off and keeping out of fights until it has recovered its stamina.
 _Avoid_: Retreating, fleeing
+
+**Turn**:
+A brawler's or bully's go at fighting the player. One at a time rides alongside them and attacks them; any others that want to fight them wait their turn, holding back behind them (or racing on, if they are ahead), and don't attack them unless the player hits them. Once the one fighting stops, the nearest of the others takes its turn.
+_Avoid_: Queue, slot
+
+**Breather**:
+The 3 s an opponent whose hit has just landed on the player gives them before it attacks them again, unless the player is fighting it back: has hit it in the last 5 s.
+_Avoid_: Cooldown, grace period
 
 **Weapon**:
 A club a rider swings instead of punching. A rider takes one with a hit thrown at its holder during the wind-up of a swing, and drops it in a crash.
