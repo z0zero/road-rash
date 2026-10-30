@@ -278,7 +278,7 @@ class Sound {
   }
 
   /** Follows the race as it is drawn: the countdown, the engines, skids and gravel. */
-  frame({ track, previous, current }: RaceView) {
+  frame({ previous, current }: RaceView) {
     const racing = this.screen === "racing" || this.screen === "paused";
     // A race begins afresh when its countdown or clock goes back; with no race on, there's nothing to hear.
     if (!racing || current.countdown > this.lastCountdown || current.clock < this.lastClock) this.forgetRace();
@@ -307,10 +307,9 @@ class Sound {
     if (onBike) this.engine.follow(player.speed, this.acceleration, racing ? 1 : 0);
     else this.engine.follow(0, 0, racing ? FALLEN_ENGINE_LOUDNESS : 0);
     // Braking hard squeals the tyres on the road; off it, the gravel crunches.
-    const offRoad = Math.abs(player.offset) > track.roadHalfWidth;
-    const skid = racing && onBike && !offRoad ? skidding(player.speed, -this.acceleration) : 0;
+    const skid = racing && onBike && !player.offRoad ? skidding(player.speed, -this.acceleration) : 0;
     this.skid.setIntensity(skid);
-    this.gravel.setIntensity(racing && onBike && offRoad ? player.speed / LOUDEST_GRAVEL_SPEED : 0);
+    this.gravel.setIntensity(racing && onBike && player.offRoad ? player.speed / LOUDEST_GRAVEL_SPEED : 0);
 
     if (!isSameOne(nearest, this.nearest)) this.opponentEngine.reset();
     this.nearest = nearest;

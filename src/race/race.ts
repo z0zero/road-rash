@@ -43,7 +43,7 @@ import { catchUpFor, opponentControls, paceFor, type OpponentRiding } from "./op
 import { OPPONENTS, PLAYER_NAME, type Temperament } from "./opponents";
 import { createRandom } from "./random";
 import { remarkOn, type Ending, type Remark } from "./remarks";
-import { ride, type Controls, type Motion } from "./riding";
+import { isOffRoad, ride, type Controls, type Motion } from "./riding";
 import { STEP_SECONDS, STEPS_PER_SECOND, stepsIn } from "./steps";
 import { nearestOpponentOrCop, warningsFor, type Warnings } from "./surroundings";
 import type { Track } from "./track";
@@ -111,6 +111,8 @@ export interface RiderSnapshot {
   readonly offset: number;
   /** Metres per second along the track. */
   readonly speed: number;
+  /** Whether the rider is beyond the road's edge, on a shoulder, where a bike slows sharply. */
+  readonly offRoad: boolean;
   readonly status: RiderStatus;
   /** Position in the race, 1 for the leader; null for wrecked and busted riders. */
   readonly position: number | null;
@@ -124,7 +126,11 @@ export interface RiderSnapshot {
   readonly attack: AttackSnapshot | null;
   /** The weapon the rider holds, which their punches swing instead; null when they hold none. */
   readonly weapon: Weapon | null;
-  /** Null while the rider is on their bike; after a crash, "tumbling" and then "on-foot" until they remount. */
+  /**
+   * Null while the rider is on their bike; after a crash, "tumbling" and then
+   * "on-foot" until they remount, and "knocked-down" while they tumble again
+   * after a car has knocked them down on foot.
+   */
   readonly crash: CrashPhase | null;
   /** Where the rider's bike is: under them while they ride it, or wherever it slid to after a crash. */
   readonly bike: BikeSnapshot;
@@ -827,6 +833,7 @@ export function createRace(options: RaceOptions): Race {
             distance,
             offset,
             speed,
+            offRoad: isOffRoad(offset, track),
             status: rider.status,
             position: ranks.get(rider.id) ?? null,
             finishTime: rider.finishTime,

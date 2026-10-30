@@ -143,6 +143,19 @@ describe("riding", () => {
     expect(before - player(race).speed).toBeGreaterThan(8);
   });
 
+  it("says when the rider is off the road, on a shoulder, and when they are back on it", () => {
+    const race = startedRace();
+    const { roadHalfWidth } = race.track;
+    secondsUntil(race, FULL_THROTTLE, () => player(race).speed >= 20);
+    expect(player(race).offRoad).toBe(false);
+
+    secondsUntil(race, { ...FULL_THROTTLE, steer: 1 }, () => player(race).offset > roadHalfWidth);
+    expect(player(race).offRoad).toBe(true);
+
+    secondsUntil(race, { ...FULL_THROTTLE, steer: -1 }, () => player(race).offset <= roadHalfWidth);
+    expect(player(race).offRoad).toBe(false);
+  });
+
   /** The middle of the first stretch after `from` that curves steadily at a radius between `minRadius` and `maxRadius`. */
   function steadyCurve(track: Track, from: number, minRadius: number, maxRadius: number) {
     for (let d = from; d < track.finishDistance; d++) {

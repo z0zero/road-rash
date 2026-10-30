@@ -53,8 +53,6 @@ export abstract class BikeMotion {
   facing = 0;
   /** Radians the wheels have turned. */
   wheelTurn = 0;
-  /** Whether they are beyond the road's edge, on the shoulder. */
-  offRoad = false;
   /** Null while they are on their bike; otherwise how far they are in getting back on it. */
   crash: CrashPhase | null = null;
   /** The attack they are making, or null. */
@@ -111,7 +109,6 @@ export abstract class BikeMotion {
     this.pitch = along * Math.atan(road.grade);
     this.bank = along * road.bank;
     this.wheelTurn = (this.wheelTurn + (along * travelled) / wheelRadius) % (Math.PI * 2);
-    this.offRoad = Math.abs(body.offset) > view.track.roadHalfWidth;
 
     if (!this.crash) {
       // Face the way it rides, turned a little towards the sideways motion.
@@ -138,9 +135,9 @@ export abstract class BikeMotion {
 
     const ground = view.track.pointAt(body.distance, body.offset);
     this.bodyAt.set(ground.x, ground.y, ground.z);
-    if (this.crash === "tumbling") {
-      // Knocked down by a car while on foot, they tumble afresh.
-      if (phaseBefore === "on-foot") this.tumble = 0;
+    if (this.crash !== "on-foot") {
+      // A car knocking them down starts their tumble afresh.
+      if (this.crash === "knocked-down" && phaseBefore !== "knocked-down") this.tumble = 0;
       this.tumble += (ran * Math.PI * 2) / TUMBLE_METRES;
       // Head over heels the way they are thrown: on along the road, or back down it by an oncoming car.
       this.bodyYaw = -view.track.sampleAt(body.distance).heading + (body.speed < 0 ? Math.PI : 0);

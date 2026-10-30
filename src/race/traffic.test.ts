@@ -291,7 +291,12 @@ describe("a rider on foot", () => {
       { type: "knocked-down", rider: PLAYER, impactSpeed: expect.closeTo(culprit.speed, 6) },
     ]);
     expect(events.filter(playerCrashed)).toEqual([]);
-    expect(player(race)).toMatchObject({ crash: "tumbling", condition, status: "racing" });
+    expect(player(race)).toMatchObject({ crash: "knocked-down", condition, status: "racing" });
+    // They tumble for as long as after a crash, then they are on foot again.
+    const tumbling = secondsUntil(race, { ...NO_INPUT, brake: 1 }, () => player(race).crash !== "knocked-down", 3);
+    expect(tumbling).toBeGreaterThan(1.1);
+    expect(tumbling).toBeLessThan(1.3);
+    expect(player(race).crash).toBe("on-foot");
   });
 });
 
