@@ -19,7 +19,7 @@ const RACE_DIRECTION_SPEEDS = [15, 25] as const;
 const ONCOMING_SPEEDS = [18, 28] as const;
 
 /** Traffic fills the road from this many metres behind the player... */
-const BEHIND = 150;
+export const BEHIND = 150;
 /** ...to this many metres ahead of them, where cars come onto the road and leave it... */
 export const AHEAD = 600;
 /** ...at about one car per this many metres of road in each direction... */
