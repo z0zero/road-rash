@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import { createRace, NO_INPUT, PLAYER, STEP_SECONDS, type PlayerInput, type Race, type Track } from ".";
 import {
   autopilot,
+  chase,
   FULL_THROTTLE,
   kmh,
+  nearestOpponent,
   NO_COPS,
   player,
   secondsUntil,
@@ -273,7 +275,47 @@ describe("the finish", () => {
   });
 });
 
+/** A started race in which the player, on a bike with next to no condition left, has wrecked it in the first seconds by riding into the opponent nearest them. */
+function wreckedEarly(seed = 1) {
+  const race = createRace({ seed, playerCondition: 1 });
+  stepFor(race, 3);
+  secondsUntil(race, chase(race, nearestOpponent(race), 12), () => player(race).status === "wrecked", 30);
+  return race;
+}
+
 describe("fast-forwarding to the results", () => {
+  it("gives every rider still in the race a time, even after the player's race ended in the first seconds", () => {
+    const race = wreckedEarly();
+    expect(race.snapshot().clock).toBeLessThan(15);
+
+    const results = race.fastForward();
+
+    expect(results.complete).toBe(true);
+    expect(results.standings.filter((standing) => standing.status === "racing")).toEqual([]);
+    const finishers = results.standings.filter((standing) => standing.status === "finished");
+    expect(finishers.length).toBeGreaterThan(10);
+    for (const { time } of finishers) expect(time).toBeGreaterThan(0);
+  });
+
+  it("can race the rest of the field a little at a time, saying until then that the standings aren't final", () => {
+    const allAtOnce = wreckedEarly().fastForward();
+    const race = wreckedEarly();
+
+    const first = race.fastForward(0);
+
+    // The player's own result is final at once; the standings, and the remark that goes with them, aren't yet.
+    expect(first).toMatchObject({ outcome: "wrecked", time: null, position: null, qualified: false, complete: false, remark: null });
+    expect(first.standings.filter((standing) => standing.status === "racing").length).toBeGreaterThan(10);
+    let results = first;
+    let goes = 0;
+    while (!results.complete) {
+      results = race.fastForward(10 * STEPS_PER_SECOND);
+      goes++;
+    }
+    expect(goes).toBeGreaterThan(10);
+    expect(results).toEqual(allAtOnce);
+  });
+
   it("refuses while the player is still racing", () => {
     const race = startedRace();
     stepFor(race, 10, FULL_THROTTLE);

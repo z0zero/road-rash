@@ -26,6 +26,7 @@ export default function Game() {
         readInput: () => controls.current?.read() ?? NO_INPUT,
         storage: browserStorage(),
         newSeed: () => seedInAddress() ?? Math.floor(Math.random() * 2 ** 32),
+        now: () => performance.now(),
       }),
   );
   const state = useSyncExternalStore(session.subscribe, session.getState, session.getState);

@@ -57,10 +57,21 @@ export interface SessionOptions {
   storage: SaveStorage | undefined;
   /** A seed for each new race. */
   newSeed(): number;
+  /** The time now, in milliseconds, from any fixed point: it times how long a frame spends on the fast-forward. */
+  now(): number;
 }
 
 /** A frame longer than this (a hiccup, or a tab coming back) is cut short rather than simulated in full. */
 const MAX_FRAME_SECONDS = 0.25;
+
+/**
+ * Once the player's race is over, each frame races the rest of the field on
+ * towards the finish for about this many milliseconds, so the standings fill
+ * in over a few frames instead of the game stalling for one...
+ */
+const FAST_FORWARD_MS_PER_FRAME = 10;
+/** ...a second of race at a time. */
+const FAST_FORWARD_STEPS = Math.round(1 / STEP_SECONDS);
 
 /**
  * Frames a new race is drawn for before the session starts stepping it, so
@@ -197,8 +208,10 @@ export class GameSession {
 
   /** Moves the game on by `seconds` of real time; call it once per animation frame, just before drawing it. */
   advance(seconds: number) {
-    const { screen } = this.state;
-    if (screen === "racing" || screen === "results") {
+    const { screen, results } = this.state;
+    if (screen === "results" && results && !results.complete) {
+      this.raceTheFieldOn(results);
+    } else if (screen === "racing" || screen === "results") {
       if (this.framesBeforeStepping > 0) this.framesBeforeStepping--;
       else this.accumulator += Math.min(Math.max(seconds, 0), MAX_FRAME_SECONDS);
       while (this.accumulator >= STEP_SECONDS) {
@@ -223,12 +236,15 @@ export class GameSession {
     }
   }
 
+  /**
+   * Shows the results as the player's race ends. Their own result is final at
+   * once; the rest of the field is raced to the finish over the next frames
+   * (`raceTheFieldOn`), while the view stays as the player's race ended.
+   */
   private showResults() {
-    const results = this.race.fastForward();
+    const results = this.race.fastForward(0);
     this.race.drainEvents();
-    const snapshot = this.race.snapshot();
-    this.frame.previous = snapshot;
-    this.frame.current = snapshot;
+    this.frame.previous = this.frame.current;
     const bestBefore = this.saveData.personalBest;
     this.saveData = recordRaceResult(this.saveData, results);
     storeSaveData(this.options.storage, this.saveData);
@@ -239,6 +255,28 @@ export class GameSession {
       newBestTime: this.saveData.personalBest.time !== bestBefore.time,
       newBestPosition: this.saveData.personalBest.position !== bestBefore.position,
     });
+  }
+
+  /**
+   * Races the rest of the field on towards the finish for a frame's share of
+   * time. The standings shown change only as riders finish or drop out of the
+   * race, and once they are complete, since the order of the riders still on
+   * the road changes every step; then the view moves on to where the race
+   * ended up.
+   */
+  private raceTheFieldOn(shown: RaceResults) {
+    const until = this.options.now() + FAST_FORWARD_MS_PER_FRAME;
+    let results = shown;
+    do results = this.race.fastForward(FAST_FORWARD_STEPS);
+    while (!results.complete && this.options.now() < until);
+    this.race.drainEvents();
+    if (results.complete) {
+      const snapshot = this.race.snapshot();
+      this.frame.previous = snapshot;
+      this.frame.current = snapshot;
+    }
+    const settled = ({ standings }: RaceResults) => standings.filter((standing) => standing.status !== "racing").length;
+    if (results.complete || settled(results) !== settled(shown)) this.setState({ results });
   }
 
   /** Loads a new race, ready for its countdown, and returns its seed. */

@@ -65,7 +65,13 @@ export function ResultsScreen({
           {!results.qualified && results.outcome === "finished" && (
             <p className="-mt-3 text-sm text-sand/70">Finish {formatPosition(QUALIFYING_POSITION)} or better to qualify.</p>
           )}
-          <SaidAfterTheRace remark={results.remark} />
+          {results.remark ? (
+            <SaidAfterTheRace remark={results.remark} />
+          ) : (
+            <p data-testid="racing-on" className="w-full border-l-4 border-sand/30 py-0.5 pl-4 text-left text-lg italic text-sand/70">
+              The rest of the field is racing to the finish&hellip;
+            </p>
+          )}
           <dl className="grid w-full grid-cols-2 gap-x-6 gap-y-2 text-lg">
             <dt className="text-sand/80">Position</dt>
             <dd data-testid="results-position" className="text-right font-semibold tabular-nums text-sand">
@@ -95,7 +101,7 @@ export function ResultsScreen({
           </div>
           <RaceSeed seed={seed} />
         </div>
-        <Standings standings={results.standings} />
+        <Standings standings={results.standings} complete={results.complete} />
       </div>
     </div>
   );
@@ -128,10 +134,14 @@ function SaidAfterTheRace({ remark }: { remark: Remark }) {
   );
 }
 
-/** Every rider's final position and time, the player's row picked out. */
-function Standings({ standings }: { standings: readonly Standing[] }) {
+/**
+ * Every rider's final position and time, the player's row picked out. Until
+ * the standings are `complete`, riders still racing to the finish have no
+ * position yet, and say so.
+ */
+function Standings({ standings, complete }: { standings: readonly Standing[]; complete: boolean }) {
   return (
-    <table data-testid="standings" className="w-full self-start text-sm tabular-nums">
+    <table data-testid="standings" aria-busy={!complete} className="w-full self-start text-sm tabular-nums">
       <caption className="mb-2 text-left font-display text-2xl uppercase italic tracking-wide text-sun">Standings</caption>
       <thead>
         <tr className="text-left text-xs uppercase tracking-widest text-sand/60">
@@ -147,30 +157,33 @@ function Standings({ standings }: { standings: readonly Standing[] }) {
         </tr>
       </thead>
       <tbody>
-        {standings.map((standing) => (
-          <tr
-            key={standing.rider}
-            className={
-              standing.rider === PLAYER
-                ? "bg-sunset/25 font-semibold text-sun"
-                : standing.position !== null && standing.position <= QUALIFYING_POSITION
-                  ? "text-sand"
-                  : "text-sand/80"
-            }
-          >
-            <td className="py-0.5 pl-1">{standing.position === null ? "–" : formatPosition(standing.position)}</td>
-            <th scope="row" className="py-0.5 text-left font-[inherit]">
-              {standing.name}
-            </th>
-            <td className="py-0.5 pr-1 text-right">{finish(standing)}</td>
-          </tr>
-        ))}
+        {standings.map((standing) => {
+          const onTheWay = !complete && standing.status === "racing";
+          return (
+            <tr
+              key={standing.rider}
+              className={
+                standing.rider === PLAYER
+                  ? "bg-sunset/25 font-semibold text-sun"
+                  : !onTheWay && standing.position !== null && standing.position <= QUALIFYING_POSITION
+                    ? "text-sand"
+                    : "text-sand/80"
+              }
+            >
+              <td className="py-0.5 pl-1">{standing.position === null || onTheWay ? "–" : formatPosition(standing.position)}</td>
+              <th scope="row" className="py-0.5 text-left font-[inherit]">
+                {standing.name}
+              </th>
+              <td className="py-0.5 pr-1 text-right">{onTheWay ? "Racing…" : finish(standing)}</td>
+            </tr>
+          );
+        })}
       </tbody>
     </table>
   );
 }
 
-/** A finishing time, how the rider's race ended, or a dash for a rider still riding when the results were drawn up. */
+/** A finishing time, how the rider's race ended, or a dash for a rider still riding when the fast-forward ran out of time. */
 function finish(standing: Standing) {
   if (standing.time !== null) return formatRaceTime(standing.time);
   if (standing.status === "wrecked") return "Wrecked";

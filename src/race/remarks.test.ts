@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createRace, PLAYER, type RaceEvent, type RaceResults } from ".";
+import { createRace, PLAYER, type RaceEvent, type RaceResults, type Remark } from ".";
 import {
   alongsideTheFirstCop,
   autopilot,
@@ -66,9 +66,15 @@ const slowRace = remembered((seed) => rideToTheFinish(seed, 45));
 const SLOW_SEEDS = [2, 4, 5];
 const wreckedRace = remembered(rideToAWreck);
 
+/** The remark on a race's results, which come with one once their standings are complete. */
+function remarkOn(results: RaceResults): Remark {
+  if (!results.remark) throw new Error("no remark: the standings aren't complete");
+  return results.remark;
+}
+
 /** Who a remark comes from, as the standings name them. */
 function speakerOf(results: RaceResults) {
-  const { by, name } = results.remark;
+  const { by, name } = remarkOn(results);
   return { by, name, standing: results.standings.find((standing) => standing.rider === by.id) };
 }
 
@@ -81,7 +87,7 @@ describe("the remark on the results", () => {
     expect(by.kind).toBe("rider");
     expect(by.id).not.toBe(PLAYER);
     expect(name).toBe(standing?.name);
-    expect(results.remark.line).toMatch(/\w/);
+    expect(remarkOn(results).line).toMatch(/\w/);
   });
 
   it("comes from an opponent the player beat, when the player qualified", () => {
@@ -119,13 +125,13 @@ describe("the remark on the results", () => {
     expect(results.outcome).toBe("busted");
     expect(bustedBy).toBeDefined();
     expect(results.remark).toMatchObject({ by: { kind: "cop", id: bustedBy }, name: cops.find((cop) => cop.id === bustedBy)?.name });
-    expect(results.remark.line).toMatch(/\w/);
+    expect(remarkOn(results).line).toMatch(/\w/);
   });
 
   it("is chosen with the race's seed: the same race gives the same remark, other races others", () => {
     expect(rideToAWreck(1).remark).toEqual(wreckedRace(1).remark);
 
-    const remarks = [1, 2, 3].flatMap((seed, index) => [wreckedRace(seed).remark, slowRace(SLOW_SEEDS[index]).remark]);
+    const remarks = [1, 2, 3].flatMap((seed, index) => [remarkOn(wreckedRace(seed)), remarkOn(slowRace(SLOW_SEEDS[index]))]);
     expect(new Set(remarks.map(({ name, line }) => `${name}: ${line}`)).size).toBeGreaterThan(3);
   });
 });
