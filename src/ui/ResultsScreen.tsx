@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PLAYER, QUALIFYING_POSITION, type RaceOutcome, type RaceResults, type Remark, type Standing } from "@/race";
 import { liveryOf } from "@/renderer/liveries";
 import type { PersonalBest } from "@/save-data/save-data";
@@ -10,9 +10,11 @@ import { RaceSeed } from "./RaceSeed";
 const BANNERS: Record<RaceOutcome, string> = { finished: "Finished", wrecked: "Wrecked", busted: "Busted" };
 
 /**
- * Restart takes the focus only this long after the results come up
- * (milliseconds). A gamepad's A presses the button in focus, and A is also a
- * throttle, so a rider still pressing it as the race ends would otherwise
+ * The buttons can't be pressed, or take the focus, until this long after the
+ * results come up (milliseconds), when Restart takes the focus unless the
+ * player has already moved it to a button. A gamepad's A presses the button
+ * in focus, and A is also a throttle, so a rider still pressing it as the
+ * race ends, or pushing the stick that moves the focus, would otherwise
  * restart the race before they had read the results.
  */
 const FOCUS_RESTART_AFTER_MS = 1500;
@@ -40,10 +42,15 @@ export function ResultsScreen({
 }) {
   const newBests = [newBestTime && "time", newBestPosition && "position"].filter(Boolean).join(" and ");
   const restart = useRef<HTMLButtonElement>(null);
+  const buttons = useRef<HTMLDivElement>(null);
+  const [ready, setReady] = useState(false);
   useEffect(() => {
-    const focusing = window.setTimeout(() => restart.current?.focus(SHOW_FOCUS), FOCUS_RESTART_AFTER_MS);
-    return () => window.clearTimeout(focusing);
+    const readying = window.setTimeout(() => setReady(true), FOCUS_RESTART_AFTER_MS);
+    return () => window.clearTimeout(readying);
   }, []);
+  useEffect(() => {
+    if (ready && !buttons.current?.contains(document.activeElement)) restart.current?.focus(SHOW_FOCUS);
+  }, [ready]);
   return (
     <div
       role="dialog"
@@ -93,7 +100,7 @@ export function ResultsScreen({
           {newBests && (
             <p className="text-center font-display text-2xl uppercase italic text-sunset">New best {newBests}!</p>
           )}
-          <div className="flex flex-col gap-3">
+          <div ref={buttons} inert={!ready} className="flex flex-col gap-3">
             <Button ref={restart} onClick={onRestart}>
               Restart
             </Button>

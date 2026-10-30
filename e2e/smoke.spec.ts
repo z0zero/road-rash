@@ -421,6 +421,32 @@ test.describe("with a gamepad", () => {
     await gamepad(page).release(GAMEPAD.rightTrigger);
   });
 
+  test("leaves the results up for a stick push and A as they open, then gives Restart the focus", async ({ page }) => {
+    // Half a minute of racing, a frame at a time.
+    test.slow();
+    // A race that a rider who just holds the throttle wrecks in the first half-minute. Any seed will do in which that is so.
+    await page.goto("/?seed=17");
+    await startRacing(page);
+    await gamepad(page).press(GAMEPAD.rightTrigger);
+    const results = page.getByRole("dialog", { name: "Wrecked" });
+    expect(await playUntil(page, 40, () => results.isVisible())).toBe(true);
+
+    // Still steering and throttling as the race ends: the stick's push would move the focus to a button, and A press it.
+    await gamepad(page).push(-0.7, 0.7);
+    await page.clock.fastForward(FRAME_MS);
+    await gamepad(page).push(0, 0);
+    await gamepad(page).release(GAMEPAD.rightTrigger);
+    await page.clock.fastForward(FRAME_MS);
+    await gamepad(page).press(GAMEPAD.a);
+    await page.clock.fastForward(FRAME_MS);
+    await gamepad(page).release(GAMEPAD.a);
+    await page.clock.fastForward(FRAME_MS);
+    await expect(results).toBeVisible();
+
+    await play(page, 1);
+    await expect(results.getByRole("button", { name: "Restart" })).toBeFocused();
+  });
+
   test("moves between menu buttons with the D-pad or the left stick, and presses them with A", async ({ page }) => {
     await expect(page.getByRole("button", { name: "Start Race" })).toBeFocused();
 
