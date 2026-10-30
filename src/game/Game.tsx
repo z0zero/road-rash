@@ -78,6 +78,9 @@ export default function Game() {
     let last: number | null = null;
     let frame = requestAnimationFrame(function tick(now) {
       controls.current?.poll();
+      // A punch or kick pressed while no race is ridden, on the pause menu say, goes nowhere: it is read and
+      // dropped here, so it isn't thrown the moment the race resumes.
+      if (session.getState().screen !== "racing") controls.current?.read();
       session.advance(last === null ? 0 : (now - last) / 1000);
       // R3F derives useFrame's delta from this timestamp: pass seconds, as its clock expects.
       advance(now / 1000);
@@ -111,7 +114,7 @@ export default function Game() {
       {state.screen === "credits" && <CreditsScreen onBack={session.closeCredits} />}
       {(state.screen === "racing" || state.screen === "paused") && <Hud session={session} reduceMotion={reduceMotion} />}
       {state.screen === "paused" && (
-        <PauseMenu onResume={session.resume} onRestart={restart} onQuit={session.quitToTitle} />
+        <PauseMenu seed={state.seed} onResume={session.resume} onRestart={restart} onQuit={session.quitToTitle} />
       )}
       {state.screen === "results" && state.results && (
         <ResultsScreen
@@ -119,6 +122,7 @@ export default function Game() {
           personalBest={state.personalBest}
           newBestTime={state.newBestTime}
           newBestPosition={state.newBestPosition}
+          seed={state.seed}
           onRestart={restart}
           onTitle={session.quitToTitle}
         />

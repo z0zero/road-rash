@@ -27,18 +27,18 @@ export interface Limb {
 }
 
 /**
- * A rider on their bike, flat-shaded and built in code. The bike faces -z
- * with its wheels on the ground at y = 0. Move and turn `root` to place it on
- * the road; turn the wheels about x to roll them; move and turn the rider's
- * joints to animate them (each joint's group is turned so its bone runs
- * along +y, and its rest pose is the riding crouch).
+ * A bike and the body on it, a rider's or a cop's, flat-shaded and built in
+ * code. The bike faces -z with its wheels on the ground at y = 0. Move and
+ * turn `root` to place it on the road; turn the wheels about x to roll them;
+ * move and turn the body's joints to animate them (each joint's group is
+ * turned so its bone runs along +y, and its rest pose is the riding crouch).
  */
-export interface RiderModel {
+export interface BikeModel {
   readonly root: Group;
   /** Front, then rear. */
   readonly wheels: readonly [Group, Group];
-  /** The rider, seated: shift and lean it to hang off into corners. */
-  readonly rider: Group;
+  /** The body on the bike, seated: shift and lean it to hang off into corners. After a crash it leaves the bike. */
+  readonly body: Group;
   /** Turns at the hips. */
   readonly torso: Group;
   /** Turns at the neck, upright in the bike's frame at rest. */
@@ -49,7 +49,7 @@ export interface RiderModel {
   readonly legs: readonly [Limb, Limb];
   /**
    * A club gripped in each hand, left then right, both hidden until the rider
-   * holds one. Each turns at the grip, its shaft running along +y to its head.
+   * or cop holds one. Each turns at the grip, its shaft running along +y to its head.
    */
   readonly clubs: readonly [Group, Group];
   /** Every joint's turn in the riding crouch, to animate from and return to. */
@@ -95,10 +95,10 @@ const LAMP_DARK = 0.18;
 const LAMP_TURN_SECONDS = 0.3;
 
 /**
- * Builds a rider and their bike in a livery: a cop on a bike with panniers
- * and a light bar, if `cop`. Call `dispose` when done with it.
+ * Builds a bike and the body on it in a livery: a rider's, or a cop's on a
+ * bike with panniers and a light bar, if `cop`. Call `dispose` when done with it.
  */
-export function createRiderModel(livery: Livery, { cop = false } = {}): RiderModel {
+export function createBikeModel(livery: Livery, { cop = false } = {}): BikeModel {
   const geometries: BufferGeometry[] = [];
   const surface = new MeshPhongMaterial({ vertexColors: true, shininess: 38, specular: "#3a3a3a" });
   // The lamps glow far brighter than white, so they bloom.
@@ -129,11 +129,11 @@ export function createRiderModel(livery: Livery, { cop = false } = {}): RiderMod
   // The riding crouch, in the bike's frame: hips on the seat, hands on the grips, feet on the pegs.
   const hips = new Vector3(0, 1.05, 0.3);
   const shoulders = new Vector3(0, 1.43, -0.08);
-  const rider = new Group();
-  rider.position.copy(hips);
-  root.add(rider);
+  const body = new Group();
+  body.position.copy(hips);
+  root.add(body);
 
-  const torso = joint(rider, new Quaternion(), hips, hips, shoulders);
+  const torso = joint(body, new Quaternion(), hips, hips, shoulders);
   torso.group.add(
     mesh(new LowPoly().add(new BoxGeometry(0.42, 0.58, 0.27), livery.jacket, { at: [0, 0.27, 0] }).add(
       new BoxGeometry(0.44, 0.1, 0.29),
@@ -187,7 +187,7 @@ export function createRiderModel(livery: Livery, { cop = false } = {}): RiderMod
     const hip = new Vector3(side * 0.13, 1.03, 0.3);
     const knee = new Vector3(side * 0.25, 0.86, -0.08);
     const foot = new Vector3(side * 0.19, 0.46, 0.22);
-    const upper = joint(rider, new Quaternion(), hips, hip, knee);
+    const upper = joint(body, new Quaternion(), hips, hip, knee);
     upper.group.add(mesh(limbGeometry(0.16, upper.length, LEATHER)));
     const lower = joint(upper.group, upper.world, hip, knee, foot);
     lower.group.add(
@@ -224,7 +224,7 @@ export function createRiderModel(livery: Livery, { cop = false } = {}): RiderMod
   return {
     root,
     wheels,
-    rider,
+    body,
     torso: torso.group,
     head,
     arms,

@@ -1,16 +1,31 @@
+import { useEffect, useRef } from "react";
 import { PLAYER, QUALIFYING_POSITION, type RaceOutcome, type RaceResults, type Remark, type Standing } from "@/race";
 import { liveryOf } from "@/renderer/liveries";
 import type { PersonalBest } from "@/save-data/save-data";
 import { Button } from "./Button";
 import { formatPosition, formatRaceTime } from "./format";
+import { PANEL, PANEL_TITLE } from "./panel";
+import { RaceSeed } from "./RaceSeed";
 
 const BANNERS: Record<RaceOutcome, string> = { finished: "Finished", wrecked: "Wrecked", busted: "Busted" };
+
+/**
+ * Restart takes the focus only this long after the results come up
+ * (milliseconds). A gamepad's A presses the button in focus, and A is also a
+ * throttle, so a rider still pressing it as the race ends would otherwise
+ * restart the race before they had read the results.
+ */
+const FOCUS_RESTART_AFTER_MS = 1500;
+
+/** Restart shows its focus ring when it takes the focus, so it is clear what A or Enter will press. */
+const SHOW_FOCUS: FocusOptions & { focusVisible: boolean } = { focusVisible: true };
 
 export function ResultsScreen({
   results,
   personalBest,
   newBestTime,
   newBestPosition,
+  seed,
   onRestart,
   onTitle,
 }: {
@@ -18,10 +33,17 @@ export function ResultsScreen({
   personalBest: PersonalBest;
   newBestTime: boolean;
   newBestPosition: boolean;
+  /** The race's seed, shown for a bug report. */
+  seed: number;
   onRestart: () => void;
   onTitle: () => void;
 }) {
   const newBests = [newBestTime && "time", newBestPosition && "position"].filter(Boolean).join(" and ");
+  const restart = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const focusing = window.setTimeout(() => restart.current?.focus(SHOW_FOCUS), FOCUS_RESTART_AFTER_MS);
+    return () => window.clearTimeout(focusing);
+  }, []);
   return (
     <div
       role="dialog"
@@ -29,9 +51,9 @@ export function ResultsScreen({
       aria-labelledby="results-title"
       className="absolute inset-0 flex items-center justify-center overflow-y-auto bg-night/55 p-4 backdrop-blur-[2px]"
     >
-      <div className="flex w-[min(52rem,94vw)] flex-col gap-6 rounded-xl border border-sun/40 bg-night/85 px-8 py-7 shadow-2xl md:flex-row md:gap-10">
+      <div className={`flex w-[min(52rem,94vw)] flex-col gap-6 px-8 py-7 md:flex-row md:gap-10 ${PANEL}`}>
         <div className="flex flex-col items-center gap-4 md:w-72 md:shrink-0">
-          <h2 id="results-title" className="font-display text-6xl uppercase italic tracking-wide text-sun">
+          <h2 id="results-title" className={`text-6xl ${PANEL_TITLE}`}>
             {BANNERS[results.outcome]}
           </h2>
           <p
@@ -66,11 +88,12 @@ export function ResultsScreen({
             <p className="text-center font-display text-2xl uppercase italic text-sunset">New best {newBests}!</p>
           )}
           <div className="flex flex-col gap-3">
-            <Button autoFocus onClick={onRestart}>
+            <Button ref={restart} onClick={onRestart}>
               Restart
             </Button>
             <Button onClick={onTitle}>Back to title</Button>
           </div>
+          <RaceSeed seed={seed} />
         </div>
         <Standings standings={results.standings} />
       </div>
