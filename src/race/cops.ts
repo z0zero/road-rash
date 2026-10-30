@@ -1,6 +1,7 @@
-import type { Crash } from "./crashing";
+import { letGo } from "./busting";
+import { carryOn, slide, STAND_STILL, type Crash } from "./crashing";
 import type { CopId, RiderId } from "./events";
-import type { Attack, Weapon } from "./fighting";
+import { punchOf, throwAttack, withinReach, type Attack, type Weapon } from "./fighting";
 import type { Footprint } from "./footprint";
 import {
   BRAKING_LEAD,
@@ -11,9 +12,11 @@ import {
   sidewaysTowards,
   type BendLimits,
 } from "./opponent-riding";
+import { copsInTheRace, type RaceState } from "./race-state";
+import { PLAYER, whereIs } from "./riders";
 import { BIKE_WIDTH, clamp, maxSidewaysSpeed, type Motion } from "./riding";
 import { STEP_SECONDS, stepsIn } from "./steps";
-import type { Track } from "./track";
+import { apart, type Track } from "./track";
 import { TUNING } from "./tuning";
 
 /** Where a cop is in the race: waiting on the shoulder for the player to pass, riding in the race, or knocked off and out of it. */
@@ -294,4 +297,93 @@ export function takeTurns(cops: readonly Cop[], rota: Rota, player: Place, busy:
   if (!next) return;
   next.following = true;
   next.followingSteps = FOLLOWING_STEPS;
+}
+
+/**
+ * What every cop does this step, from where things stand: rides to bust a
+ * crashed rider who hasn't got away yet; or fights back against the rider
+ * who hit it, riding alongside them and swinging at them when they are
+ * within reach; or stands by a rider it has just busted, on the shoulder;
+ * or else patrols near the player, pulling over onto the shoulder while the
+ * player is down after a crash it isn't riding to. Cops find their way around everyone on a bike, the
+ * riders and each other (`everyoneOnABike`), and the cars and obstacles on
+ * the road. Returns each cop's intent, or null for a cop not riding in the
+ * race.
+ */
+export function decideCops(
+  race: RaceState,
+  everyoneOnABike: readonly Readonly<Motion>[],
+  carsAndObstacles: readonly Footprint[],
+): (CopIntent | null)[] {
+  const { riders, cops, track, edge } = race;
+  letGo(race);
+  for (const cop of copsInTheRace(race)) {
+    const fighting = cop.fightingBack === null ? null : riders[cop.fightingBack];
+    cop.fightingBackSteps = Math.max(0, cop.fightingBackSteps - 1);
+    if (fighting && (cop.fightingBackSteps === 0 || fighting.status !== "racing")) cop.fightingBack = null;
+    cop.attackCooldownSteps = Math.max(0, cop.attackCooldownSteps - 1);
+    cop.standingBySteps = Math.max(0, cop.standingBySteps - 1);
+  }
+  for (const cop of copsInTheRace(race)) {
+    const fighting = cop.fightingBack === null ? null : riders[cop.fightingBack];
+    if (!fighting || fighting.crash || cop.busting !== null || cop.attack || cop.attackCooldownSteps > 0) continue;
+    if (!withinReach(cop.motion, fighting.motion, punchOf(cop))) continue;
+    throwAttack(race, cop, "punch");
+    cop.attackCooldownSteps = stepsIn(COP_ATTACK_EVERY_SECONDS);
+  }
+  const player = whereIs(riders[PLAYER]);
+  takeTurns(cops, race.rota, player, (cop) => cop.busting !== null || cop.fightingBack !== null || cop.standingBySteps > 0);
+  return cops.map((cop) => {
+    if (cop.status !== "riding") return null;
+    if (cop.busting !== null) {
+      return bustingIntent(cop.motion, whereIs(riders[cop.busting]), everyoneOnABike, carsAndObstacles, edge);
+    }
+    const fighting = cop.fightingBack === null ? null : riders[cop.fightingBack];
+    if (fighting && !fighting.crash) {
+      return fightingBackIntent(cop.motion, fighting.motion, track, everyoneOnABike, carsAndObstacles);
+    }
+    // Standing by a rider it has busted, or on patrol while the player is down, a cop pulls over onto the shoulder.
+    if (cop.standingBySteps > 0 || riders[PLAYER].crash) return pullingOverIntent(cop.motion, track);
+    return patrolIntent(cop.motion, player, cop.following, track, everyoneOnABike, carsAndObstacles);
+  });
+}
+
+/**
+ * Moves every cop on by a step: a riding cop as it intends (`intents`, by cop
+ * id); a waiting cop's bike, bumped, slides to a stop on the shoulder; a
+ * knocked-off cop's bike slides to a stop while they tumble, and then they
+ * stay where they are.
+ */
+export function moveCops(race: RaceState, intents: readonly (CopIntent | null)[]): void {
+  const { edge } = race;
+  race.cops.forEach((cop, index) => {
+    const intent = intents[index];
+    if (intent) moveCop(cop.motion, intent, edge);
+    // A cop's bike parked on the shoulder, bumped, slides to a stop.
+    if (cop.status === "waiting") slide(cop.motion, edge);
+    // A knocked-off cop's bike slides to a stop while they tumble, and then they stay where they are.
+    if (cop.crash) {
+      slide(cop.motion, edge);
+      carryOn(cop.crash, cop.motion, STAND_STILL, edge);
+    }
+  });
+}
+
+/** Cops waiting on the shoulder join the race once the player, still racing, has passed them. */
+export function joinThePlayer(race: RaceState) {
+  const player = race.riders[PLAYER];
+  if (player.status !== "racing") return;
+  for (const cop of race.cops) {
+    if (cop.status === "waiting" && whereIs(player).distance >= cop.motion.distance) cop.status = "riding";
+  }
+}
+
+/** Says which cops have come near the player, and which have gone: cops in the race within their alert range of the player. */
+export function alertThePlayer(race: RaceState) {
+  for (const cop of race.cops) {
+    const near = cop.status === "riding" && apart(cop.motion, whereIs(race.riders[PLAYER])) <= TUNING.cops.alertRange;
+    if (near === cop.near) continue;
+    cop.near = near;
+    race.events.push({ type: near ? "cop-near" : "cop-gone", cop: cop.id });
+  }
 }

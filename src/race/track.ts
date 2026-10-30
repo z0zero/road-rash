@@ -217,3 +217,8 @@ function bankFor(curvature: number) {
 function lerp(from: number, to: number, t: number) {
   return from + (to - from) * t;
 }
+
+/** Metres between two places in track space (straight-line). */
+export function apart(a: { readonly distance: number; readonly offset: number }, b: { readonly distance: number; readonly offset: number }): number {
+  return Math.hypot(a.distance - b.distance, a.offset - b.offset);
+}
