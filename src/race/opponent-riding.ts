@@ -87,6 +87,18 @@ const FOOTPRINT_IN_THE_WAY = 0.7;
 const ONCOMING_LOOK_AHEAD = 3;
 /** ...and never cut across the path of a car or an obstacle they would get to within this many seconds. */
 const CROSSING_TIME = 1.5;
+/**
+ * Held back to a standstill, or nearly, behind something in its way, an
+ * opponent or a cop whose line leads round it rolls on at this walking pace
+ * (m/s), since a bike can't move sideways while it stands still...
+ */
+const WALKING_PACE = 2;
+/**
+ * ...and riding no faster than this (m/s), it sees a car or an obstacle
+ * ahead of it, in its path, as something to steer round, not as one alongside
+ * it, even nose to tail with it.
+ */
+const CRAWLING = 2 * WALKING_PACE;
 /** An opponent shoved sideways by a kick faster than this (m/s) rides the kick out before it steers back to its line. */
 const RIDING_OUT_A_KICK = 1;
 /**
@@ -250,7 +262,9 @@ export function lineAround(
     const reach = thing.halfLength + BIKE_HALF_LENGTH;
     const closing = Math.max(0, me.speed - thing.velocity);
     const lookAhead = thing.velocity < 0 ? ONCOMING_LOOK_AHEAD : FOOTPRINT_LOOK_AHEAD;
-    const alongside = Math.abs(ahead) < reach + 1;
+    // Crawling up to something in its path, it is behind it, however close, not alongside it.
+    const inFront = me.speed <= CRAWLING && ahead > 0 && Math.abs(thing.offset - me.offset) < thing.halfWidth + BIKE_HALF_WIDTH;
+    const alongside = Math.abs(ahead) < reach + 1 && !inFront;
     if (!alongside && (ahead <= 0 || ahead - reach >= 2 + closing * lookAhead)) continue;
     // A car changing lanes takes up the road from where it is to the lane it is moving over to.
     const left = Math.min(thing.offset, thing.movingTo);
@@ -271,12 +285,15 @@ export function lineAround(
   for (const thing of carsAndObstacles) {
     const ahead = thing.distance - me.distance;
     if (ahead <= 0 || thing.velocity < 0) continue;
-    const from = Math.min(thing.offset, thing.movingTo) - thing.halfWidth - FOOTPRINT_IN_THE_WAY;
-    const to = Math.max(thing.offset, thing.movingTo) + thing.halfWidth + FOOTPRINT_IN_THE_WAY;
-    // In the way of where it is, or of the line it is taking.
+    const [left, right] = [Math.min(thing.offset, thing.movingTo), Math.max(thing.offset, thing.movingTo)];
+    const [from, to] = [left - thing.halfWidth - FOOTPRINT_IN_THE_WAY, right + thing.halfWidth + FOOTPRINT_IN_THE_WAY];
+    // In the way of where it is, or of the line it is taking...
     if ((me.offset > from && me.offset < to) || (line > from && line < to)) {
       const room = Math.max(0, ahead - thing.halfLength - BIKE_HALF_LENGTH - 2);
-      holdBehind = Math.min(holdBehind, thing.velocity + Math.sqrt(2 * PLANNED_BRAKING * room));
+      const slowEnough = thing.velocity + Math.sqrt(2 * PLANNED_BRAKING * room);
+      // ...it slows for it in time; but if its line takes it clear past it, it rolls on at walking pace at least.
+      const clearPast = line <= left - thing.halfWidth - BIKE_HALF_WIDTH || line >= right + thing.halfWidth + BIKE_HALF_WIDTH;
+      holdBehind = Math.min(holdBehind, clearPast ? Math.max(slowEnough, WALKING_PACE) : slowEnough);
     }
   }
   const evading = unsafe.some(({ keepClear: [from, to] }) => me.offset > from && me.offset < to);

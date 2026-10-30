@@ -12,6 +12,7 @@ import {
   player,
   secondsUntil,
   startedRace,
+  WHOLE_RACES,
 } from "./test-helpers";
 
 /** Seconds an opponent spent free to attack with someone within reach, and the attacks it threw in that time. */
@@ -201,7 +202,7 @@ function attacksOnThePlayer(race: Race, input: () => PlayerInput, seconds: numbe
 }
 
 describe("fights with the player", () => {
-  it("are one at a time: while a brawler or bully fights a player who doesn't hit back, the others wait their turn", () => {
+  it("are one at a time: while a brawler or bully fights a player who doesn't hit back, the others wait their turn", WHOLE_RACES, () => {
     // A slow player who never attacks, from the back of the grid, where the slower fighters line up around them.
     let pileOns = 0;
     let thrown = 0;
@@ -237,7 +238,7 @@ describe("fights with the player", () => {
     expect(brawl.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("leave a slow player who doesn't hit back riding among riders for most of the race, not pounded off and left alone", () => {
+  it("leave a slow player who doesn't hit back riding among riders for most of the race, not pounded off and left alone", WHOLE_RACES, () => {
     for (const seed of [1, 2, 3]) {
       const race = startedRace(seed, { ...CLOSED_ROAD, ...NO_COPS });
       const riding = autopilot(race, { targetSpeed: 40, lane: 1.5 });
@@ -257,7 +258,7 @@ describe("fights with the player", () => {
     }
   });
 
-  it("leave a player who rides without hitting back on their bike for the first minute", () => {
+  it("leave a player who rides without hitting back on their bike for the first minute", WHOLE_RACES, () => {
     // A slow player who never attacks, in races with traffic and cops: the fighters at the back of the grid are on them
     // from the start.
     const knockedOff: number[] = [];

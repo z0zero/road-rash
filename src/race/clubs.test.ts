@@ -18,6 +18,7 @@ import {
   startedRace,
   STEPS_PER_SECOND,
   swingAt,
+  WHOLE_RACES,
 } from "./test-helpers";
 
 
@@ -147,7 +148,7 @@ describe("swinging a club", () => {
 });
 
 describe("holding a club", () => {
-  it("lasts while the player keeps swinging it: opponents seldom throw a hit into a swing, so a holding usually lasts 10 s or more", () => {
+  it("lasts while the player keeps swinging it: opponents seldom throw a hit into a swing, so a holding usually lasts 10 s or more", WHOLE_RACES, () => {
     // Whole races in which the player rides on autopilot and mashes the punch button whenever anyone is within reach.
     const holdings: { seconds: number; stolen: boolean }[] = [];
     for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
@@ -175,8 +176,7 @@ describe("holding a club", () => {
     expect(holdings.length).toBeGreaterThanOrEqual(4);
     expect(holdings.filter((holding) => holding.seconds >= 10).length).toBeGreaterThanOrEqual(0.75 * holdings.length);
     expect(holdings.filter((holding) => holding.stolen).length).toBeLessThanOrEqual(0.25 * holdings.length);
-    // Ten whole races take a while: most of a minute on a quiet machine, a few minutes on a busy one.
-  }, 240_000);
+  });
 });
 
 describe("stealing a club", () => {

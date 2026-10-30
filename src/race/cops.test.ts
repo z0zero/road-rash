@@ -19,6 +19,7 @@ import {
   startedRace,
   steerOnto,
   STEPS_PER_SECOND,
+  WHOLE_RACES,
 } from "./test-helpers";
 
 
@@ -253,7 +254,7 @@ describe("fighting a cop", () => {
     expect(cop()).toMatchObject({ status: "riding", weapon: "club" });
   });
 
-  it("makes beating a fresh cop costly: a player who mashes punch knocks it off but loses more than half their stamina, and its club stays its own", () => {
+  it("makes beating a fresh cop costly: a player who mashes punch knocks it off but loses more than half their stamina, and its club stays its own", WHOLE_RACES, () => {
     for (const seed of [1, 2, 3]) {
       const { race, input } = alongsideTheFirstCop(seed);
       const punching = () => ({ ...input(), punch: true });
@@ -432,7 +433,7 @@ describe("busting", () => {
     expect(them().status).toBe("racing");
   });
 
-  it("leaves alone a rider who crashes more than 80 m from it: a cop following the player then pulls over onto the shoulder until they are back on their bike", () => {
+  it("leaves alone a rider who crashes more than 80 m from it: a cop following the player then pulls over onto the shoulder until they are back on their bike", WHOLE_RACES, () => {
     // Following 1.5 s behind a player riding 54 m/s or more, the cop is over 80 m behind them.
     const { race, cop, speed, behind } = crashedAtSpeedAheadOfTheFollowingCop([7, 5, 4, 6, 2]);
     expect(speed).toBeGreaterThanOrEqual(54);
@@ -546,7 +547,7 @@ describe("running into a cop", () => {
 });
 
 describe("cops on the road", () => {
-  it("ride round cars and riders, and bump off them, so that nobody passes through a cop: in a race in traffic, no cop's bike ever overlaps a car or a rider's", () => {
+  it("ride round cars and riders, and bump off them, so that nobody passes through a cop: in a race in traffic, no cop's bike ever overlaps a car or a rider's", WHOLE_RACES, () => {
     let copSteps = 0;
     const through: string[] = [];
     for (const seed of [1, 2]) {
@@ -583,7 +584,7 @@ describe("cops on the road", () => {
 });
 
 describe("cops on the road, as the opponents see them", () => {
-  it("are slowed down for in time and ridden round, as a slower car is: no opponent runs into a cop pulling out to join the race, or riding slowly", () => {
+  it("are slowed down for in time and ridden round, as a slower car is: no opponent runs into a cop pulling out to join the race, or riding slowly", WHOLE_RACES, () => {
     const intoACop: string[] = [];
     for (const seed of [1, 2, 3, 4, 5, 6]) {
       // The player rides on past the cops, so that each pulls out in front of the field coming up behind them.
