@@ -267,6 +267,29 @@ test("stops prompting the player to hit back as soon as they attack, and for goo
   await expect(prompt).toBeHidden();
 });
 
+test("goes back to the title from the results with Esc, once they can be pressed", async ({ page }) => {
+  // Half a minute of racing, a frame at a time.
+  test.slow();
+  await page.goto(WRECKED_EARLY);
+  await startRacing(page);
+  await page.keyboard.down("w");
+  const results = page.getByRole("dialog", { name: "Wrecked" });
+  expect(await playUntil(page, 40, () => results.isVisible())).toBe(true);
+  await page.keyboard.up("w");
+
+  // Esc pressed as the race ends, to pause it say, leaves the results up...
+  await page.keyboard.press("Escape");
+  await play(page, 0.2);
+  await expect(results).toBeVisible();
+
+  // ...and once Restart has the focus, goes back to the title.
+  await play(page, 1.4);
+  await expect(results.getByRole("button", { name: "Restart" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(results).toBeHidden();
+  await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
+});
+
 /** Buttons of the standard gamepad mapping, named as on an Xbox controller. */
 const GAMEPAD = { a: 0, b: 1, x: 2, leftTrigger: 6, rightTrigger: 7, start: 9, up: 12, down: 13, left: 14, right: 15 };
 

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { codesOf, KEYS } from "@/input/bindings";
 import { PLAYER, QUALIFYING_POSITION, type RaceOutcome, type RaceResults, type Remark, type Standing } from "@/race";
 import { liveryOf } from "@/renderer/liveries";
 import type { PersonalBest } from "@/save-data/save-data";
@@ -16,9 +17,11 @@ const BANNERS: Record<RaceOutcome, string> = { finished: "Finished", wrecked: "W
  * in focus and its B goes back to the title, but A is also a throttle and B
  * a kick, so a rider still pressing them as the race ends, or pushing the
  * stick that moves the focus, would otherwise leave the results before they
- * had read them.
+ * had read them. Esc goes back to the title from then on too.
  */
 const FOCUS_RESTART_AFTER_MS = 1500;
+
+const BACK = codesOf(KEYS.back);
 
 /** Restart shows its focus ring when it takes the focus, so it is clear what A or Enter will press. */
 const SHOW_FOCUS: FocusOptions & { focusVisible: boolean } = { focusVisible: true };
@@ -58,6 +61,9 @@ export function ResultsScreen({
       aria-modal="true"
       aria-labelledby="results-title"
       className="absolute inset-0 flex items-center justify-center overflow-y-auto bg-night/55 p-4 backdrop-blur-[2px]"
+      onKeyDown={(event) => {
+        if (ready && BACK.includes(event.code)) onTitle();
+      }}
     >
       <div className={`flex w-[min(52rem,94vw)] flex-col gap-6 px-8 py-7 md:flex-row md:gap-10 ${PANEL}`}>
         <div className="flex flex-col items-center gap-4 md:w-72 md:shrink-0">
