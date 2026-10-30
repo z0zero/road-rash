@@ -22,6 +22,13 @@ const JUMP = 10;
 const BACKING_SPEED = 0.5;
 /** ...turning round at this many radians a second. */
 const TURN_ROUND_RATE = 4;
+/**
+ * A club swing's strike is drawn on for this long after it lands (seconds of
+ * race time), held and then easing back, however soon the swinger is ready to
+ * swing again: the race lets a club swing go again 0.05 s after its strike,
+ * too soon to see it struck.
+ */
+const FOLLOW_THROUGH_SECONDS = 0.35;
 
 /**
  * How someone on a bike, a rider or a cop, is drawn this frame: where their
@@ -52,8 +59,12 @@ export abstract class BikeMotion {
   wheelTurn = 0;
   /** Null while they are on their bike; otherwise how far they are in getting back on it. */
   crash: CrashPhase | null = null;
-  /** The attack they are making, or null. */
+  /** The attack they are making, or null; after a club swing's strike, its follow-through (see `FOLLOW_THROUGH_SECONDS`). */
   attack: AttackSnapshot | null = null;
+  /** When the last club swing struck (race time) and which way, while it follows through. */
+  private readonly strike = { at: -Infinity, side: 1 as Side, seen: false };
+  /** The follow-through drawn as `attack` once the race has done with the swing. */
+  private readonly followThrough = { kind: "club-swing" as const, side: 1 as Side, stage: "recovery" as const, progress: 0 };
   /** The weapon they hold, or null. */
   weapon: Weapon | null = null;
   /** The hand a held club is in: 1 the right, -1 the left. It moves to the side of each swing and stays there. */
@@ -77,12 +88,33 @@ export abstract class BikeMotion {
   /** Their entry in a snapshot. */
   protected abstract readonly entryIn: (snapshot: RaceSnapshot) => RiderSnapshot | CopSnapshot;
 
+  /**
+   * The attack to draw: the race's, except that a club swing's strike is drawn
+   * on through its follow-through until a new attack winds up, or they crash.
+   */
+  private drawnAttack({ attack, crash }: RiderSnapshot | CopSnapshot, clock: number): AttackSnapshot | null {
+    const strike = this.strike;
+    const striking = attack?.kind === "club-swing" && attack.stage === "recovery";
+    if (striking && !strike.seen) {
+      strike.at = clock;
+      strike.side = attack.side;
+    }
+    strike.seen = striking;
+    // A new attack, a crash or a race started over ends the follow-through.
+    if (attack?.stage === "wind-up" || crash || clock < strike.at) strike.at = -Infinity;
+    const since = clock - strike.at;
+    if (since >= FOLLOW_THROUGH_SECONDS) return attack;
+    this.followThrough.side = strike.side;
+    this.followThrough.progress = since / FOLLOW_THROUGH_SECONDS;
+    return this.followThrough;
+  }
+
   /** Moves on to this frame's view, `delta` seconds after the last. */
   update(view: RaceView, delta: number, wheelRadius: number) {
     const snapshot = this.entryIn(view.current);
     const phaseBefore = this.crash;
     this.crash = snapshot.crash;
-    this.attack = snapshot.attack;
+    this.attack = this.drawnAttack(snapshot, view.current.clock);
     this.weapon = snapshot.weapon;
     if (snapshot.attack?.kind === "club-swing") this.clubHand = snapshot.attack.side;
     const body = poseOf(view, this.entryIn, this.pose);
