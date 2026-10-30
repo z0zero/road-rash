@@ -1,4 +1,4 @@
-import { PLAYER, type RaceOutcome, type RaceResults, type Remark, type Standing } from "@/race";
+import { PLAYER, QUALIFYING_POSITION, type RaceOutcome, type RaceResults, type Remark, type Standing } from "@/race";
 import { liveryOf } from "@/renderer/liveries";
 import type { PersonalBest } from "@/save-data/save-data";
 import { Button } from "./Button";
@@ -41,7 +41,7 @@ export function ResultsScreen({
             {results.qualified ? "Qualified!" : "Not qualified"}
           </p>
           {!results.qualified && results.outcome === "finished" && (
-            <p className="-mt-3 text-sm text-sand/70">Finish 3rd or better to qualify.</p>
+            <p className="-mt-3 text-sm text-sand/70">Finish {formatPosition(QUALIFYING_POSITION)} or better to qualify.</p>
           )}
           <SaidAfterTheRace remark={results.remark} />
           <dl className="grid w-full grid-cols-2 gap-x-6 gap-y-2 text-lg">
@@ -130,7 +130,7 @@ function Standings({ standings }: { standings: readonly Standing[] }) {
             className={
               standing.rider === PLAYER
                 ? "bg-sunset/25 font-semibold text-sun"
-                : standing.position !== null && standing.position <= 3
+                : standing.position !== null && standing.position <= QUALIFYING_POSITION
                   ? "text-sand"
                   : "text-sand/80"
             }
