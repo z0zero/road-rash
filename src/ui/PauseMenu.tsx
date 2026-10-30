@@ -1,15 +1,18 @@
+import type { Difficulty } from "@/race";
 import { Button } from "./Button";
 import { Dialog } from "./Dialog";
 import { RaceSeed } from "./RaceSeed";
 
-/** The pause menu: resume, restart or quit to the title, with the race's seed for a bug report. */
+/** The pause menu: resume, restart or quit to the title, with the race's difficulty and seed for a bug report. */
 export function PauseMenu({
   seed,
+  difficulty,
   onResume,
   onRestart,
   onQuit,
 }: {
   seed: number;
+  difficulty: Difficulty;
   onResume: () => void;
   onRestart: () => void;
   onQuit: () => void;
@@ -21,7 +24,7 @@ export function PauseMenu({
       </Button>
       <Button onClick={onRestart}>Restart</Button>
       <Button onClick={onQuit}>Quit to title</Button>
-      <RaceSeed seed={seed} />
+      <RaceSeed seed={seed} difficulty={difficulty} />
     </Dialog>
   );
 }

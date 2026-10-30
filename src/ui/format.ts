@@ -1,3 +1,5 @@
+import type { Difficulty } from "@/race";
+
 /** Speed for the screen: the simulation's metres per second in whole km/h. */
 export function toKmh(metresPerSecond: number): number {
   return Math.round(metresPerSecond * 3.6);
@@ -19,4 +21,12 @@ export function formatRaceTime(seconds: number): string {
   const minutes = Math.floor(hundredths / 6000);
   const wholeSeconds = Math.floor((hundredths % 6000) / 100);
   return `${minutes}:${String(wholeSeconds).padStart(2, "0")}.${String(hundredths % 100).padStart(2, "0")}`;
+}
+
+/** What each difficulty is called on screen. */
+const DIFFICULTY_NAMES: Readonly<Record<Difficulty, string>> = { easy: "Easy", normal: "Normal", hard: "Hard" };
+
+/** A difficulty's name on screen: "Easy", "Normal" or "Hard". */
+export function difficultyName(difficulty: Difficulty): string {
+  return DIFFICULTY_NAMES[difficulty];
 }

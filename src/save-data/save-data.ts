@@ -1,7 +1,7 @@
-import type { RaceResults } from "@/race";
+import { DEFAULT_DIFFICULTY, DIFFICULTIES, type Difficulty, type RaceResults } from "@/race";
 
 /**
- * Save data: the player's settings and personal best, kept in the browser's
+ * Save data: the player's settings and personal bests, kept in the browser's
  * localStorage under one versioned key. Missing or corrupt data and storage
  * that throws fall back to the defaults and never break the game.
  */
@@ -15,6 +15,8 @@ export interface Settings {
   readonly reduceMotion: boolean | null;
   /** Whether the player has ever attacked in a race: until they have, the HUD shows them the hit-back prompt. */
   readonly hasAttacked: boolean;
+  /** The difficulty the player last chose on the title screen, which their races are run at. */
+  readonly difficulty: Difficulty;
 }
 
 export interface PersonalBest {
@@ -26,35 +28,51 @@ export interface PersonalBest {
 
 export interface SaveData {
   readonly settings: Settings;
-  readonly personalBest: PersonalBest;
+  /** The personal best on each difficulty: times on one don't compare with times on another. */
+  readonly personalBests: Readonly<Record<Difficulty, PersonalBest>>;
 }
 
+/** No finish yet. */
+const NO_PERSONAL_BEST: PersonalBest = { time: null, position: null };
+
 export const DEFAULT_SAVE_DATA: SaveData = {
-  settings: { masterVolume: 1, musicVolume: 0.7, effectsVolume: 1, reduceMotion: null, hasAttacked: false },
-  personalBest: { time: null, position: null },
+  settings: { masterVolume: 1, musicVolume: 0.7, effectsVolume: 1, reduceMotion: null, hasAttacked: false, difficulty: DEFAULT_DIFFICULTY },
+  personalBests: { easy: NO_PERSONAL_BEST, normal: NO_PERSONAL_BEST, hard: NO_PERSONAL_BEST },
 };
 
 /** The part of the browser's Storage that save data uses. */
 export type SaveStorage = Pick<Storage, "getItem" | "setItem">;
 
 /** Everything is saved under this one key; a new version gets a new key. */
-const KEY = "rev-and-wreck:v1";
+const KEY = "rev-and-wreck:v2";
+/**
+ * Where v1.0.0 saved, with a single personal best: there was only one race
+ * then, the one that is now Normal. Read only when there is nothing under
+ * `KEY` yet.
+ */
+const V1_KEY = "rev-and-wreck:v1";
 
 /**
- * Reads the save data. Anything missing or invalid falls back to its default,
- * field by field, so one bad value never loses the rest. Never throws.
+ * Reads the save data, or failing that a save from v1.0.0, whose personal
+ * best becomes Normal's. Anything missing or invalid falls back to its
+ * default, field by field, so one bad value never loses the rest. Never throws.
  */
 export function loadSaveData(storage: SaveStorage | undefined): SaveData {
   let parsed: unknown;
+  let fromV1 = false;
   try {
-    const saved = storage?.getItem(KEY);
+    let saved = storage?.getItem(KEY);
+    if (!saved) {
+      saved = storage?.getItem(V1_KEY);
+      fromV1 = true;
+    }
     if (!saved) return DEFAULT_SAVE_DATA;
     parsed = JSON.parse(saved);
   } catch {
     return DEFAULT_SAVE_DATA;
   }
   const settings = fields(fields(parsed).settings);
-  const personalBest = fields(fields(parsed).personalBest);
+  const bests = fromV1 ? { normal: fields(parsed).personalBest } : fields(fields(parsed).personalBests);
   const defaults = DEFAULT_SAVE_DATA.settings;
   return {
     settings: {
@@ -63,26 +81,42 @@ export function loadSaveData(storage: SaveStorage | undefined): SaveData {
       effectsVolume: isVolume(settings.effectsVolume) ? settings.effectsVolume : defaults.effectsVolume,
       reduceMotion: typeof settings.reduceMotion === "boolean" ? settings.reduceMotion : defaults.reduceMotion,
       hasAttacked: typeof settings.hasAttacked === "boolean" ? settings.hasAttacked : defaults.hasAttacked,
+      difficulty: isDifficulty(settings.difficulty) ? settings.difficulty : defaults.difficulty,
     },
-    personalBest: {
-      time: isTime(personalBest.time) ? personalBest.time : null,
-      position: isPosition(personalBest.position) ? personalBest.position : null,
+    personalBests: {
+      easy: personalBestIn(bests.easy),
+      normal: personalBestIn(bests.normal),
+      hard: personalBestIn(bests.hard),
     },
   };
 }
 
+/** The personal best that saved `value` holds, field by field. */
+function personalBestIn(value: unknown): PersonalBest {
+  const { time, position } = fields(value);
+  return { time: isTime(time) ? time : null, position: isPosition(position) ? position : null };
+}
+
 /**
- * The save data with a race's result counted towards the personal best: only
- * finishes count, and the fastest time and best position are kept separately.
+ * The save data with a race on `difficulty` counted towards that difficulty's
+ * personal best: only finishes count, and the fastest time and best position
+ * are kept separately.
  */
-export function recordRaceResult(data: SaveData, result: Pick<RaceResults, "outcome" | "time" | "position">): SaveData {
+export function recordRaceResult(
+  data: SaveData,
+  difficulty: Difficulty,
+  result: Pick<RaceResults, "outcome" | "time" | "position">,
+): SaveData {
   if (result.outcome !== "finished") return data;
-  const { time, position } = data.personalBest;
+  const { time, position } = data.personalBests[difficulty];
   return {
     ...data,
-    personalBest: {
-      time: result.time !== null && (time === null || result.time < time) ? result.time : time,
-      position: result.position !== null && (position === null || result.position < position) ? result.position : position,
+    personalBests: {
+      ...data.personalBests,
+      [difficulty]: {
+        time: result.time !== null && (time === null || result.time < time) ? result.time : time,
+        position: result.position !== null && (position === null || result.position < position) ? result.position : position,
+      },
     },
   };
 }
@@ -102,6 +136,10 @@ function isTime(value: unknown): value is number {
 
 function isPosition(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 1;
+}
+
+function isDifficulty(value: unknown): value is Difficulty {
+  return DIFFICULTIES.some((difficulty) => difficulty === value);
 }
 
 /**
