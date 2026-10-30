@@ -6,6 +6,7 @@ import {
   autopilot,
   CLOSED_ROAD,
   eventsUntil,
+  FIRST_COP,
   nearestOpponent,
   nearestWithinReach,
   nearingTheWaitingCop,
@@ -17,8 +18,6 @@ import {
   stepFor,
   STEPS_PER_SECOND,
 } from "./test-helpers";
-
-const FIRST_COP = { kind: "cop", id: 0 } as const;
 
 /**
  * A started race on a closed road with no cops, in which the player has

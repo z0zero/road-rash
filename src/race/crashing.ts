@@ -1,7 +1,7 @@
 import { sendCopsTo } from "./busting";
 import type { CrashCause } from "./events";
 import type { RaceState } from "./race-state";
-import { PLAYER, type Rider } from "./riders";
+import { isPlayer, type Rider } from "./riders";
 import { clamp, type Motion } from "./riding";
 import { STEP_SECONDS, stepsIn } from "./steps";
 import { TUNING } from "./tuning";
@@ -149,7 +149,7 @@ export function crash(race: RaceState, rider: Rider, cause: CrashCause, impactSp
   if (rider.condition === 0) {
     rider.status = "wrecked";
     race.events.push({ type: "wrecked", rider: rider.id });
-    if (rider.id === PLAYER) race.events.push({ type: "player-race-over", outcome: "wrecked" });
+    if (isPlayer(rider)) race.events.push({ type: "player-race-over", outcome: "wrecked" });
   } else {
     sendCopsTo(race, rider);
   }
@@ -165,7 +165,7 @@ export function runBack(race: RaceState, rider: Rider, input: OnFootControls): v
   if (!rider.crash) return;
   const { edge } = race;
   slide(rider.motion, edge);
-  const onFoot = rider.status !== "racing" ? STAND_STILL : rider.riding ? RUN_STRAIGHT_BACK : input;
+  const onFoot = rider.status !== "racing" ? STAND_STILL : isPlayer(rider) ? input : RUN_STRAIGHT_BACK;
   carryOn(rider.crash, rider.motion, onFoot, edge);
   if (rider.status === "racing" && canRemount(rider.crash, rider.motion)) getBackOn(race, rider);
 }

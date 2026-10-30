@@ -9,7 +9,9 @@ import {
   CLOSED_ROAD,
   eventsDuring,
   eventsUntil,
+  FIRST_COP,
   kmh,
+  ME,
   nearestWithinReach,
   nearingTheWaitingCop,
   player,
@@ -18,8 +20,6 @@ import {
   STEPS_PER_SECOND,
 } from "./test-helpers";
 
-const ME = { kind: "rider", id: PLAYER } as const;
-const FIRST_COP = { kind: "cop", id: 0 } as const;
 
 /**
  * A started race in which the player has ridden alongside a racer (an

@@ -1,5 +1,5 @@
 import { copsInTheRace, type RaceState } from "./race-state";
-import { PLAYER, whereIs, type Rider } from "./riders";
+import { isPlayer, whereIs, type Rider } from "./riders";
 import { stepsIn } from "./steps";
 import { apart } from "./track";
 import { TUNING } from "./tuning";
@@ -35,7 +35,7 @@ export function bustTheCaught(race: RaceState) {
     cop.busting = null;
     cop.standingBySteps = stepsIn(TUNING.cops.standingBySeconds);
     race.events.push({ type: "busted", rider: rider.id, cop: cop.id });
-    if (rider.id === PLAYER) {
+    if (isPlayer(rider)) {
       race.playerBustedBy = cop;
       race.events.push({ type: "player-race-over", outcome: "busted" });
     }

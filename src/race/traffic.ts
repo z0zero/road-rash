@@ -1,7 +1,7 @@
 import type { Random } from "./random";
 import { BIKE_LENGTH, BIKE_WIDTH, clamp } from "./riding";
 import { STEP_SECONDS } from "./steps";
-import type { Track } from "./track";
+import type { Moving, Track } from "./track";
 
 /** The body a car is built on, which sets its size. */
 export type CarKind = "hatchback" | "saloon" | "van" | "pickup";
@@ -97,13 +97,7 @@ export interface Around {
 }
 
 /** Where a rider is on the road, which cars make room for. */
-export interface RiderOnTheRoad {
-  /** Metres along the centreline. */
-  readonly distance: number;
-  /** Metres right of the centreline. */
-  readonly offset: number;
-  /** Metres per second along the track. */
-  readonly speed: number;
+export interface RiderOnTheRoad extends Moving {
   /** Whether they are on their bike: a car slows behind a rider on their bike, but runs down one on foot. */
   readonly onTheirBike: boolean;
 }

@@ -1,3 +1,4 @@
+import { createGroundGrid } from "./ground-grid";
 import { placeObstacles, placeScenery } from "./placements";
 import { createRandom, type Random } from "./random";
 import { buildTrack, type Bend, type Slope, type Track, type TrackLayout } from "./track";
@@ -224,25 +225,15 @@ function hairpinSection(heading: number, random: Random): RoadPlan {
 /** Whether stretches of road far apart along the track stay well apart on the ground. */
 function keepsClearOfItself(track: Track): boolean {
   const spacing = 4;
-  const cell = CLEARANCE;
-  const grid = new Map<string, number[]>();
-  const points: { x: number; z: number; d: number }[] = [];
+  const grid = createGroundGrid<{ x: number; z: number; d: number }>(CLEARANCE);
   for (let d = 0; d <= track.length; d += spacing) {
     const { x, z } = track.sampleAt(d);
-    const point = { x, z, d };
-    const cx = Math.floor(x / cell);
-    const cz = Math.floor(z / cell);
-    for (let i = -1; i <= 1; i++) {
-      for (let j = -1; j <= 1; j++) {
-        for (const index of grid.get(`${cx + i},${cz + j}`) ?? []) {
-          const other = points[index];
-          if (d - other.d > CLEARANCE_ARC && Math.hypot(x - other.x, z - other.z) < CLEARANCE) return false;
-        }
-      }
-    }
-    const key = `${cx},${cz}`;
-    grid.set(key, [...(grid.get(key) ?? []), points.length]);
-    points.push(point);
+    let clear = true;
+    grid.forEachNear(x, z, 1, (other) => {
+      if (d - other.d > CLEARANCE_ARC && Math.hypot(x - other.x, z - other.z) < CLEARANCE) clear = false;
+    });
+    if (!clear) return false;
+    grid.add(x, z, { x, z, d });
   }
   return true;
 }
