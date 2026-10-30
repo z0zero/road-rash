@@ -16,7 +16,7 @@ import { ride, type Controls } from "./riding";
 import { snapshotOf, type RaceSnapshot } from "./snapshot";
 import { STEP_SECONDS, STEPS_PER_SECOND } from "./steps";
 import type { Track } from "./track";
-import { CLOSED_ROAD, createTraffic, type Traffic } from "./traffic";
+import { CLOSED_ROAD, createTraffic, type RiderOrCopOnTheRoad, type Traffic } from "./traffic";
 
 /** Once over the finish line, a rider lets go of the throttle and brakes to a stop. */
 const FINISHED_CONTROLS: Controls = { throttle: 0, brake: 0.7, steer: 0 };
@@ -101,16 +101,19 @@ export interface Race {
   fastForward(steps?: number): RaceResults;
 }
 
-/** Where the riders still racing are on the road, on their bikes or off them. */
-function ridersOnTheRoad(race: RaceState) {
-  return race.riders.filter((rider) => rider.status === "racing").map((rider) => ({ ...whereIs(rider), onTheirBike: !rider.crash }));
+/** Where the riders still racing are on the road, on their bikes or off them, and the cops riding in the race, whom cars make room for too. */
+function onTheRoad(race: RaceState): RiderOrCopOnTheRoad[] {
+  return [
+    ...race.riders.filter((rider) => rider.status === "racing").map((rider) => ({ ...whereIs(rider), onTheirBike: !rider.crash })),
+    ...copsInTheRace(race).map(({ motion: { distance, offset, speed } }) => ({ distance, offset, speed, onTheirBike: true })),
+  ];
 }
 
 /** Advances the race by exactly `STEP_SECONDS` with the player's input for that step. */
 function step(race: RaceState, input: PlayerInput) {
   const { riders, track, traffic } = race;
   // The traffic drives on whatever the riders do, even while they wait for the countdown, though none comes on behind them then.
-  if (race.stepsTaken < COUNTDOWN_STEPS) traffic.step(whereIs(riders[PLAYER]), ridersOnTheRoad(race), true);
+  if (race.stepsTaken < COUNTDOWN_STEPS) traffic.step(whereIs(riders[PLAYER]), onTheRoad(race), true);
   else {
     const clockBefore = clock(race);
     // Everyone decides what to do from where things stand...
@@ -136,7 +139,7 @@ function step(race: RaceState, input: PlayerInput) {
       }
     }
     moveCops(race, copIntents);
-    traffic.step(whereIs(player), ridersOnTheRoad(race));
+    traffic.step(whereIs(player), onTheRoad(race));
     // ...and then what they ran into, the hits and the finish line settle what happened.
     bustRidersReached(race);
     joinThePlayer(race);

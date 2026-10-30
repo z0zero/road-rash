@@ -96,8 +96,8 @@ export interface Around {
   readonly speed: number;
 }
 
-/** Where a rider is on the road, which cars make room for. */
-export interface RiderOnTheRoad extends Moving {
+/** Where a rider, or a cop, is on the road, which cars make room for. */
+export interface RiderOrCopOnTheRoad extends Moving {
   /** Whether they are on their bike: a car slows behind a rider on their bike, but runs down one on foot. */
   readonly onTheirBike: boolean;
 }
@@ -109,12 +109,12 @@ export interface Traffic {
   /**
    * Moves every car on by a step, then lets the cars that have left the
    * window around the player go and brings new ones in at its ends. Cars
-   * come onto the road, and change lanes, out of the way of the `riders`, and
-   * slow down behind a slower one on their bike. While the riders are
+   * come onto the road, and change lanes, out of the way of the `riders` and
+   * cops, and slow down behind a slower one on their bike. While the riders are
    * `waitingForTheStart`, none comes on behind the player, where it would
    * come up through the start grid as they set off.
    */
-  step(player: Around, riders: readonly RiderOnTheRoad[], waitingForTheStart?: boolean): void;
+  step(player: Around, riders: readonly RiderOrCopOnTheRoad[], waitingForTheStart?: boolean): void;
 }
 
 /** A closed road: no traffic at all. */
@@ -209,7 +209,7 @@ export function createTraffic(track: Track, random: Random, player: Around, clea
    * is at `lane`: no rider in that lane is close to it, or would come up to
    * it, or it to them, within `RIDERS_SECONDS`.
    */
-  const ridersGiveRoom = (riders: readonly RiderOnTheRoad[], distance: number, lane: number, velocity: number) =>
+  const ridersGiveRoom = (riders: readonly RiderOrCopOnTheRoad[], distance: number, lane: number, velocity: number) =>
     riders.every((rider) => {
       const ahead = rider.distance - distance;
       const closing = ahead > 0 ? velocity - rider.speed : rider.speed - velocity;
@@ -242,7 +242,7 @@ export function createTraffic(track: Track, random: Random, player: Around, clea
    * moves over to its direction's other lane if there is room in it and no
    * rock ahead there; otherwise it tries again next step.
    */
-  const changeLanes = (car: Car, riders: readonly RiderOnTheRoad[]) => {
+  const changeLanes = (car: Car, riders: readonly RiderOrCopOnTheRoad[]) => {
     const dodging = rockAhead(car, car.distance, car.lane) !== null;
     if (!dodging && (car.laneChangeIn === Infinity || --car.laneChangeIn > 0)) return;
     const [near, far] = lanes(car.oncoming);
@@ -267,7 +267,7 @@ export function createTraffic(track: Track, random: Random, player: Around, clea
    * it (`riders`); it stops short of a fallen rock in its way; otherwise it
    * drives at its own speed.
    */
-  const keepDistance = (car: Car, riders: readonly RiderOnTheRoad[]) => {
+  const keepDistance = (car: Car, riders: readonly RiderOrCopOnTheRoad[]) => {
     let wanted = car.cruise;
     const rock = rockAhead(car, car.distance, car.offset);
     if (rock) wanted = Math.min(wanted, Math.sqrt(2 * BRAKING * Math.max(0, rock.gap - ROCK_STOP)));

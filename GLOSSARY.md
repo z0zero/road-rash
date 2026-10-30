@@ -193,7 +193,7 @@ A police officer on a motorcycle who rides among the riders and busts anyone who
 _Avoid_: Police, officer
 
 **Patrol**:
-What a cop in the race does when nobody needs busting: riding near the player, the cops taking turns to follow them about 1.5 s behind while the other holds well back. While the player is down after a crash it isn't riding to, a cop on patrol pulls over onto the shoulder.
+What a cop in the race does when nobody needs busting: riding near the player, the cops taking turns to follow them about 1.5 s behind while the other holds well back. While the player is down after a crash it isn't riding to, a cop on patrol pulls over onto the shoulder, and so does one holding back from a player who rides slowly, rather than slow almost to a stop in the race's lanes. A cop never pulls across the path of a rider or a car coming up behind it, and cars slow down for a slower cop in their lane as for a slower rider.
 _Avoid_: Chase, pursuit
 
 **Standing by**:
