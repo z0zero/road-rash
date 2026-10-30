@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { NO_INPUT, PLAYER, STEP_SECONDS, type PlayerInput, type RaceEvent, type RiderSnapshot } from ".";
+import { NO_INPUT, PLAYER, STEP_SECONDS, type PlayerInput, type RiderSnapshot } from ".";
 import {
   alongsideARacer,
   chase,
   eventsDuring,
   eventsUntil,
+  isCrash,
   kmh,
   nearestOpponent,
   NO_COPS,
@@ -16,8 +17,6 @@ import {
   stepFor,
 } from "./test-helpers";
 
-type Crash = Extract<RaceEvent, { type: "crash" }>;
-const isCrash = (event: RaceEvent): event is Crash => event.type === "crash";
 
 describe("after a crash", () => {
   it("the rider tumbles for about 1.2 s, then is on foot, running back to their bike at about 6 m/s", () => {

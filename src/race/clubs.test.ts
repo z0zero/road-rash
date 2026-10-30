@@ -3,23 +3,24 @@ import { createRace, NO_INPUT, PLAYER, type AttackKind, type PlayerInput, type R
 import {
   alongsideAn,
   alongsideARacer,
+  type AttackThrown,
   autopilot,
   eventsDuring,
   eventsUntil,
+  ME,
   nearestWithinReach,
   player,
   punchedMidSwing,
   rideAlongside,
   rideInto,
+  rider,
   secondsUntil,
   startedRace,
   STEPS_PER_SECOND,
+  swingAt,
 } from "./test-helpers";
 
-type AttackThrown = Extract<RaceEvent, { type: "attack-thrown" }>;
 
-const ME = { kind: "rider", id: PLAYER } as const;
-const rider = (id: RiderId) => ({ kind: "rider", id }) as const;
 
 /** The kind of every attack `attacker` threw among `events`. */
 const thrownBy = (attacker: RiderId, events: readonly RaceEvent[]): AttackKind[] =>
@@ -213,11 +214,7 @@ describe("stealing a club", () => {
 
   it("doesn't happen with a hit thrown after the swing has struck", () => {
     const { race, target, input } = alongsideAn("bully");
-    const swingJustStruck = () => {
-      const attack = race.snapshot().riders[target].attack;
-      return attack?.kind === "club-swing" && attack.stage === "recovery" && attack.progress < 0.2;
-    };
-    secondsUntil(race, input, swingJustStruck, 30);
+    secondsUntil(race, input, () => swingAt(race, target, "recovery", 0.2), 30);
     race.drainEvents();
 
     // A punch thrown as the swing strikes lands a little over 0.1 s later, while the bully is still recovering.

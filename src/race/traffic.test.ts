@@ -1,10 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { NO_INPUT, PLAYER, STEP_SECONDS, type CarSnapshot, type PlayerInput, type Race, type RaceEvent } from ".";
-import { autopilot, CLOSED_ROAD, eventsDuring, eventsUntil, NO_COPS, player, secondsUntil, startedRace, stepFor, STEPS_PER_SECOND } from "./test-helpers";
+import {
+  autopilot,
+  CLOSED_ROAD,
+  eventsDuring,
+  eventsUntil,
+  leftOnTheirOwn,
+  NO_COPS,
+  player,
+  playerCrashed,
+  secondsUntil,
+  startedRace,
+  STEPS_PER_SECOND,
+} from "./test-helpers";
 
-type Crash = Extract<RaceEvent, { type: "crash" }>;
-const isCrash = (event: RaceEvent): event is Crash => event.type === "crash";
-const playerCrashed = (event: RaceEvent) => isCrash(event) && event.rider === PLAYER;
 
 /** The car with this id, while it is on the road. */
 function carOf(race: Race, id: number): CarSnapshot | undefined {
@@ -26,8 +35,7 @@ function carAhead(race: Race): CarSnapshot | undefined {
  * their way; returns the car's id.
  */
 function behindACar(seed = 1) {
-  const race = startedRace(seed);
-  stepFor(race, 40);
+  const race = leftOnTheirOwn(seed);
   const pilot = autopilot(race);
   const close = () => {
     const car = carAhead(race);

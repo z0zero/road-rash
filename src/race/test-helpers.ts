@@ -27,6 +27,18 @@ export { setUpRace, type TestSetup };
 export const STEPS_PER_SECOND = 60;
 export const FULL_THROTTLE: PlayerInput = { ...NO_INPUT, throttle: 1 };
 
+/** The player, as events name them. */
+export const ME = { kind: "rider", id: PLAYER } as const;
+/** A rider, as events name them. */
+export const rider = (id: RiderId) => ({ kind: "rider", id }) as const;
+/** The first cop, as events name it. */
+export const FIRST_COP = { kind: "cop", id: 0 } as const;
+
+export type AttackThrown = Extract<RaceEvent, { type: "attack-thrown" }>;
+export type Crash = Extract<RaceEvent, { type: "crash" }>;
+export const isCrash = (event: RaceEvent): event is Crash => event.type === "crash";
+export const playerCrashed = (event: RaceEvent): event is Crash => isCrash(event) && event.rider === PLAYER;
+
 /** Sets a race up on a closed road, with no traffic. */
 export const CLOSED_ROAD: TestSetup = { traffic: false };
 
@@ -48,6 +60,13 @@ export function startedRace(seed = 1, setup: TestSetup = {}) {
   const race = setUpRace({ seed }, setup);
   stepFor(race, 3);
   race.drainEvents();
+  return race;
+}
+
+/** A started race, set up as `setup` says, in which the field has ridden off for 40 s, leaving the player on their own on the start line. */
+export function leftOnTheirOwn(seed = 1, setup: TestSetup = {}) {
+  const race = startedRace(seed, setup);
+  stepFor(race, 40);
   return race;
 }
 
@@ -388,15 +407,17 @@ export function racerKnockedOff(seed = 1) {
 export function punchedMidSwing(seed = 1) {
   const alongside = alongsideAn("bully", seed);
   const { race, target, input } = alongside;
-  const swingBeginning = () => {
-    const attack = race.snapshot().riders[target].attack;
-    return attack?.kind === "club-swing" && attack.stage === "wind-up" && attack.progress < 0.5;
-  };
-  secondsUntil(race, input, swingBeginning, 30);
+  secondsUntil(race, input, () => swingAt(race, target, "wind-up", 0.5), 30);
   race.drainEvents();
   race.step({ ...input(), punch: true });
   const events = [...race.drainEvents(), ...eventsDuring(race, 0.5, input)];
   return { ...alongside, events };
+}
+
+/** Whether the rider `id` is swinging a club, in a stage of the swing and less than `before` (0 to 1) through it. */
+export function swingAt(race: Race, id: RiderId, stage: "wind-up" | "recovery", before: number): boolean {
+  const attack = race.snapshot().riders[id].attack;
+  return attack?.kind === "club-swing" && attack.stage === stage && attack.progress < before;
 }
 
 /** Input that rides up behind the opponent `target` at about `closing` m/s faster than it, steering straight at it. */
