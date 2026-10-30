@@ -30,8 +30,10 @@ const emptyTallies = (): Tallies => ({
 });
 
 
-/** An opponent whose hit lands on a player who doesn't hit back gives them this many seconds before its next attack. */
+/** An opponent whose hit lands on a player who doesn't hit back gives them this many seconds before its next attack... */
 const BREATHER_SECONDS = 3;
+/** ...and gives up on them once this many of its hits have landed. */
+const UNANSWERED_HITS = 3;
 
 /**
  * Rides `race` with `input` for up to `seconds`, or until the player's race is
@@ -39,12 +41,17 @@ const BREATHER_SECONDS = 3;
  * attacking that has someone within reach: whether the nearest of them is the
  * player or another opponent, and whether the opponent attacks. The player
  * never hits back, so an opponent isn't free to attack them for
- * `BREATHER_SECONDS` after each of its hits lands on them. Every attack the
- * opponents throw goes into `thrown`.
+ * `BREATHER_SECONDS` after each of its hits lands on them, nor, once
+ * `UNANSWERED_HITS` of its hits have landed, until it comes back and attacks
+ * them again, having given up on them. Every attack the opponents throw goes
+ * into `thrown`.
  */
 function tallyAttacks(tallies: Tallies, race: Race, input: () => PlayerInput, seconds: number, thrown: AttackThrown[]) {
   /** Until when (race clock) each opponent gives the player a breather. */
   const breathers = new Map<number, number>();
+  /** How many of each opponent's hits have landed on the player since it last gave up on them, and those that have. */
+  const unanswered = new Map<number, number>();
+  const gaveUp = new Set<number>();
   for (let step = 0; step < seconds / STEP_SECONDS && player(race).status === "racing"; step++) {
     const { clock, riders: before } = race.snapshot();
     const free = before.filter((rider) => rider.temperament && rider.status === "racing" && !rider.crash && !rider.attack);
@@ -54,14 +61,18 @@ function tallyAttacks(tallies: Tallies, race: Race, input: () => PlayerInput, se
     for (const event of events) {
       if (event.type === "attack-landed" && event.target.kind === "rider" && event.target.id === PLAYER) {
         breathers.set(event.attacker.id, race.snapshot().clock + BREATHER_SECONDS);
+        const hits = (unanswered.get(event.attacker.id) ?? 0) + 1;
+        unanswered.set(event.attacker.id, hits % UNANSWERED_HITS);
+        if (hits === UNANSWERED_HITS) gaveUp.add(event.attacker.id);
       }
+      if (event.type === "attack-thrown" && event.target?.kind === "rider" && event.target.id === PLAYER) gaveUp.delete(event.attacker.id);
     }
     const byOpponents = events.filter((event): event is AttackThrown => event.type === "attack-thrown" && event.attacker.id !== PLAYER);
     thrown.push(...byOpponents);
     const attackers = new Set(byOpponents.map((event) => event.attacker.id));
     free.forEach((rider, index) => {
       if (nearest[index] === null || !rider.temperament) return;
-      if (nearest[index] === PLAYER && clock < (breathers.get(rider.id) ?? -Infinity)) return;
+      if (nearest[index] === PLAYER && (clock < (breathers.get(rider.id) ?? -Infinity) || gaveUp.has(rider.id))) return;
       const tally = tallies[nearest[index] === PLAYER ? "player" : "opponent"][rider.temperament];
       tally.seconds += STEP_SECONDS;
       if (attackers.has(rider.id)) tally.attacks++;
@@ -75,15 +86,16 @@ const rate = ({ seconds, attacks }: Tally) => attacks / seconds;
 describe("opponents", () => {
   // Three races ridden at the field's pace, on closed roads, so the opponents get plenty of chances to attack the player
   // and each other, with no cars to keep them apart; and long rides alongside a racer, since racers don't come looking
-  // for a fight, and alongside a brawler and a bully, who take a breather between their hits on a player who doesn't hit
-  // back.
+  // for a fight, and alongside a bully, who lines up far from the player and takes a breather between their hits on a
+  // player who doesn't hit back. (Not alongside a brawler: matching its speed from the start, the player rides too slowly
+  // for its patience, and it gives up on them, which the tally can't tell from its being free to attack.)
   const tallies = emptyTallies();
   const thrown: AttackThrown[] = [];
   for (const seed of [1, 2, 3]) {
     const race = startedRace(seed, CLOSED_ROAD);
     tallyAttacks(tallies, race, autopilot(race, { targetSpeed: 48 }), 300, thrown);
   }
-  for (const alongside of [alongsideARacer(), alongsideAn("brawler"), alongsideAn("bully")]) {
+  for (const alongside of [alongsideARacer(), alongsideAn("bully")]) {
     tallyAttacks(tallies, alongside.race, alongside.input, 60, thrown);
   }
 
@@ -218,6 +230,30 @@ describe("fights with the player", () => {
     }
     expect(thrown).toBeGreaterThan(10);
     expect(pileOns).toBeLessThanOrEqual(1);
+  });
+
+  it("end once three of a fighter's hits have landed on a player who never hits back: it gives up on them, and lands no more for 10 s at least", WHOLE_RACES, () => {
+    // A slow player who never attacks, from the back of the grid, where the slower fighters line up around them.
+    /** Each fighter's runs of hits on the player: hits less than 10 s apart. */
+    const runs: string[] = [];
+    let landed = 0;
+    for (const seed of [1, 2, 3]) {
+      const race = startedRace(seed, { ...CLOSED_ROAD, ...NO_COPS });
+      const { attacks } = attacksOnThePlayer(race, autopilot(race, { targetSpeed: 40, lane: 1.5 }), 90, ["brawler", "bully"]);
+      const hits = attacks.filter(({ kind }) => kind === "landed");
+      landed += hits.length;
+      for (const attacker of new Set(hits.map((hit) => hit.attacker))) {
+        let run: number[] = [];
+        for (const { at } of hits.filter((hit) => hit.attacker === attacker)) {
+          if (run.length > 0 && at - run[run.length - 1] >= 10) run = [];
+          run.push(at);
+          if (run.length > UNANSWERED_HITS) runs.push(`seed ${seed}, rider ${attacker}: ${run.map((time) => time.toFixed(1)).join(", ")} s`);
+        }
+      }
+    }
+
+    expect(landed).toBeGreaterThan(5);
+    expect(runs).toEqual([]);
   });
 
   it("give a player who doesn't hit back 3 s after each hit that lands on them, and trade blows at the full rate with one who does", () => {

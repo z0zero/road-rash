@@ -124,7 +124,7 @@ export function decideOpponents(
  * attack the nearest rider within their reach now and then, the player far
  * more often than each other; never a cop. A player who doesn't fight an
  * opponent back gets a breather after each of its hits, and is spared by
- * those `waiting` their turn.
+ * those `waiting` their turn and those that have given up on them.
  */
 export function opponentsAttack(race: RaceState, riding: readonly Rider[], waiting: ReadonlySet<Rider>): void {
   for (const opponent of riding) {
@@ -133,8 +133,8 @@ export function opponentsAttack(race: RaceState, riding: readonly Rider[], waiti
     // Opponents leave the cops alone.
     if (nearest?.kind !== "rider") continue;
     // A player who doesn't fight an opponent back gets a breather after each of its hits, and is spared by those
-    // waiting their turn.
-    const spared = opponent.breatherSteps > 0 || waiting.has(opponent);
+    // waiting their turn and those that have given up on them.
+    const spared = opponent.breatherSteps > 0 || waiting.has(opponent) || opponent.patience.gaveUp;
     if (isPlayer(nearest) && spared && !isFightingBack(opponent.stepsSinceThePlayerHitIt)) continue;
     const kind = opponentAttack(opponent.temperament, isPlayer(nearest), isMidSwing(nearest.attack), race.random);
     // A club reaches further than a kick: a club holder swings at a rider its kick can't reach.
