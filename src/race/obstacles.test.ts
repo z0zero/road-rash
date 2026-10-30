@@ -1,19 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { NO_INPUT, PLAYER, type ObstaclePlacement, type Race, type RaceEvent } from ".";
+import { NO_INPUT, PLAYER, type ObstaclePlacement, type Race } from ".";
 import {
   autopilot,
   eventsDuring,
   eventsUntil,
+  leftOnTheirOwn,
   NO_COPS,
   player,
+  playerCrashed,
   rideInto,
   secondsUntil,
-  startedRace,
   stepFor,
 } from "./test-helpers";
 
-type Crash = Extract<RaceEvent, { type: "crash" }>;
-const playerCrashed = (event: RaceEvent): event is Crash => event.type === "crash" && event.rider === PLAYER;
 
 /**
  * A started race in which the field has ridden off, leaving the player on
@@ -21,8 +20,7 @@ const playerCrashed = (event: RaceEvent): event is Crash => event.type === "cras
  * them. There are no cops, who would bust the player for crashing into it.
  */
 function onTheirOwn(isKind: (obstacle: ObstaclePlacement) => boolean) {
-  const race = startedRace(1, NO_COPS);
-  stepFor(race, 40);
+  const race = leftOnTheirOwn(1, NO_COPS);
   const obstacle = race.track.obstacles.find((other) => isKind(other) && other.distance > player(race).distance + 100);
   if (!obstacle) throw new Error("no such obstacle");
   return { race, obstacle };
