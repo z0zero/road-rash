@@ -14,8 +14,11 @@ import {
   bendSpeed,
   chase,
   CLOSED_ROAD,
+  nearestOpponent,
+  nearestWithinReach,
   NO_COPS,
   player,
+  rideAlongside,
   secondsUntil,
   startedRace,
   steerTowards,
@@ -239,6 +242,30 @@ describe("the opponents", () => {
       for (const speed of speeds) expect(speed).toBeLessThan(0.6 * (fastest.get(id) ?? 0));
     }
     expect(atApexes.size).toBe(14);
+  });
+
+  it("get going again from a standstill behind a roadside sign on the shoulder, once nobody rides beside them", () => {
+    // The player kicks the racer who lined up nearest them off the road, ahead of a sign on the shoulder, and rides beside
+    // it on its inside, so that it can't come back onto the road, until it stops behind the sign; then the player rides on.
+    const race = startedRace(8, { ...CLOSED_ROAD, ...NO_COPS });
+    const target = nearestOpponent(race, "racer");
+    const them = () => race.snapshot().riders[target];
+    const alongside = rideAlongside(race, target);
+    secondsUntil(race, alongside, () => nearestWithinReach(race.snapshot().riders, player(race)) === target, 60);
+    const signAhead = () =>
+      race.track.obstacles.find(({ kind, offset, distance }) => kind === "sign" && offset > 6.5 && distance - them().distance > 80 && distance - them().distance < 200);
+    secondsUntil(race, alongside, () => signAhead() !== undefined, 60);
+    const sign = signAhead();
+    secondsUntil(race, () => ({ ...alongside(), kick: player(race).attack === null }), () => them().offset > 7, 10);
+    secondsUntil(race, rideAlongside(race, target, { across: 3.5 }), () => them().speed < 0.5, 30);
+    expect(them()).toMatchObject({ status: "racing", crash: null });
+    expect(them().offset).toBeGreaterThan(race.track.roadHalfWidth);
+    expect((sign?.distance ?? NaN) - them().distance).toBeLessThan(5);
+
+    const pilot = autopilot(race, { lane: 1.5 });
+    const seconds = secondsUntil(race, pilot, () => them().speed > 5 && them().offset < race.track.roadHalfWidth, 20);
+
+    expect(seconds).toBeLessThan(10);
   });
 
   it("ride at their own pace, so faster riders pass slower ones", () => {
