@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NO_INPUT, PLAYER, STEP_SECONDS, type CarSnapshot, type PlayerInput, type Race, type RaceEvent } from ".";
-import { autopilot, eventsUntil, NO_COPS, player, secondsUntil, startedRace, stepFor, STEPS_PER_SECOND } from "./test-helpers";
+import { autopilot, eventsDuring, eventsUntil, NO_COPS, player, secondsUntil, startedRace, stepFor, STEPS_PER_SECOND } from "./test-helpers";
 
 type Crash = Extract<RaceEvent, { type: "crash" }>;
 const isCrash = (event: RaceEvent): event is Crash => event.type === "crash";
@@ -213,6 +213,26 @@ describe("running into a car", () => {
     expect(player(race).crash).not.toBeNull();
     expect(inside).toEqual([]);
     expect(knockedDownByIt).toEqual([]);
+  });
+
+  it("slows down behind a slower rider on their bike in its lane, rather than running into them from behind", () => {
+    const { race, car } = behindACar();
+    // The player gets 40 m ahead of the car, pulls into its lane and stops there.
+    const pilot = autopilot(race);
+    secondsUntil(race, pilot, () => player(race).distance - (carOf(race, car)?.distance ?? Infinity) > 40, 60);
+    const stopping = (): PlayerInput => {
+      const me = player(race);
+      const them = carOf(race, car);
+      const steer = them ? Math.max(-1, Math.min(1, 1.5 * (them.offset - me.offset))) : 0;
+      return { ...NO_INPUT, steer, brake: 1 };
+    };
+
+    const events = eventsDuring(race, 15, stopping).filter(playerCrashed);
+
+    expect(events).toEqual([]);
+    const them = carOf(race, car);
+    expect(them?.speed).toBeLessThan(1);
+    expect(player(race).distance - (them?.distance ?? Infinity)).toBeGreaterThan(0);
   });
 
   it("head on, crashes a rider at the two speeds added together", () => {
