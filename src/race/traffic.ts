@@ -1,7 +1,7 @@
 import type { Random } from "./random";
 import { BIKE_LENGTH, BIKE_WIDTH, clamp } from "./riding";
 import { STEP_SECONDS } from "./steps";
-import type { Moving, Track } from "./track";
+import type { Moving, Track, TrackPosition } from "./track";
 
 /** The body a car is built on, which sets its size. */
 export type CarKind = "hatchback" | "saloon" | "van" | "pickup";
@@ -121,6 +121,25 @@ export interface Traffic {
 
 /** A closed road: no traffic at all. */
 export const CLOSED_ROAD: Traffic = { cars: [], step() {} };
+
+/** Saloons standing still where they are put, in the race direction, on a road closed to every other car: a test's parked cars. They never move. */
+export function parkedCars(where: readonly TrackPosition[]): Traffic {
+  const { kind, length, width } = KINDS.find((each) => each.kind === "saloon") ?? KINDS[0];
+  const cars: Car[] = where.map(({ distance, offset }, id) => ({
+    id,
+    kind,
+    oncoming: false,
+    length,
+    width,
+    distance,
+    offset,
+    speed: 0,
+    cruise: 0,
+    lane: offset,
+    laneChangeIn: Infinity,
+  }));
+  return { cars, step() {} };
+}
 
 /** A car's speed along the track (m/s): negative for an oncoming car. */
 export function velocityOf(car: Car): number {
