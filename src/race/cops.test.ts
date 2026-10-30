@@ -32,13 +32,26 @@ function alongsideARacerPastTheFirstCop(seed = 1) {
 }
 
 /**
+ * A started race in which the player has ridden alongside a racer until they
+ * are `before` metres short of the first cop, still waiting on the shoulder.
+ */
+function alongsideARacerNearingTheFirstCop(before: number, seed = 1) {
+  const alongside = alongsideARacer(seed);
+  const { race, input } = alongside;
+  const cop = race.snapshot().cops[0];
+  secondsUntil(race, input, () => player(race).distance >= cop.distance - before, 120);
+  race.drainEvents();
+  return alongside;
+}
+
+/**
  * Rides with `input`, punching the opponent `target` down to no stamina and
  * keeping it there, until `when` holds; then punches it off its bike. Returns
  * every event on the way, its crash last.
  */
 function knockOffWhen(race: Race, target: RiderId, input: () => PlayerInput, when: () => boolean) {
   const punching = () => ({ ...input(), punch: race.snapshot().riders[target].stamina > 0 || when() });
-  return eventsUntil(race, punching, (event) => event.type === "crash" && event.rider === target, 30);
+  return eventsUntil(race, punching, (event) => event.type === "crash" && event.rider === target, 45);
 }
 
 /**
@@ -187,7 +200,7 @@ describe("fighting a cop", () => {
 });
 
 describe("the cop alert", () => {
-  it("is on while a cop in the race is within 150 m of the player: cop-near as one comes that close, cop-gone as it leaves", () => {
+  it("is on while a cop in the race is within 150 m of the player: cop-near as one comes that close at up to 66 m/s, faster than any bike, cop-gone as it leaves", () => {
     const { race, target, input } = alongsideARacer();
     const them = () => race.snapshot().riders[target];
     const cop = () => race.snapshot().cops[0];
@@ -197,11 +210,14 @@ describe("the cop alert", () => {
     // Passing the first cop, which joins the race.
     const passing = rideWatchingTheCops(race, input, () => player(race).distance >= waitingAt + 20, 120, near);
     // Knocking the racer off with the cop close behind, so that it busts the racer and stays with it a while, as the
-    // player rides on flat out; then the cop comes back up to the player.
+    // player rides on flat out; then the cop chases the player back down, faster than any bike.
     const punching = () => ({ ...input(), punch: them().stamina > 0 || them().distance - cop().distance > 5 });
     rideWatchingTheCops(race, punching, () => them().crash !== null, 30, near);
     const ridingOn: RaceEvent[] = [];
-    rideWatchingTheCops(race, autopilot(race), () => ridingOn.length >= 2, 90, near, ridingOn);
+    const pilot = autopilot(race);
+    let fastest = 0;
+    const chased = () => ((fastest = Math.max(fastest, cop().speed)), pilot());
+    rideWatchingTheCops(race, chased, () => ridingOn.length >= 2, 90, near, ridingOn);
 
     expect(passing).toEqual([{ type: "cop-near", cop: 0 }]);
     expect(them().status).toBe("busted");
@@ -209,6 +225,8 @@ describe("the cop alert", () => {
       { type: "cop-gone", cop: 0 },
       { type: "cop-near", cop: 0 },
     ]);
+    expect(fastest).toBeGreaterThan(kmh(225));
+    expect(fastest).toBeLessThanOrEqual(66 + 1e-9);
   });
 });
 
@@ -228,12 +246,31 @@ describe("busting", () => {
     expect(apart(cop(), them())).toBeLessThan(3);
   });
 
-  it("lets a rider go who gets back on their bike before the cop reaches them", () => {
-    const { race, target, input } = alongsideARacerPastTheFirstCop();
+  it("catches a rider who crashes within 15 m of a cop, but only once they are on their feet, never while they tumble", () => {
+    const { race, target, input } = alongsideARacerNearingTheFirstCop(150);
     const cop = () => race.snapshot().cops[0];
     const them = () => race.snapshot().riders[target];
-    // Knocked off with the cop well ahead, so that it has to stop and come back.
-    knockOffWhen(race, target, input, () => cop().distance - them().distance > 15);
+    // Knocked off just past the cop, as it pulls out to join the race.
+    knockOffWhen(race, target, input, () => them().distance - cop().distance > 2);
+    expect(apart(cop(), them())).toBeLessThan(15);
+    const crashedAt = race.snapshot().clock;
+
+    const events = eventsUntil(race, input, (event) => event.type === "busted", 10);
+
+    expect(events.at(-1)).toEqual({ type: "busted", rider: target, cop: 0 });
+    expect(events).not.toContainEqual({ type: "remounted", rider: target });
+    // Caught as they got to their feet, the tumble over.
+    expect(them().crash).toBe("on-foot");
+    expect(race.snapshot().clock - crashedAt).toBeGreaterThanOrEqual(1.2);
+  });
+
+  it("lets a rider go who crashes with the cop over 65 m off and runs straight back to their bike: the cop closes in at an arrest pace", () => {
+    const { race, target, input } = alongsideARacerPastTheFirstCop(2);
+    const cop = () => race.snapshot().cops[0];
+    const them = () => race.snapshot().riders[target];
+    // Knocked off as the cop, done following the player, falls back past 60 m behind.
+    knockOffWhen(race, target, input, () => them().distance - cop().distance > 62);
+    expect(apart(cop(), them())).toBeGreaterThan(65);
     expect(apart(cop(), them())).toBeLessThan(80);
     expect(cop().busting).toBe(target);
 
@@ -241,10 +278,9 @@ describe("busting", () => {
 
     expect(events.filter((event) => event.type === "busted")).toEqual([]);
     expect(them()).toMatchObject({ status: "racing", crash: null });
-    // The cop gives up, and rides on near the player.
-    eventsDuring(race, 10, input);
+    // The cop gives up.
+    eventsDuring(race, 1, input);
     expect(cop().busting).toBeNull();
-    expect(apart(cop(), player(race))).toBeLessThan(150);
     expect(them().status).toBe("racing");
   });
 
@@ -322,25 +358,44 @@ describe("cops", () => {
     expect(race.snapshot().cops[1]).toEqual(second);
   });
 
-  it("chase down a player who passes them at speed, at up to 66 m/s, faster than any bike, and stay within 150 m of them", () => {
-    // On a closed road, so that no crash in traffic gets the player busted by the first cop on the way to the second.
+  it("follow the player for about 30 s, then fall back out of the alert's range and leave them be for a good while", () => {
+    // On a closed road, so that nothing happens to keep the cop with the player.
     const race = startedRace(1, CLOSED_ROAD);
     const pilot = autopilot(race);
-    const second = race.snapshot().cops[1];
-    secondsUntil(race, pilot, () => player(race).distance >= second.distance, 300);
-    expect(player(race).speed).toBeGreaterThan(40);
-    let fastest = 0;
-    let furthest = 0;
+    const first = race.snapshot().cops[0];
+    secondsUntil(race, pilot, () => player(race).distance >= first.distance, 120);
+    const near = () => race.snapshot().cops[0].near;
 
-    eventsDuring(race, 60, () => {
-      const { riders, cops } = race.snapshot();
-      fastest = Math.max(fastest, cops[1].speed);
-      furthest = Math.max(furthest, apart(cops[1], riders[PLAYER]));
-      return pilot();
-    });
+    const following = secondsUntil(race, pilot, () => !near(), 60);
+    const away = secondsUntil(race, pilot, () => near() || player(race).status !== "racing", 300);
 
-    expect(fastest).toBeGreaterThan(kmh(225));
-    expect(fastest).toBeLessThanOrEqual(66 + 1e-9);
-    expect(furthest).toBeLessThanOrEqual(150);
+    expect(following).toBeGreaterThan(30);
+    expect(following).toBeLessThan(45);
+    expect(away).toBeGreaterThan(45);
+  });
+});
+
+describe("the cop alert, over a whole race", () => {
+  it("is on for well under half the race once the first cop has joined, for a player who rides it without incident", () => {
+    const race = startedRace(1, CLOSED_ROAD);
+    const pilot = autopilot(race);
+    const first = race.snapshot().cops[0];
+    secondsUntil(race, pilot, () => player(race).distance >= first.distance, 120);
+    let steps = 0;
+    let alerted = 0;
+
+    secondsUntil(
+      race,
+      () => {
+        steps++;
+        if (race.snapshot().cops.some((cop) => cop.near)) alerted++;
+        return pilot();
+      },
+      () => player(race).status !== "racing",
+      300,
+    );
+
+    expect(player(race).status).toBe("finished");
+    expect(alerted / steps).toBeLessThan(0.45);
   });
 });
