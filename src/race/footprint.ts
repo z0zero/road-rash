@@ -2,14 +2,17 @@ import type { ObstaclePlacement } from "./placements";
 import { velocityOf, type Car } from "./traffic";
 
 /**
- * Where a car or an obstacle is on the road, how much of it it covers and how
- * fast it moves along it: what riders steer around, and crash into.
+ * Where a car or an obstacle is on the road, how much of it it covers, how
+ * fast it moves along it and, for a car changing lanes, the lane it is moving
+ * over to: what riders steer around, and crash into.
  */
 export interface Footprint {
   /** Metres along the centreline: its middle. */
   readonly distance: number;
   /** Metres right of the centreline: its middle. */
   readonly offset: number;
+  /** Metres right of the centreline that its middle is moving over to: the middle of the lane a car is changing to, else its offset. */
+  readonly movingTo: number;
   /** Metres per second along the track: negative for an oncoming car, 0 for an obstacle. */
   readonly velocity: number;
   /** Metres from its middle to its front and back... */
@@ -22,6 +25,7 @@ export function footprintOfCar(car: Car): Footprint {
   return {
     distance: car.distance,
     offset: car.offset,
+    movingTo: car.lane,
     velocity: velocityOf(car),
     halfLength: car.length / 2,
     halfWidth: car.width / 2,
@@ -30,5 +34,5 @@ export function footprintOfCar(car: Car): Footprint {
 
 /** An obstacle covers a square as wide as its round base. */
 export function footprintOfObstacle({ distance, offset, radius }: ObstaclePlacement): Footprint {
-  return { distance, offset, velocity: 0, halfLength: radius, halfWidth: radius };
+  return { distance, offset, movingTo: offset, velocity: 0, halfLength: radius, halfWidth: radius };
 }

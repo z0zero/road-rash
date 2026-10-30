@@ -328,42 +328,109 @@ function thingsOn(race: Race): Thing[] {
   ];
 }
 
-describe("opponents", () => {
-  it("steer around the cars and obstacles in their way most of the time, but can still crash into them", () => {
-    /** Cars and obstacles that came into an opponent's path and that it got past on its bike. */
-    let gotPast = 0;
-    let crashedInto = 0;
-    for (const seed of [1, 2, 3]) {
-      const race = startedRace(seed);
-      const pilot = autopilot(race);
-      /** Every car and obstacle an opponent is coming up to with it in its path, by "rider: thing". */
-      const comingUp = new Set<string>();
-      for (let step = 0; step < 240 * STEPS_PER_SECOND && player(race).status === "racing"; step++) {
-        race.step(pilot());
-        for (const event of race.drainEvents()) {
-          if (event.type !== "crash" || event.rider === PLAYER) continue;
-          if (event.cause === "traffic" || event.cause === "obstacle") crashedInto++;
-          for (const key of comingUp) if (key.startsWith(`${event.rider}:`)) comingUp.delete(key);
+/** Whether a car and a rider are coming together: the one behind is faster than the one in front. Returns the seconds until they meet, or Infinity. */
+function secondsUntilTheyMeet(car: CarSnapshot, rider: { readonly distance: number; readonly speed: number }) {
+  const velocity = car.oncoming ? -car.speed : car.speed;
+  // Metres between the car's end and the middle of the bike, which reaches 1 m beyond it.
+  const along = rider.distance - car.distance;
+  const gap = Math.abs(along) - car.length / 2 - 1;
+  const closing = along > 0 ? velocity - rider.speed : rider.speed - velocity;
+  return closing > 0 ? Math.max(0, gap) / closing : Infinity;
+}
+
+describe("riding with the pack in traffic", () => {
+  // Six races with the player riding at the pack's pace, so that the opponents meet the traffic, which drives around the
+  // player; with no cops, who would bust the player if they crashed in traffic, ending their ride through it.
+  const races = [1, 2, 3, 4, 5, 6];
+  /** Cars and obstacles that came into an opponent's path and that it got past on its bike. */
+  let gotPast = 0;
+  /** Crashes of opponents into cars and obstacles. */
+  let crashedInto = 0;
+  /** Every car that came onto the road, and the cars among them that came on right in front of a rider in its lane. */
+  let newCars = 0;
+  const inFrontOfARider: string[] = [];
+  /** Every lane change, and those that moved a car over into the path of a rider in the lane it moved into. */
+  let laneChanges = 0;
+  const intoARider: string[] = [];
+  for (const seed of races) {
+    const race = startedRace(seed, NO_COPS);
+    const pilot = autopilot(race, { targetSpeed: 48 });
+    const { laneWidth } = race.track;
+    /** Every car seen so far, and its offset in the last snapshot. */
+    const lastOffsets = new Map(race.snapshot().traffic.map((car) => [car.id, car.offset]));
+    /** Every car and obstacle an opponent is coming up to with it in its path, by "rider: thing". */
+    const comingUp = new Set<string>();
+    for (let step = 0; step < 240 * STEPS_PER_SECOND && player(race).status === "racing"; step++) {
+      race.step(pilot());
+      for (const event of race.drainEvents()) {
+        if (event.type !== "crash" || event.rider === PLAYER) continue;
+        if (event.cause === "traffic" || event.cause === "obstacle") crashedInto++;
+        for (const key of comingUp) if (key.startsWith(`${event.rider}:`)) comingUp.delete(key);
+      }
+      const { riders, clock, traffic } = race.snapshot();
+      const onTheirBikes = riders.filter((rider) => rider.status === "racing" && rider.crash === null);
+      /** Riders on their bikes in the lane whose middle is at `lane`. */
+      const inTheLane = (lane: number) => onTheirBikes.filter((rider) => Math.abs(rider.offset - lane) < laneWidth / 2);
+      for (const car of traffic) {
+        const last = lastOffsets.get(car.id);
+        lastOffsets.set(car.id, car.offset);
+        if (last === undefined) {
+          newCars++;
+          for (const rider of inTheLane(car.offset)) {
+            if (secondsUntilTheyMeet(car, rider) < 1) inFrontOfARider.push(`seed ${seed} at ${clock.toFixed(1)} s: car ${car.id}, ${rider.name}`);
+          }
+          continue;
         }
-        const things = thingsOn(race);
-        for (const rider of race.snapshot().riders) {
-          if (rider.id === PLAYER || rider.status !== "racing" || rider.crash !== null) continue;
-          for (const thing of things) {
-            const key = `${rider.id}: ${thing.key}`;
-            const ahead = thing.distance - rider.distance;
-            const inItsPath = Math.abs(thing.offset - rider.offset) < thing.halfWidth + 0.4;
-            if (!comingUp.has(key) && ahead > 20 && ahead < 60 && inItsPath) comingUp.add(key);
-            if (comingUp.has(key) && ahead < -thing.halfLength - 1) {
-              gotPast++;
-              comingUp.delete(key);
-            }
+        // A car leaving the middle of its lane is changing lanes, to its direction's other lane.
+        const middles = [laneWidth / 2, (3 * laneWidth) / 2];
+        if (car.offset === last || !middles.includes(Math.abs(last))) continue;
+        laneChanges++;
+        const lane = Math.sign(last) * (Math.abs(last) === middles[0] ? middles[1] : middles[0]);
+        for (const rider of inTheLane(lane)) {
+          if (Math.abs(rider.distance - car.distance) < 20 || secondsUntilTheyMeet(car, rider) < 2) {
+            intoARider.push(`seed ${seed} at ${clock.toFixed(1)} s: car ${car.id}, ${rider.name}`);
+          }
+        }
+      }
+      const things = thingsOn(race);
+      for (const rider of riders) {
+        if (rider.id === PLAYER || rider.status !== "racing" || rider.crash !== null) continue;
+        for (const thing of things) {
+          const ahead = thing.distance - rider.distance;
+          // Nothing far ahead or well behind is coming up, or being got past, just now.
+          if (ahead >= 60 || ahead < -thing.halfLength - 5) continue;
+          const key = `${rider.id}: ${thing.key}`;
+          const inItsPath = Math.abs(thing.offset - rider.offset) < thing.halfWidth + 0.4;
+          if (!comingUp.has(key) && ahead > 20 && ahead < 60 && inItsPath) comingUp.add(key);
+          if (comingUp.has(key) && ahead < -thing.halfLength - 1) {
+            gotPast++;
+            comingUp.delete(key);
           }
         }
       }
     }
+  }
 
-    expect(gotPast).toBeGreaterThan(200);
-    expect(crashedInto).toBeGreaterThan(0);
-    expect(crashedInto / (gotPast + crashedInto)).toBeLessThan(0.05);
+  describe("the cars", () => {
+    it("come onto the road out of the riders' way: never right in front of a rider in their lane", () => {
+      expect(newCars).toBeGreaterThan(300);
+      expect(inFrontOfARider).toEqual([]);
+    });
+
+    it("change lanes out of the riders' way: never into the path of a rider close by in the lane they move into", () => {
+      expect(laneChanges).toBeGreaterThan(30);
+      expect(intoARider).toEqual([]);
+    });
+  });
+
+  describe("the opponents", () => {
+    it("steer around the cars and obstacles in their way", () => {
+      expect(gotPast).toBeGreaterThan(400);
+    });
+
+    it("rarely crash into one, though they still can: no more than once a race among the whole field", () => {
+      expect(crashedInto).toBeGreaterThan(0);
+      expect(crashedInto).toBeLessThanOrEqual(races.length);
+    });
   });
 });
