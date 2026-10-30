@@ -104,7 +104,8 @@ function poseCrashed(model: RiderModel, body: { group: Group; seat: Vector3 }, m
   if (rider.parent !== body.group) body.group.add(rider);
   // Whatever the race says they still hold: a rider who crashes has dropped their club.
   poseClub(model, motion);
-  const tumbling = motion.crash === "tumbling";
+  // Tumbling, after a crash or a knock-down, until they are on foot.
+  const tumbling = motion.crash !== "on-foot";
   body.group.position.copy(motion.bodyAt);
   body.group.rotation.set(0, motion.bodyYaw, 0);
   rider.position.set(0, hipsHeight(tumbling, motion.tumble), 0);

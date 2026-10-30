@@ -32,7 +32,7 @@ export function ride(motion: Motion, controls: Controls, track: Track, dt: numbe
     brake * TUNING.braking -
     (1 - throttle) * (1 - brake) * coastingDeceleration(motion.speed);
 
-  const offRoad = Math.abs(motion.offset) > track.roadHalfWidth;
+  const offRoad = isOffRoad(motion.offset, track);
   if (offRoad && motion.speed > TUNING.offRoadTopSpeed) {
     acceleration = Math.min(acceleration, 0) - TUNING.offRoadDeceleration;
   }
@@ -52,6 +52,11 @@ export function ride(motion: Motion, controls: Controls, track: Track, dt: numbe
   motion.offset = clamp(motion.offset + (motion.steering + push + motion.shove + motion.kickShove) * dt, -edge, edge);
   motion.shove *= Math.exp(-TUNING.shoveDecay * dt);
   motion.kickShove *= Math.exp(-TUNING.kickShoveDecay * dt);
+}
+
+/** Whether `offset` (metres right of the centreline) lies beyond the road's edge, on a shoulder, where a bike slows sharply. */
+export function isOffRoad(offset: number, track: Track): boolean {
+  return Math.abs(offset) > track.roadHalfWidth;
 }
 
 function driveAcceleration(speed: number) {
