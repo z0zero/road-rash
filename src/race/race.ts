@@ -110,7 +110,7 @@ function ridersOnTheRoad(race: RaceState) {
 function step(race: RaceState, input: PlayerInput) {
   const { riders, track, traffic } = race;
   // The traffic drives on whatever the riders do, even while they wait for the countdown.
-  if (race.stepsTaken < COUNTDOWN_STEPS) traffic.step(whereIs(riders[PLAYER]), ridersOnTheRoad(race));
+  if (race.stepsTaken < COUNTDOWN_STEPS) traffic.step(whereIs(riders[PLAYER]), ridersOnTheRoad(race), true);
   else {
     const clockBefore = clock(race);
     // Everyone decides what to do from where things stand...

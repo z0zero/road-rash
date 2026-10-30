@@ -110,9 +110,11 @@ export interface Traffic {
    * Moves every car on by a step, then lets the cars that have left the
    * window around the player go and brings new ones in at its ends. Cars
    * come onto the road, and change lanes, out of the way of the `riders`, and
-   * slow down behind a slower one on their bike.
+   * slow down behind a slower one on their bike. While the riders are
+   * `waitingForTheStart`, none comes on behind the player, where it would
+   * come up through the start grid as they set off.
    */
-  step(player: Around, riders: readonly RiderOnTheRoad[]): void;
+  step(player: Around, riders: readonly RiderOnTheRoad[], waitingForTheStart?: boolean): void;
 }
 
 /** A closed road: no traffic at all. */
@@ -306,7 +308,7 @@ export function createTraffic(track: Track, random: Random, player: Around, clea
 
   return {
     cars,
-    step(player, riders) {
+    step(player, riders, waitingForTheStart = false) {
       for (const car of cars) {
         changeLanes(car, riders);
         keepDistance(car, riders);
@@ -327,6 +329,7 @@ export function createTraffic(track: Track, random: Random, player: Around, clea
         // is catching it up, and never at the road's end; otherwise at its near end, behind them, to catch them up.
         const behind = !oncoming && speed >= player.speed;
         if (!oncoming && !behind && player.distance + AHEAD >= track.length) continue;
+        if (behind && waitingForTheStart) continue;
         const at = behind ? back : front;
         let nearest = behind ? Infinity : -Infinity;
         for (const car of cars) {
