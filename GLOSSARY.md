@@ -92,6 +92,10 @@ _Avoid_: Damage, durability, bike health
 A rider on their bike running into another rider on a bike, a cop, a car or an obstacle at a small speed difference (under 8 m/s) and being pushed apart, without crashing. A cop bumps off whatever it runs into, whatever the speed difference. A bike that bumps a car or an obstacle with no room to pass it on one side, before the edge of the shoulder, is pushed to its other side.
 _Avoid_: Nudge, collision
 
+**Squeezing past**:
+An opponent, or a cop, held to a standstill by what is in its way with no clear way round it, as when a rider stands beside it with a roadside rock ahead, rolling on at walking pace through the nearest gap its bike fits through, out onto the shoulder if need be. Held back behind a rider who has all but stopped, it rolls on round them at walking pace too, rather than wait behind them.
+_Avoid_: Nudging through, forcing past
+
 **Run-in**:
 Two riders on their bikes, or a rider and a cop, running into each other at a larger speed difference than a bump: the faster rider crashes. A cop never does: the spec puts a cop out of the race only when it is beaten in a fight, so a cop that runs into a rider only bumps them.
 _Avoid_: Collision, impact
