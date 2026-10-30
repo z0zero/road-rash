@@ -1,5 +1,5 @@
 import { useFrame } from "@react-three/fiber";
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import {
   type BufferGeometry,
   Color,
@@ -15,6 +15,7 @@ import {
 import type { GameSession, RaceView } from "@/game/session";
 import { STEP_SECONDS, type CarKind, type CarSnapshot } from "@/race";
 import { CAR_MODELS, isCarKind, paintOf } from "./car-models";
+import { InstancedMeshes } from "./InstancedMeshes";
 
 /** At most this many cars of one kind are drawn at a time: more than the road around the player ever holds. */
 const MOST_OF_A_KIND = 32;
@@ -42,28 +43,10 @@ interface CarsOfAKind {
  * headlamps bloom in the dusk.
  */
 export function Traffic({ session }: { session: GameSession }) {
-  const fleet = useMemo(() => buildFleet(), []);
-  useEffect(
-    () => () => {
-      for (const cars of fleet.kinds.values()) {
-        for (const mesh of cars.meshes) {
-          mesh.geometry.dispose();
-          mesh.dispose();
-        }
-      }
-      for (const material of fleet.materials) material.dispose();
-    },
-    [fleet],
-  );
-  useFrame(() => placeCars(fleet.kinds, session.view));
-
-  return (
-    <group>
-      {[...fleet.kinds.values()].flatMap(({ meshes }) =>
-        meshes.map((mesh) => <primitive key={mesh.uuid} object={mesh} />),
-      )}
-    </group>
-  );
+  const kinds = useMemo(() => buildFleet(), []);
+  const meshes = useMemo(() => [...kinds.values()].flatMap((cars) => cars.meshes), [kinds]);
+  useFrame(() => placeCars(kinds, session.view));
+  return <InstancedMeshes meshes={meshes} />;
 }
 
 function buildFleet() {
@@ -97,7 +80,7 @@ function buildFleet() {
       drawn: 0,
     });
   }
-  return { kinds, materials: [paint, trim, lamps] };
+  return kinds;
 }
 
 const WHITE = new Color("#ffffff");
