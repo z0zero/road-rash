@@ -16,6 +16,7 @@ import {
   type RaceEvent,
   type RiderId,
   type RiderSnapshot,
+  type Moving,
   type Side,
   type Temperament,
   type TrackPosition,
@@ -288,24 +289,38 @@ export function rideAlongside(race: Race, target: RiderId, { across = 1.4 } = {}
   return (): PlayerInput => {
     const { riders } = race.snapshot();
     const me = riders[PLAYER];
-    const them = riders[target];
     const sideways = (me.offset - lastOffset) / STEP_SECONDS;
     lastOffset = me.offset;
-    const lane = them.offset + (them.offset > 0 ? -across : across);
-    const closing = Math.max(-5, Math.min(5, 0.8 * (them.distance - me.distance)));
-    let wanted = Math.max(0, them.speed + closing);
+    const { lane, closingSpeed } = besides(riders[target], me, across);
+    let wanted = Math.max(0, closingSpeed);
     for (const other of riders) {
       const ahead = other.distance - me.distance;
       if (other.id !== PLAYER && ahead > 0 && ahead < 15 && Math.abs(other.offset - me.offset) < 1.2) {
         wanted = Math.min(wanted, other.speed + 5);
       }
     }
-    return {
-      ...NO_INPUT,
-      steer: Math.max(-1, Math.min(1, 0.8 * (lane - me.offset) - 0.25 * sideways)),
-      throttle: me.speed < wanted ? 1 : 0,
-      brake: me.speed > wanted + 0.5 ? Math.min(1, (me.speed - wanted) / 3) : 0,
-    };
+    return steerOnto(me, lane, wanted, sideways);
+  };
+}
+
+/**
+ * Where the player rides to be `across` metres to the side of `them`, towards
+ * the middle of the road, and level with them: the line, and the speed that
+ * closes in on them along the track at no more than 5 m/s.
+ */
+function besides(them: Moving, me: Moving, across: number) {
+  const lane = them.offset + (them.offset > 0 ? -across : across);
+  const closing = Math.max(-5, Math.min(5, 0.8 * (them.distance - me.distance)));
+  return { lane, closingSpeed: them.speed + closing };
+}
+
+/** Input that steers the player, moving across the road at `sideways` m/s, onto `lane`, at about `wanted` m/s. */
+export function steerOnto(me: Moving, lane: number, wanted: number, sideways: number): PlayerInput {
+  return {
+    ...NO_INPUT,
+    steer: Math.max(-1, Math.min(1, 0.8 * (lane - me.offset) - 0.25 * sideways)),
+    throttle: me.speed < wanted ? 1 : 0,
+    brake: me.speed > wanted + 0.5 ? Math.min(1, (me.speed - wanted) / 3) : 0,
   };
 }
 
@@ -450,18 +465,10 @@ function rideAlongsideTheFirstCop(race: Race) {
   let lastOffset = player(race).offset;
   return (): PlayerInput => {
     const me = player(race);
-    const cop = race.snapshot().cops[0];
     const sideways = (me.offset - lastOffset) / STEP_SECONDS;
     lastOffset = me.offset;
-    const lane = cop.offset + (cop.offset > 0 ? -1.4 : 1.4);
-    const closing = Math.max(-5, Math.min(5, 0.8 * (cop.distance - me.distance)));
-    const wanted = Math.max(Math.abs(lane - me.offset) > 0.3 ? 2 : 0, cop.speed + closing);
-    return {
-      ...NO_INPUT,
-      steer: Math.max(-1, Math.min(1, 0.8 * (lane - me.offset) - 0.25 * sideways)),
-      throttle: me.speed < wanted ? 1 : 0,
-      brake: me.speed > wanted + 0.5 ? Math.min(1, (me.speed - wanted) / 3) : 0,
-    };
+    const { lane, closingSpeed } = besides(race.snapshot().cops[0], me, 1.4);
+    return steerOnto(me, lane, Math.max(Math.abs(lane - me.offset) > 0.3 ? 2 : 0, closingSpeed), sideways);
   };
 }
 
