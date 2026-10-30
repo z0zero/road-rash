@@ -1,7 +1,7 @@
 import { letGo } from "./busting";
-import { carryOn, slide, STAND_STILL, type Crash } from "./crashing";
+import { carryOn, slide, STAND_STILL } from "./crashing";
 import type { CopId, RiderId } from "./events";
-import { punchOf, throwAttack, withinReach, type Attack, type Weapon } from "./fighting";
+import { punchOf, throwAttack, withinReach, type FighterState } from "./fighting";
 import type { Footprint } from "./footprint";
 import {
   BRAKING_LEAD,
@@ -28,23 +28,12 @@ export const COP_FULL_STAMINA: number = TUNING.cops.fullStamina;
 /** The cops, in cop-id order: original names, none taken from Road Rash's rosters. */
 const COP_NAMES = ["Sergeant Pike", "Deputy Gale"];
 
-/** A cop on a motorcycle, in track space like the riders. */
-export interface Cop {
+/** A cop on a motorcycle, in track space like the riders. Every cop carries a club, and comes off their bike only when knocked off. */
+export interface Cop extends FighterState {
   readonly kind: "cop";
   readonly id: CopId;
   readonly name: string;
-  /** The bike's motion, which is the cop's too while they ride it. */
-  readonly motion: Motion;
   status: CopStatus;
-  stamina: number;
-  /** Steps since the cop was last hit (Infinity if never). */
-  stepsSinceHit: number;
-  /** The attack the cop is making, or null. */
-  attack: Attack | null;
-  /** The weapon the cop holds, or null: every cop carries a club. */
-  weapon: Weapon | null;
-  /** Null while the cop is on their bike; how they came off it once knocked off. */
-  crash: Crash | null;
   /** The rider the cop is fighting back against, for hitting it; null when it isn't fighting anyone. */
   fightingBack: RiderId | null;
   /** Steps the cop has still to fight back for, unless it is hit again. */

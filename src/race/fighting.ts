@@ -1,5 +1,5 @@
 import type { Cop } from "./cops";
-import { crash, throwOff } from "./crashing";
+import { crash, throwOff, type Crash } from "./crashing";
 import type { AttackKind, RiderOrCop } from "./events";
 import { breatherAfterHitting } from "./opponent-fighting";
 import { copsInTheRace, onTheirBikes, type RaceState } from "./race-state";
@@ -11,6 +11,22 @@ import { TUNING } from "./tuning";
 
 /** Anyone who fights: a rider, or a cop. */
 export type Fighter = Rider | Cop;
+
+/** What the race keeps track of for anyone who fights, a rider or a cop. */
+export interface FighterState {
+  /** The bike's motion, which is the fighter's too while they ride it. */
+  readonly motion: Motion;
+  /** How much fight they have left. */
+  stamina: number;
+  /** Steps since they were last hit (Infinity if never). */
+  stepsSinceHit: number;
+  /** The attack they are making, or null. */
+  attack: Attack | null;
+  /** The weapon they hold, or null. */
+  weapon: Weapon | null;
+  /** Null while they are on their bike; how they are getting on after being thrown off it. */
+  crash: Crash | null;
+}
 
 /** How events name a fighter. */
 export function who(fighter: Fighter): RiderOrCop {
