@@ -19,6 +19,11 @@ export function paceFor(skill: number): number {
   return PACE_RANGE[0] + (PACE_RANGE[1] - PACE_RANGE[0]) * clamp(skill, 0, 1);
 }
 
+/** How fast (m/s) an opponent's pace takes it where it is now on `track`, with nothing in its way. */
+export function paceAt(motion: Readonly<Motion>, riding: OpponentRiding, track: Track): number {
+  return riding.pace * Math.min(TUNING.topSpeed, safeSpeedAt(track, motion.distance + motion.speed * BRAKING_LEAD));
+}
+
 /** Catch-up leaves opponents within this many metres of the player at their usual pace... */
 const CATCH_UP_NEAR = 75;
 /** ...and grows with the distance beyond it, to its most at this many metres... */

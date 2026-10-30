@@ -39,8 +39,8 @@ import {
 } from "./fighting";
 import { footprintOfCar, footprintOfObstacle, type Footprint } from "./footprint";
 import { QUALIFYING_POSITION } from "./limits";
-import { isDroppingBack, opponentAttack, opponentIntent } from "./opponent-fighting";
-import { catchUpFor, opponentControls, paceFor, type OpponentRiding } from "./opponent-riding";
+import { isDroppingBack, opponentAttack, opponentIntent, wearPatience, wholePatience, type Patience } from "./opponent-fighting";
+import { catchUpFor, opponentControls, paceAt, paceFor, type Intent, type OpponentRiding } from "./opponent-riding";
 import { OPPONENTS, PLAYER_NAME, type Temperament } from "./opponents";
 import { createRandom } from "./random";
 import { remarkOn, type Ending, type Remark } from "./remarks";
@@ -315,6 +315,8 @@ interface Rider {
   crash: Crash | null;
   /** Whether an opponent is badly beaten and dropping back until it has recovered. */
   droppingBack: boolean;
+  /** How long an opponent will still ride alongside the player if they ride slowly, and whether it has given up on them. */
+  readonly patience: Patience;
 }
 
 /** Where a rider is: on their bike, or wherever they are after being thrown off it. */
@@ -371,6 +373,7 @@ export function createRace(options: RaceOptions): Race {
     weapon: rider.temperament === "bully" ? "club" : null,
     crash: null,
     droppingBack: false,
+    patience: wholePatience(),
   });
   // The player starts on the start line, between the two lanes that run in the race direction.
   const riders: Rider[] = [
@@ -751,15 +754,21 @@ export function createRace(options: RaceOptions): Race {
         const catchUp = (rider: Rider) =>
           player.status === "racing" ? catchUpFor(rider.motion.distance - whereIs(player).distance) : 1;
         const playerToFight = player.status === "racing" && !player.crash ? player.motion : null;
+        // What each opponent is up to: brawlers and bullies lose patience with a player who rides slowly beside them.
+        const intents = new Map<Rider, Intent>();
         for (const rider of riding) {
-          if (rider.riding) rider.droppingBack = isDroppingBack(rider.droppingBack, rider.stamina);
+          if (!rider.riding || !rider.temperament) continue;
+          rider.droppingBack = isDroppingBack(rider.droppingBack, rider.stamina);
+          const intent = opponentIntent(rider.temperament, rider.motion, playerToFight, rider.droppingBack, rider.patience.gaveUp);
+          wearPatience(rider.patience, intent.alongside !== null, playerToFight?.speed ?? null, paceAt(rider.motion, rider.riding, track));
+          intents.set(rider, intent);
         }
         const carsAndObstacles = [...traffic.cars.map(footprintOfCar), ...obstacles];
         // Riders off their bikes need no controls: their bikes slide on by themselves.
         const controls = riders.map((rider) => {
           if (rider.status !== "racing" || rider.crash) return FINISHED_CONTROLS;
-          if (!rider.riding || !rider.temperament) return input;
-          const intent = opponentIntent(rider.temperament, rider.motion, playerToFight, rider.droppingBack);
+          const intent = intents.get(rider);
+          if (!rider.riding || !intent) return input;
           return opponentControls(rider.motion, rider.riding, track, everyoneOnABike, catchUp(rider), intent, carsAndObstacles);
         });
         if (player.status === "racing" && !player.crash && !player.attack && (input.punch || input.kick)) {
