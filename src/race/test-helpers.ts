@@ -19,6 +19,7 @@ import {
   type Moving,
   type Side,
   type Temperament,
+  type Track,
   type TrackPosition,
 } from ".";
 import { setUpRace, type TestSetup } from "./race";
@@ -193,14 +194,28 @@ function thingsOnTheRoad(race: Race, riders: readonly RiderSnapshot[], traffic: 
       .snapshot()
       .cops.filter((cop) => cop.status !== "knocked-off")
       .map(({ bike: { distance, offset, speed } }) => ({ distance, offset, velocity: speed, halfLength: 1, halfWidth: 0.4 })),
+    ...carsAndObstacles(race.track, traffic),
+  ];
+}
+
+/**
+ * The cars (as a snapshot's `traffic` has them) and the obstacles on `track`,
+ * as things a rider can run into: where their middle is, how fast they go
+ * along the track (m/s, negative for an oncoming car), half their length and
+ * width (metres), and a key that names each.
+ */
+export function carsAndObstacles(track: Track, traffic: readonly CarSnapshot[]) {
+  return [
     ...traffic.map((car) => ({
+      key: `car ${car.id}`,
       distance: car.distance,
       offset: car.offset,
       velocity: car.oncoming ? -car.speed : car.speed,
       halfLength: car.length / 2,
       halfWidth: car.width / 2,
     })),
-    ...race.track.obstacles.map(({ distance, offset, radius }) => ({
+    ...track.obstacles.map(({ distance, offset, radius }, index) => ({
+      key: `obstacle ${index}`,
       distance,
       offset,
       velocity: 0,
