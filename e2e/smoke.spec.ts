@@ -551,6 +551,8 @@ test.describe("with a gamepad", () => {
   });
 
   test("moves between menu buttons with the D-pad or the left stick, and presses them with A", async ({ page }) => {
+    // Eight presses and pushes, each waiting for the frames that read it.
+    test.slow();
     await expect(page.getByRole("button", { name: "Start Race" })).toBeFocused();
 
     // The difficulty beside Start Race comes first.
@@ -652,6 +654,8 @@ test.describe("with a gamepad", () => {
   });
 
   test("moves the difficulty beside Start Race with the D-pad's left and right, and races it", async ({ page }) => {
+    // Nine presses, each waiting for the frames that read it, then a race's first frames.
+    test.slow();
     await expect(page.getByRole("button", { name: "Start Race" })).toBeFocused();
     const choice = (name: string) => difficultyChoices(page).getByRole("radio", { name });
 
