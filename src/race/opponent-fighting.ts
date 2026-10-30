@@ -37,13 +37,15 @@ const PATIENCE_STEPS = stepsIn(10);
 export interface Patience {
   /** Steps it will still ride alongside a slow player. */
   steps: number;
-  /** Whether it has given up on the player: it just races until its patience is whole again. */
+  /** Whether it has given up on the player: it just races, and attacks them only if they hit it, until its patience is whole again. */
   gaveUp: boolean;
+  /** How many of its hits have landed on the player, one after another, while they didn't fight it back. */
+  unansweredHits: number;
 }
 
 /** An opponent's patience with the player at the start of the race: whole. */
 export function wholePatience(): Patience {
-  return { steps: PATIENCE_STEPS, gaveUp: false };
+  return { steps: PATIENCE_STEPS, gaveUp: false, unansweredHits: 0 };
 }
 
 /**
@@ -132,13 +134,34 @@ export function isFightingBack(stepsSinceThePlayerHitIt: number): boolean {
   return stepsSinceThePlayerHitIt <= FIGHTING_BACK_STEPS;
 }
 
+/** An opponent gives up on a player who doesn't hit back once this many of its hits have landed on them unanswered. */
+const UNANSWERED_HITS = 3;
+
+/** An opponent whose hit has just landed on the player, and how it stands with them. */
+interface HittingThePlayer {
+  breatherSteps: number;
+  readonly stepsSinceThePlayerHitIt: number;
+  readonly patience: Patience;
+}
+
 /**
- * How many steps an opponent whose hit has just landed on the player gives
- * them before it attacks them again: none while they fight it back, so a
- * brawl is a brawl, but a breather for a player who doesn't hit back.
+ * What an opponent whose hit has just landed on the player does about it:
+ * nothing while they fight it back, so a brawl is a brawl; but to a player
+ * who doesn't hit back it gives a breather before it attacks them again, and
+ * once `UNANSWERED_HITS` of its hits have landed on them unanswered, it loses
+ * its patience with them and gives up on them.
  */
-export function breatherAfterHitting(stepsSinceThePlayerHitIt: number): number {
-  return isFightingBack(stepsSinceThePlayerHitIt) ? 0 : BREATHER_STEPS;
+export function afterHittingThePlayer(opponent: HittingThePlayer): void {
+  if (isFightingBack(opponent.stepsSinceThePlayerHitIt)) {
+    opponent.breatherSteps = 0;
+    return;
+  }
+  opponent.breatherSteps = BREATHER_STEPS;
+  opponent.patience.unansweredHits++;
+  if (opponent.patience.unansweredHits < UNANSWERED_HITS) return;
+  opponent.patience.unansweredHits = 0;
+  opponent.patience.steps = 0;
+  opponent.patience.gaveUp = true;
 }
 
 /**

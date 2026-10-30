@@ -1,7 +1,7 @@
 import type { Cop } from "./cops";
 import { crash, throwOff, type Crash } from "./crashing";
 import type { AttackKind, RiderOrCop } from "./events";
-import { breatherAfterHitting } from "./opponent-fighting";
+import { afterHittingThePlayer } from "./opponent-fighting";
 import { copsInTheRace, onTheirBikes, type RaceState } from "./race-state";
 import { isPlayer, type Rider } from "./riders";
 import type { Motion } from "./riding";
@@ -165,10 +165,13 @@ export function advanceAttacks(race: RaceState) {
 
 function land(race: RaceState, attacker: Fighter, target: Fighter, { kind, thrownMidSwingAt }: Attack) {
   race.events.push({ type: "attack-landed", attacker: who(attacker), target: who(target), kind });
-  // An opponent whose hit lands on a player who doesn't fight it back gives them a breather before its next attack.
+  // An opponent whose hit lands on a player who doesn't fight it back gives them a breather before its next attack,
+  // and after a few such hits gives up on them.
   if (attacker.kind === "rider" && target.kind === "rider") {
-    if (isPlayer(attacker)) target.stepsSinceThePlayerHitIt = 0;
-    else if (isPlayer(target)) attacker.breatherSteps = breatherAfterHitting(attacker.stepsSinceThePlayerHitIt);
+    if (isPlayer(attacker)) {
+      target.stepsSinceThePlayerHitIt = 0;
+      target.patience.unansweredHits = 0;
+    } else if (isPlayer(target)) afterHittingThePlayer(attacker);
   }
   takeTheClub(race, attacker, target, thrownMidSwingAt);
   const { stamina, shove } = TUNING.attacks[kind];
