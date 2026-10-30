@@ -1,4 +1,5 @@
 import { Color, ShaderChunk, Vector3 } from "three";
+import { radians } from "@/math";
 import { groundDirection } from "./geography";
 
 /**
@@ -30,11 +31,11 @@ export const SUNSET = {
 } as const;
 
 /** The sun hangs this far round from straight out to sea, towards the right of the sea (radians)... */
-const SUN_AROUND_FROM_SEA = (55 * Math.PI) / 180;
+const SUN_AROUND_FROM_SEA = radians(55);
 /** ...and this high above the horizon (radians). */
-const SUN_ELEVATION = (7 * Math.PI) / 180;
+const SUN_ELEVATION = radians(7);
 /** The sunlight comes from higher than the sun's disc, so the low sun still lights the road. */
-const SUNLIGHT_ELEVATION = (24 * Math.PI) / 180;
+const SUNLIGHT_ELEVATION = radians(24);
 
 /**
  * The direction towards the sun, as a unit vector in world coordinates, for a

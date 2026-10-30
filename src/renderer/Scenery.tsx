@@ -1,8 +1,7 @@
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import {
   type BufferGeometry,
   InstancedMesh,
-  type Material,
   Matrix4,
   MeshLambertMaterial,
   Quaternion,
@@ -19,6 +18,7 @@ import {
   rockModel,
   stonePineModel,
 } from "./scenery-models";
+import { InstancedMeshes } from "./InstancedMeshes";
 import { hash } from "./noise";
 import { type Terrain, terrainFor } from "./terrain";
 
@@ -45,28 +45,7 @@ type Model =
  */
 export function Scenery({ track }: { track: Track }) {
   const meshes = useMemo(() => buildScenery(track), [track]);
-  useEffect(
-    () => () => {
-      const disposed = new Set<{ dispose(): void }>();
-      for (const mesh of meshes) {
-        const materials: Material[] = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-        for (const resource of [mesh.geometry, ...materials]) {
-          if (!disposed.has(resource)) resource.dispose();
-          disposed.add(resource);
-        }
-        mesh.dispose();
-      }
-    },
-    [meshes],
-  );
-
-  return (
-    <group>
-      {meshes.map((mesh) => (
-        <primitive key={mesh.uuid} object={mesh} />
-      ))}
-    </group>
-  );
+  return <InstancedMeshes meshes={meshes} />;
 }
 
 function buildScenery(track: Track): InstancedMesh[] {
@@ -200,10 +179,7 @@ function footing(track: Track, terrain: Terrain, item: SceneryPlacement, steepes
       const { x, z } = track.pointAt(item.distance, offset);
       const y = terrain.groundAt(x, z);
       if (y < SHORE) continue;
-      let slope = 0;
-      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        slope = Math.max(slope, Math.abs(terrain.groundAt(x + dx, z + dz) - y));
-      }
+      const slope = terrain.slopeAt(x, z);
       if (slope <= steepest) return { x, y, z, slope };
     }
   }

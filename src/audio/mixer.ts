@@ -1,3 +1,4 @@
+import { clamp } from "@/math";
 import type { Settings } from "@/save-data/save-data";
 
 /**
@@ -74,7 +75,7 @@ export function createMixer(context: BaseAudioContext): Mixer {
     },
     duck(depth) {
       const now = context.currentTime;
-      const dipped = 1 - Math.min(1, Math.max(0, depth));
+      const dipped = 1 - clamp(depth, 0, 1);
       for (const param of [musicDuck.gain, ridingDuck]) {
         param.cancelScheduledValues(now);
         param.setValueAtTime(param.value, now);
@@ -87,6 +88,5 @@ export function createMixer(context: BaseAudioContext): Mixer {
 
 /** A volume setting (0 to 1) as a gain: squared, so halfway on the slider sounds about half as loud. */
 function loudness(volume: number): number {
-  const clamped = Math.min(1, Math.max(0, volume));
-  return clamped * clamped;
+  return clamp(volume, 0, 1) ** 2;
 }
