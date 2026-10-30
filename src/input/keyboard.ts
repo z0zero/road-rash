@@ -4,8 +4,8 @@ import { Presses } from "./presses";
 
 const THROTTLE = codesOf(KEYS.throttle);
 const BRAKE = codesOf(KEYS.brake);
-const LEFT = codesOf(KEYS.steerLeft);
-const RIGHT = codesOf(KEYS.steerRight);
+const LEFT = codesOf(KEYS.steer.map((pair) => pair.left));
+const RIGHT = codesOf(KEYS.steer.map((pair) => pair.right));
 const PUNCH = codesOf(KEYS.punch);
 const KICK = codesOf(KEYS.kick);
 const PAUSE = codesOf(KEYS.pause);

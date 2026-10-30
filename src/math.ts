@@ -1,5 +1,5 @@
 /**
- * Small numeric helpers for the renderer, the sound and the UI. The Race
+ * Small numeric helpers for the renderer, the sound, the UI and the input. The Race
  * module keeps its own, since it imports nothing from the rest of the game.
  */
 
