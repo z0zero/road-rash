@@ -8,6 +8,7 @@ import {
   NO_INPUT,
   QUALIFYING_POSITION,
   TOP_SPEED,
+  TRAFFIC_AHEAD,
   type Race,
 } from ".";
 import { autopilot, kmh, startedRace, STEPS_PER_SECOND } from "./test-helpers";
@@ -31,6 +32,21 @@ describe("the race's limits, which the game shows", () => {
 
   it("are how near the player a cop sets off the cop alert: 150 m", () => {
     expect(COP_ALERT_RANGE).toBe(150);
+  });
+
+  it("are how far ahead of the player cars come onto the road, and leave it: 600 m", () => {
+    expect(TRAFFIC_AHEAD).toBe(600);
+    const race = startedRace(1, { cops: false });
+    const pilot = autopilot(race);
+    let furthest = 0;
+    for (let step = 0; step < 60 * STEPS_PER_SECOND; step++) {
+      race.step(pilot());
+      const { riders, traffic } = race.snapshot();
+      for (const car of traffic) furthest = Math.max(furthest, car.distance - riders[0].distance);
+    }
+
+    expect(furthest).toBeGreaterThan(TRAFFIC_AHEAD - 20);
+    expect(furthest).toBeLessThanOrEqual(TRAFFIC_AHEAD + 1e-6);
   });
 
   /** The most cars on the road at once over `seconds` of riding with `input`. */

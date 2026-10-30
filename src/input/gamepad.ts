@@ -1,4 +1,6 @@
+import { clamp } from "@/math";
 import { NO_INPUT, type PlayerInput } from "@/race";
+import { Presses } from "./presses";
 
 // Buttons and axes of the standard gamepad mapping (https://w3c.github.io/gamepad/#remapping),
 // buttons named as on an Xbox controller: A is the bottom face button, B the right one, X the left one.
@@ -27,10 +29,10 @@ export const GAMEPAD_NAMES = {
 const STICK_DEAD_ZONE = 0.15;
 /** A trigger counts only once pulled this far, so one resting a touch off zero doesn't hold the throttle open. */
 const TRIGGER_DEAD_ZONE = 0.05;
-/** A stick pushed this far one way points that way, for getting round menus... */
-const STICK_POINTS = 0.6;
-/** ...until it comes back within this, so that a stick wavering at the edge doesn't point again and again. */
-const STICK_STOPS_POINTING = 0.4;
+/** A push of the stick this far one way starts pointing that way, for getting round menus... */
+const STICK_PUSH_STARTS = 0.6;
+/** ...and ends only once it comes back within this, so that a stick wavering at the edge doesn't point again and again. */
+const STICK_PUSH_ENDS = 0.4;
 
 /** A way the D-pad or the left stick points. */
 export type Direction = "up" | "down" | "left" | "right";
@@ -59,13 +61,23 @@ export interface Gamepads {
   dispose(): void;
 }
 
-/** What a gamepad was doing when last polled. */
+/** What a gamepad was doing when polled. Each poll writes over one it has done with, so polling allocates nothing. */
 interface PadState {
   /** Which of its buttons were pressed, by button. */
-  readonly pressed: readonly boolean[];
+  readonly pressed: boolean[];
   /** Which ways its left stick pointed. */
-  readonly stick: Readonly<Record<Direction, boolean>>;
+  readonly stick: Record<Direction, boolean>;
 }
+
+function padState(): PadState {
+  return { pressed: [], stick: { up: false, down: false, left: false, right: false } };
+}
+
+/** A gamepad doing nothing: what one seen for the first time is compared with. */
+const DOING_NOTHING: Readonly<PadState> = padState();
+
+/** No gamepads at all. */
+const NONE: readonly (Gamepad | null)[] = [];
 
 /**
  * Turns gamepads with the standard mapping into the player's input: the
@@ -79,16 +91,22 @@ interface PadState {
 export function listenToGamepads(target: Window, handlers: GamepadHandlers): Gamepads {
   /** What every gamepad was doing at the last poll, by the gamepad's index; one missing then is new. */
   let lastSeen = new Map<number, PadState>();
-  let held: Pick<PlayerInput, "throttle" | "brake" | "steer"> = NO_INPUT;
-  let punched = false;
-  let kicked = false;
+  /** Where this poll puts what every gamepad is doing; it becomes `lastSeen` once the poll is done. */
+  let seen = new Map<number, PadState>();
+  /** States the last poll has done with, for the next to write over. */
+  const spare: PadState[] = [];
+  const doneWith = (state: PadState) => spare.push(state);
+  /** The pedals and steering the gamepads held at the last poll. */
+  const held = { throttle: 0, brake: 0, steer: 0 };
+  const presses = new Presses();
   let focused = target.document.hasFocus();
 
   const loseFocus = () => {
     focused = false;
-    held = NO_INPUT;
-    punched = false;
-    kicked = false;
+    held.throttle = 0;
+    held.brake = 0;
+    held.steer = 0;
+    presses.clear();
   };
   const regainFocus = () => {
     focused = true;
@@ -101,35 +119,42 @@ export function listenToGamepads(target: Window, handlers: GamepadHandlers): Gam
       let throttle = 0;
       let brake = 0;
       let steer = 0;
-      const seen = new Map<number, PadState>();
-      for (const pad of standardGamepads(target.navigator)) {
-        const before = lastSeen.get(pad.index);
-        const now: PadState = { pressed: pad.buttons.map((button) => button.pressed), stick: stickPointing(pad, before) };
+      for (const pad of gamepadsOf(target.navigator)) {
+        if (!pad || !pad.connected || pad.mapping !== "standard") continue;
+        const before = lastSeen.get(pad.index) ?? DOING_NOTHING;
+        const now = spare.pop() ?? padState();
+        now.pressed.length = pad.buttons.length;
+        for (let button = 0; button < pad.buttons.length; button++) now.pressed[button] = pad.buttons[button].pressed;
+        pointStick(now.stick, pad, before);
         seen.set(pad.index, now);
         // Without focus, only what the gamepad is doing is kept, so that a button held all along isn't taken for a new press.
         if (!focused) continue;
         throttle = Math.max(throttle, triggerPull(pad, RIGHT_TRIGGER), now.pressed[A] ? 1 : 0);
         brake = Math.max(brake, triggerPull(pad, LEFT_TRIGGER));
         steer += steeringOf(pad, now);
-        // A gamepad seen for the first time: whatever it is already holding was pressed before now.
-        if (!before) continue;
-        const justPressed = (button: number) => now.pressed[button] && !before.pressed[button];
-        if (justPressed(X)) punched = true;
-        if (justPressed(B)) kicked = true;
-        if (justPressed(START)) handlers.onPause();
-        if (justPressed(A)) handlers.onMenuPress();
+        // A gamepad seen for the first time is compared with one doing nothing, so what it is holding counts as
+        // just pressed: browsers show a gamepad to the page only once one of its buttons is pressed, and that press
+        // should do what it says, not just wake the gamepad.
+        if (justPressed(X, now, before)) presses.press("punch");
+        if (justPressed(B, now, before)) presses.press("kick");
+        if (justPressed(START, now, before)) handlers.onPause();
+        if (justPressed(A, now, before)) handlers.onMenuPress();
         for (const direction of DIRECTIONS) {
-          if (points(now, direction) && !points(before, direction)) handlers.onMenuMove(direction);
+          if (isPointing(now, direction) && !isPointing(before, direction)) handlers.onMenuMove(direction);
         }
       }
+      // What the last poll saw is done with: this poll's is the last seen now.
+      lastSeen.forEach(doneWith);
+      lastSeen.clear();
+      const done = lastSeen;
       lastSeen = seen;
-      held = { throttle, brake, steer: Math.max(-1, Math.min(1, steer)) };
+      seen = done;
+      held.throttle = throttle;
+      held.brake = brake;
+      held.steer = clamp(steer, -1, 1);
     },
     read() {
-      const input = { ...NO_INPUT, ...held, punch: punched, kick: kicked };
-      punched = false;
-      kicked = false;
-      return input;
+      return { ...NO_INPUT, ...held, ...presses.take() };
     },
     dispose() {
       target.removeEventListener("blur", loseFocus);
@@ -138,16 +163,22 @@ export function listenToGamepads(target: Window, handlers: GamepadHandlers): Gam
   };
 }
 
-/** The connected gamepads with the standard mapping; none where the browser has no Gamepad API or won't share it. */
-function standardGamepads(navigator: Navigator): Gamepad[] {
-  if (typeof navigator.getGamepads !== "function") return [];
+/** Whether `button` is down `now`, and wasn't `before`. */
+function justPressed(button: number, now: PadState, before: Readonly<PadState>): boolean {
+  return now.pressed[button] && !before.pressed[button];
+}
+
+/**
+ * The browser's gamepads, as it lists them (with gaps); none where it has no
+ * Gamepad API, or won't share it, as in a frame the gamepad permission policy
+ * shuts out.
+ */
+function gamepadsOf(navigator: Navigator): readonly (Gamepad | null)[] {
+  if (typeof navigator.getGamepads !== "function") return NONE;
   try {
-    return navigator
-      .getGamepads()
-      .filter((pad): pad is Gamepad => pad !== null && pad.connected && pad.mapping === "standard");
+    return navigator.getGamepads();
   } catch {
-    // A page in a frame the gamepad permission policy shuts out: as if no gamepad were there.
-    return [];
+    return NONE;
   }
 }
 
@@ -166,21 +197,22 @@ function steeringOf(pad: Gamepad, state: PadState): number {
   return beyond <= 0 ? 0 : Math.sign(across) * Math.min(1, beyond / (1 - STICK_DEAD_ZONE));
 }
 
-/** Which ways the left stick points now, given which ways it pointed `before`. */
-function stickPointing(pad: Gamepad, before: PadState | undefined): Record<Direction, boolean> {
+/** Sets which ways the left stick points now into `stick`, given which ways it pointed `before`. */
+function pointStick(stick: Record<Direction, boolean>, pad: Gamepad, before: Readonly<PadState>) {
   const across = pad.axes[LEFT_STICK_X] ?? 0;
   const down = pad.axes[LEFT_STICK_Y] ?? 0;
-  const pointing = (push: number, direction: Direction) =>
-    push >= (before?.stick[direction] ? STICK_STOPS_POINTING : STICK_POINTS);
-  return {
-    up: pointing(-down, "up"),
-    down: pointing(down, "down"),
-    left: pointing(-across, "left"),
-    right: pointing(across, "right"),
-  };
+  stick.up = isPushed(-down, before.stick.up);
+  stick.down = isPushed(down, before.stick.down);
+  stick.left = isPushed(-across, before.stick.left);
+  stick.right = isPushed(across, before.stick.right);
+}
+
+/** Whether the stick, pushed `push` of the way one way, points that way, given whether it pointed that way before. */
+function isPushed(push: number, wasPushed: boolean): boolean {
+  return push >= (wasPushed ? STICK_PUSH_ENDS : STICK_PUSH_STARTS);
 }
 
 /** Whether a gamepad points `direction`, on its D-pad or with its left stick. */
-function points(state: PadState, direction: Direction): boolean {
+function isPointing(state: Readonly<PadState>, direction: Direction): boolean {
   return Boolean(state.pressed[D_PAD[direction]]) || state.stick[direction];
 }

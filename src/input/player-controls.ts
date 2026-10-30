@@ -1,3 +1,4 @@
+import { clamp } from "@/math";
 import type { PlayerInput } from "@/race";
 import { listenToGamepads } from "./gamepad";
 import { listenToKeyboard } from "./keyboard";
@@ -27,7 +28,7 @@ export function listenToPlayer(target: Window, onPause: () => void): PlayerContr
   });
   return {
     poll: () => gamepads.poll(),
-    read: () => together(keyboard.read(), gamepads.read()),
+    read: () => combine(keyboard.read(), gamepads.read()),
     dispose() {
       keyboard.dispose();
       gamepads.dispose();
@@ -36,11 +37,11 @@ export function listenToPlayer(target: Window, onPause: () => void): PlayerContr
 }
 
 /** Two devices' input as one: the harder of the two on each pedal, their steering added up, and the presses of either. */
-function together(a: PlayerInput, b: PlayerInput): PlayerInput {
+function combine(a: PlayerInput, b: PlayerInput): PlayerInput {
   return {
     throttle: Math.max(a.throttle, b.throttle),
     brake: Math.max(a.brake, b.brake),
-    steer: Math.max(-1, Math.min(1, a.steer + b.steer)),
+    steer: clamp(a.steer + b.steer, -1, 1),
     punch: a.punch || b.punch,
     kick: a.kick || b.kick,
   };
