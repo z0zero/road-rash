@@ -11,6 +11,7 @@ import {
   eventsUntil,
   kmh,
   nearestWithinReach,
+  nearingTheWaitingCop,
   player,
   secondsUntil,
   startedRace,
@@ -138,18 +139,6 @@ function crashedAtSpeedAheadOfTheFollowingCop(seeds: readonly number[]) {
     if (crashed && crashed.speed >= 54 && crashed.behind > 80 && crashed.behind < 1.6 * crashed.speed) return crashed;
   }
   throw new Error(`no race with seeds ${seeds.join(", ")} has the player crash at speed with the cop following`);
-}
-
-/**
- * A started race on a closed road in which the player has ridden to within
- * `before` metres of the first cop, waiting on the shoulder.
- */
-function nearingTheWaitingCop(before: number, seed = 1) {
-  const race = startedRace(seed, CLOSED_ROAD);
-  const waitingAt = race.snapshot().cops[0].distance;
-  secondsUntil(race, autopilot(race), () => player(race).distance >= waitingAt - before, 120);
-  race.drainEvents();
-  return { race, cop: () => race.snapshot().cops[0] };
 }
 
 /** Input that rides at about `speed` straight at the first cop, lined up with it. */
