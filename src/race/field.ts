@@ -3,16 +3,8 @@ import { paceFor } from "./opponent-riding";
 import { OPPONENTS, PLAYER_NAME } from "./opponents";
 import type { Random } from "./random";
 import { PLAYER, type Rider } from "./riders";
-import type { Track } from "./track";
+import type { Track, TrackPosition } from "./track";
 import { TUNING } from "./tuning";
-
-/** Where a rider lines up for the start, in track space. */
-export interface StartSlot {
-  /** Metres along the centreline. */
-  readonly distance: number;
-  /** Metres right of the centreline. */
-  readonly offset: number;
-}
 
 /** The nearest group of opponents lines up about this many metres ahead of the player... */
 const NEAREST_GROUP = 30;
@@ -29,10 +21,10 @@ const ACROSS: Record<number, readonly number[]> = { 2: [0.25, 0.75], 3: [1 / 6, 
  * three, riding side by side in the lanes that run in the race direction. The
  * order is drawn from `random`; slot `i` is for the i-th opponent.
  */
-export function lineUpOpponents(track: Track, count: number, random: Random): StartSlot[] {
+export function lineUpOpponents(track: Track, count: number, random: Random): TrackPosition[] {
   const sizes = groupSizes(count, random);
   const spacing = (FURTHEST_GROUP - NEAREST_GROUP) / Math.max(1, sizes.length - 1);
-  const slots: StartSlot[] = [];
+  const slots: TrackPosition[] = [];
   sizes.forEach((size, group) => {
     // Group 0 is the furthest ahead; jitter never takes it beyond FURTHEST_GROUP.
     const jitter = group === 0 ? random.between(0, 0.2) : random.between(-0.2, 0.2);
@@ -72,7 +64,7 @@ export function lineUpRiders(track: Track, random: Random, playerCondition: numb
  * A rider on the grid: fresh, on a bike in perfect condition, standing at
  * `distance` and `offset`. Bullies start the race with a club.
  */
-function lineUp(rider: Pick<Rider, "id" | "name" | "temperament" | "riding">, distance: number, offset: number): Rider {
+function lineUp<T extends Pick<Rider, "id" | "name" | "temperament" | "riding">>(rider: T, distance: number, offset: number) {
   return {
     ...rider,
     kind: "rider",
@@ -90,7 +82,7 @@ function lineUp(rider: Pick<Rider, "id" | "name" | "temperament" | "riding">, di
     patience: wholePatience(),
     stepsSinceThePlayerHitIt: Infinity,
     breatherSteps: 0,
-  };
+  } satisfies Omit<Rider, "id" | "name" | "temperament" | "riding"> & T;
 }
 
 /** Splits `count` riders into groups of two or three, front to back. */

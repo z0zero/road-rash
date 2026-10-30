@@ -2,7 +2,7 @@ import { useFrame } from "@react-three/fiber";
 import { useEffect } from "react";
 import { type Camera, PerspectiveCamera } from "three";
 import type { GameSession } from "@/game/session";
-import { PLAYER, TOP_SPEED, type AttackKind, type RaceEvent, type RiderOrCop } from "@/race";
+import { isPlayer, PLAYER, TOP_SPEED, type AttackKind, type RaceEvent } from "@/race";
 import type { CameraShake } from "./camera-shake";
 import type { RiderMotion } from "./bike-motion";
 
@@ -69,7 +69,6 @@ export function ChaseCamera({
  * land, a little.
  */
 function joltOf(event: RaceEvent): number {
-  const isPlayer = (who: RiderOrCop) => who.kind === "rider" && who.id === PLAYER;
   if (event.type === "crash") return event.rider === PLAYER ? CRASH_JOLT : 0;
   if (event.type === "knocked-down") return event.rider === PLAYER ? KNOCKED_DOWN_JOLT : 0;
   if (event.type !== "attack-landed") return 0;

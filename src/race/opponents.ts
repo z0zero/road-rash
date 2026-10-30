@@ -11,7 +11,7 @@ import {
 } from "./opponent-fighting";
 import { catchUpFor, opponentControls, paceAt, type Intent } from "./opponent-riding";
 import type { RaceState } from "./race-state";
-import { PLAYER, whereIs, type Rider } from "./riders";
+import { isPlayer, PLAYER, whereIs, type Rider } from "./riders";
 import type { Controls, Motion } from "./riding";
 
 /**
@@ -93,7 +93,7 @@ export function decideOpponents(
   // What each opponent is up to: brawlers and bullies lose patience with a player who rides slowly beside them.
   const intents = new Map<Rider, Intent>();
   for (const rider of riding) {
-    if (!rider.riding || !rider.temperament) continue;
+    if (isPlayer(rider)) continue;
     rider.droppingBack = isDroppingBack(rider.droppingBack, rider.stamina);
     const intent = opponentIntent(rider.temperament, rider.motion, playerToFight, rider.droppingBack, rider.patience.gaveUp);
     wearPatience(rider.patience, intent.alongside !== null, playerToFight?.speed ?? null, paceAt(rider.motion, rider.riding, track));
@@ -113,7 +113,7 @@ export function decideOpponents(
   const controls = new Map<Rider, Controls>();
   for (const rider of riding) {
     const intent = intents.get(rider);
-    if (!rider.riding || !intent) continue;
+    if (isPlayer(rider) || !intent) continue;
     controls.set(rider, opponentControls(rider.motion, rider.riding, track, everyoneOnABike, catchUp(rider), intent, forTheOpponents));
   }
   return { controls, waiting };
@@ -128,15 +128,15 @@ export function decideOpponents(
  */
 export function opponentsAttack(race: RaceState, riding: readonly Rider[], waiting: ReadonlySet<Rider>): void {
   for (const opponent of riding) {
-    if (!opponent.temperament || opponent.attack || opponent.droppingBack) continue;
+    if (isPlayer(opponent) || opponent.attack || opponent.droppingBack) continue;
     const nearest = nearestWithinReach(opponent.motion, targetsFor(race, opponent), punchOf(opponent));
     // Opponents leave the cops alone.
     if (nearest?.kind !== "rider") continue;
     // A player who doesn't fight an opponent back gets a breather after each of its hits, and is spared by those
     // waiting their turn.
     const spared = opponent.breatherSteps > 0 || waiting.has(opponent);
-    if (nearest.id === PLAYER && spared && !isFightingBack(opponent.stepsSinceThePlayerHitIt)) continue;
-    const kind = opponentAttack(opponent.temperament, nearest.id === PLAYER, isMidSwing(nearest.attack), race.random);
+    if (isPlayer(nearest) && spared && !isFightingBack(opponent.stepsSinceThePlayerHitIt)) continue;
+    const kind = opponentAttack(opponent.temperament, isPlayer(nearest), isMidSwing(nearest.attack), race.random);
     // A club reaches further than a kick: a club holder swings at a rider its kick can't reach.
     if (kind) throwAttack(race, opponent, kind === "kick" && !withinReach(opponent.motion, nearest.motion, kind) ? "punch" : kind);
   }

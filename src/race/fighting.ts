@@ -3,9 +3,10 @@ import { crash, throwOff } from "./crashing";
 import type { AttackKind, RiderOrCop } from "./events";
 import { breatherAfterHitting } from "./opponent-fighting";
 import { copsInTheRace, onTheirBikes, type RaceState } from "./race-state";
-import { PLAYER, type Rider } from "./riders";
+import { isPlayer, type Rider } from "./riders";
 import type { Motion } from "./riding";
 import { STEP_SECONDS, stepsIn } from "./steps";
+import type { Side } from "./track";
 import { TUNING } from "./tuning";
 
 /** Anyone who fights: a rider, or a cop. */
@@ -24,8 +25,8 @@ export interface Attack {
   readonly kind: AttackKind;
   /** Steps since the attack was thrown. */
   steps: number;
-  /** Which way the attack goes: 1 to the attacker's right, -1 to their left. */
-  side: -1 | 1;
+  /** Which way the attack goes: to the attacker's right or left. */
+  side: Side;
   /**
    * The club holder it was thrown at while they were winding up a swing, or
    * null: if it lands on them, it takes their club, however late in the
@@ -66,7 +67,7 @@ export function withinReach(attacker: Readonly<Motion>, target: Readonly<Motion>
 }
 
 /** Which way `target` lies sideways from `attacker`: 1 for right, -1 for left (right when level). */
-export function awayFrom(attacker: Readonly<Motion>, target: Readonly<Motion>): -1 | 1 {
+export function awayFrom(attacker: Readonly<Motion>, target: Readonly<Motion>): Side {
   return target.offset >= attacker.offset ? 1 : -1;
 }
 
@@ -150,8 +151,8 @@ function land(race: RaceState, attacker: Fighter, target: Fighter, { kind, throw
   race.events.push({ type: "attack-landed", attacker: who(attacker), target: who(target), kind });
   // An opponent whose hit lands on a player who doesn't fight it back gives them a breather before its next attack.
   if (attacker.kind === "rider" && target.kind === "rider") {
-    if (attacker.id === PLAYER) target.stepsSinceThePlayerHitIt = 0;
-    else if (target.id === PLAYER) attacker.breatherSteps = breatherAfterHitting(attacker.stepsSinceThePlayerHitIt);
+    if (isPlayer(attacker)) target.stepsSinceThePlayerHitIt = 0;
+    else if (isPlayer(target)) attacker.breatherSteps = breatherAfterHitting(attacker.stepsSinceThePlayerHitIt);
   }
   takeTheClub(race, attacker, target, thrownMidSwingAt);
   const { stamina, shove } = TUNING.attacks[kind];
