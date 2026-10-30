@@ -32,7 +32,8 @@ const LEFT_STICK_Y = 1;
  * The gamepad's controls for each thing the player does, any one of which
  * will do: the gamepad reads them from here, and the Controls screen names
  * them from here. Throttle and brake are pulled as far as the furthest of
- * theirs is (a button is all or nothing); the others are pressed.
+ * theirs is (a button is all or nothing); the others are pressed. B kicks
+ * in a race and goes back on the screens over the game.
  */
 export const GAMEPAD: { readonly [C in Control]: readonly PadControl[] } = {
   throttle: [RIGHT_TRIGGER, A],
@@ -41,6 +42,7 @@ export const GAMEPAD: { readonly [C in Control]: readonly PadControl[] } = {
   punch: [X],
   kick: [B],
   pause: [START],
+  back: [B],
 };
 
 /** Getting round the screens with a gamepad: what moves between their buttons, and what presses one. */
@@ -71,6 +73,8 @@ export interface GamepadHandlers {
   onMenuMove(direction: Direction): void;
   /** A was pressed. */
   onMenuPress(): void;
+  /** B was pressed. */
+  onBack(): void;
 }
 
 export interface Gamepads {
@@ -107,7 +111,7 @@ const NONE: readonly (Gamepad | null)[] = [];
  * Turns gamepads with the standard mapping into the player's input: the
  * right trigger or A throttles, the left trigger brakes, the left stick or
  * the D-pad steers, X punches and B kicks. A punch or kick press counts once,
- * in the next step read. Start, A and the D-pad or the left stick's pushes
+ * in the next step read. Start, A, B and the D-pad or the left stick's pushes
  * also call their `handlers`, for pausing and for menus. Gamepads without
  * the standard mapping are ignored: their buttons could be anywhere. While
  * the window has lost focus, the gamepads count for nothing, as if let go.
@@ -163,6 +167,7 @@ export function listenToGamepads(target: Window, handlers: GamepadHandlers): Gam
         if (anyJustPressed(GAMEPAD.kick, now, before)) presses.press("kick");
         if (anyJustPressed(GAMEPAD.pause, now, before)) handlers.onPause();
         if (anyJustPressed(GAMEPAD_MENUS.press, now, before)) handlers.onMenuPress();
+        if (anyJustPressed(GAMEPAD.back, now, before)) handlers.onBack();
         for (const direction of DIRECTIONS) {
           if (isPointing(now, direction) && !isPointing(before, direction)) handlers.onMenuMove(direction);
         }
