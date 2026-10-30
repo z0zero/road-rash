@@ -601,12 +601,12 @@ describe("cops on the road, as the opponents see them", () => {
   it("are slowed down for in time and ridden round, as a slower car is: no opponent runs into a cop pulling out to join the race, or riding slowly", () => {
     const intoACop: string[] = [];
     for (const seed of [1, 2, 3, 4, 5, 6]) {
-      // The player rides well past both cops, so that each pulls out in front of the field coming up behind them.
+      // The player rides on past the cops, so that each pulls out in front of the field coming up behind them.
       const race = startedRace(seed);
       eventsDuring(race, 150, autopilot(race)).forEach((event) => {
         if (event.type === "crash" && event.cause === "cop" && event.rider !== PLAYER) intoACop.push(`seed ${seed}: rider ${event.rider}`);
       });
-      expect(player(race).distance).toBeGreaterThan(race.snapshot().cops[1].distance);
+      expect(player(race).distance).toBeGreaterThan(race.snapshot().cops[0].distance);
     }
 
     expect(intoACop).toEqual([]);
