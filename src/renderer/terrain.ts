@@ -11,7 +11,8 @@ import { hash, smoothNoise } from "./noise";
  * of land beyond the shoulder where the guard rails stand, then a drop to
  * below sea level. Each side
  * reaches out until it meets the land of another stretch of road (or the
- * middle of a tight bend), where a skirt drops it out of sight.
+ * middle of a tight bend), coming down to meet that land where it would stand
+ * higher, and there a skirt drops it out of sight.
  */
 export interface Terrain {
   /** Metres above sea level of the ground at a world position near the road. */
@@ -30,6 +31,11 @@ const POINTS = 10;
 const MAX_REACH = 280;
 /** Metres above sea level that skirts drop to. */
 const SKIRT_DEPTH = -30;
+/**
+ * A side cut short by another stretch's land comes down to meet it where it
+ * stands higher, over up to this many metres before the line between them.
+ */
+const MEETING_SLOPE = 120;
 
 const terrains = new WeakMap<Track, Terrain>();
 
@@ -64,10 +70,12 @@ function createTerrain(track: Track): Terrain {
   const lateral = [new Float64Array(count * POINTS), new Float64Array(count * POINTS)];
   const height = [new Float64Array(count * POINTS), new Float64Array(count * POINTS)];
   const shape = { lateral: new Float64Array(POINTS), height: new Float64Array(POINTS) };
+  /** Which sides are cut short where they meet another stretch's land, by side and section. */
+  const cutShort = [new Uint8Array(count), new Uint8Array(count)];
   for (let i = 0; i < count; i++) {
     for (let s = 0; s < 2; s++) {
       const side = s === 0 ? -1 : 1;
-      crossSection(track, i, side, reachOf(i, side), (l) => spreadAt(i, side, l), shape);
+      cutShort[s][i] = crossSection(track, i, side, reachOf(i, side), (l) => spreadAt(i, side, l), shape) ? 1 : 0;
       // Whatever lies further out than the coastline plunges into the sea.
       const top = track.pointAt(i * SPACING, side * (track.roadHalfWidth + track.shoulderWidth)).y + 2;
       for (let k = 2; k < POINTS - 1; k++) {
@@ -169,6 +177,28 @@ function createTerrain(track: Track): Terrain {
     const t = at - i0;
     const l = Math.abs(across);
     return heightAcross(s, i0, l) * (1 - t) + heightAcross(s, i0 + 1, l) * t;
+  }
+
+  // A side cut short by another stretch's land stood, wherever it was the higher of the two, as a
+  // wall of skirt above that land, which the haze showed as a flat block from afar. It comes down to
+  // meet that land at the line between them instead, its outer part sloping down into the valley.
+  const drops: [number, number, number][] = [];
+  for (let i = 0; i < count; i++) {
+    for (let s = 0; s < 2; s++) {
+      if (!cutShort[s][i]) continue;
+      const side = s === 0 ? -1 : 1;
+      // A few metres over the line, in the other land.
+      const over = lateral[s][i * POINTS + POINTS - 2] + 3;
+      const theirs = groundAt(xs[i] + side * rightX[i] * over, zs[i] + side * rightZ[i] * over);
+      const drop = height[s][i * POINTS + POINTS - 2] - theirs;
+      if (drop > 0) drops.push([s, i, drop]);
+    }
+  }
+  for (const [s, i, drop] of drops) {
+    const base = i * POINTS;
+    const end = lateral[s][base + POINTS - 2];
+    const from = Math.max(lateral[s][base + 2], end - MEETING_SLOPE);
+    for (let k = 3; k < POINTS - 1; k++) height[s][base + k] -= drop * smoothstep(from, end, lateral[s][base + k]);
   }
 
   return {
@@ -280,7 +310,8 @@ function coastlineOf(track: Track, xs: Float64Array, zs: Float64Array) {
  * Fills `shape` with one side's cross-section at section `i`: the inland cliff
  * or the drop to the sea, blended by how squarely that side faces the sea,
  * roughened as far as `spread` allows (see `spreadAt`), flattened where there
- * is little room and cut off at `reach`.
+ * is little room and cut off at `reach`. Says whether it was cut off there,
+ * short of its own end.
  */
 function crossSection(
   track: Track,
@@ -289,7 +320,7 @@ function crossSection(
   reach: number,
   spread: (lateral: number) => number,
   shape: { lateral: Float64Array; height: Float64Array },
-) {
+): boolean {
   const distance = i * SPACING;
   const { heading } = track.sampleAt(distance);
   const edge = track.roadHalfWidth + track.shoulderWidth;
@@ -346,6 +377,7 @@ function crossSection(
     shape.height[k] = k < 2 ? h : edgeY + (h - edgeY) * room;
   }
   // Cut the cross-section off where it meets the next stretch's land.
+  let cutOff = false;
   for (let k = 1; k < POINTS - 1; k++) {
     if (shape.lateral[k] <= reach) continue;
     const l0 = shape.lateral[k - 1];
@@ -356,10 +388,12 @@ function crossSection(
       shape.lateral[rest] = end;
       shape.height[rest] = cut;
     }
+    cutOff = true;
     break;
   }
   shape.lateral[POINTS - 1] = shape.lateral[POINTS - 2];
   shape.height[POINTS - 1] = SKIRT_DEPTH;
+  return cutOff;
 }
 
 const ROCK = [new Color("#b06a43"), new Color("#c27f4f"), new Color("#94573a"), new Color("#a5643f")];
