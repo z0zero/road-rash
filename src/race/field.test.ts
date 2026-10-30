@@ -6,7 +6,6 @@ import {
   type PlayerInput,
   type Race,
   type RaceEvent,
-  type RaceOptions,
   type RiderSnapshot,
   type Track,
 } from ".";
@@ -21,6 +20,7 @@ import {
   startedRace,
   steerTowards,
   STEPS_PER_SECOND,
+  type TestSetup,
 } from "./test-helpers";
 
 type RiderFinished = Extract<RaceEvent, { type: "rider-finished" }>;
@@ -58,16 +58,16 @@ function raceWithoutThePlayer(
 }
 
 /**
- * Rides a started race (set up with `options` besides the seed) with
+ * Rides a started race (set up as `setup` says) with
  * `makeInput`'s input until the player's race is over, then fast-forwards
  * it; collects every event on the way.
  */
 function rideToTheResults(
   seed: number,
   makeInput: (race: Race) => () => PlayerInput,
-  options: Omit<RaceOptions, "seed"> = {},
+  setup: TestSetup = {},
 ) {
-  const race = startedRace(seed, options);
+  const race = startedRace(seed, setup);
   const input = makeInput(race);
   const events: RaceEvent[] = [];
   secondsUntil(race, input, () => {

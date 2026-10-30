@@ -165,7 +165,7 @@ One of the traffic's cars: a hatchback, saloon, van or pickup, driving in the ra
 _Avoid_: Vehicle, NPC
 
 **Closed road**:
-A road with no traffic, which a race can be set up on.
+A road with no traffic, which a test can set a race up on; the game's races always run in traffic.
 _Avoid_: Empty road, private road
 
 **Traffic**:

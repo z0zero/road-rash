@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NO_INPUT, PLAYER, STEP_SECONDS, type CarSnapshot, type PlayerInput, type Race, type RaceEvent } from ".";
-import { autopilot, eventsDuring, eventsUntil, NO_COPS, player, secondsUntil, startedRace, stepFor, STEPS_PER_SECOND } from "./test-helpers";
+import { autopilot, CLOSED_ROAD, eventsDuring, eventsUntil, NO_COPS, player, secondsUntil, startedRace, stepFor, STEPS_PER_SECOND } from "./test-helpers";
 
 type Crash = Extract<RaceEvent, { type: "crash" }>;
 const isCrash = (event: RaceEvent): event is Crash => event.type === "crash";
@@ -177,7 +177,7 @@ describe("traffic", () => {
   });
 
   it("stays off a closed road", () => {
-    const race = startedRace(1, { traffic: false });
+    const race = startedRace(1, CLOSED_ROAD);
     const pilot = autopilot(race);
 
     for (let step = 0; step < 60 * STEPS_PER_SECOND; step++) {
