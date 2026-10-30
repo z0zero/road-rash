@@ -14,14 +14,14 @@ import {
 } from "three";
 import type { GameSession, RaceView } from "@/game/session";
 import { smoothstep } from "@/math";
-import { MOST_CARS, PLAYER, STEP_SECONDS, TRAFFIC_AHEAD, type CarKind, type CarSnapshot } from "@/race";
+import { MOST_CARS, PLAYER, STEP_SECONDS, TRAFFIC_AHEAD, TRAFFIC_BEHIND, type CarKind, type CarSnapshot } from "@/race";
 import { CAR_MODELS, isCarKind, paintOf } from "./car-models";
 import { InstancedMeshes } from "./InstancedMeshes";
 
 /**
- * Cars come onto the road, and leave it, at the far end of the window around
+ * Cars come onto the road, and leave it, at either end of the window around
  * the player, which across a hairpin can be in plain view: there a car grows
- * from nothing over this many metres of road, rather than popping in.
+ * from nothing over this many metres of road, rather than popping in or out.
  */
 const GROW_METRES = 40;
 
@@ -103,8 +103,12 @@ function placeCars(kinds: ReadonlyMap<CarKind, CarsOfAKind>, { track, previous, 
   const player = current.riders[PLAYER].distance;
   for (const car of current.traffic) {
     const cars = kinds.get(car.kind);
-    // Full size once well inside the window's far end, nothing at it.
-    const grown = smoothstep(TRAFFIC_AHEAD, TRAFFIC_AHEAD - GROW_METRES, car.distance - player);
+    // Full size once well inside the window's ends, nothing at them, where cars come onto the road and leave it.
+    const fromPlayer = car.distance - player;
+    const grown = Math.min(
+      smoothstep(TRAFFIC_AHEAD, TRAFFIC_AHEAD - GROW_METRES, fromPlayer),
+      smoothstep(-TRAFFIC_BEHIND, GROW_METRES - TRAFFIC_BEHIND, fromPlayer),
+    );
     if (!cars || cars.drawn >= MOST_CARS || grown === 0) continue;
     // A car that has only just come onto the road is drawn where it came on.
     const before = sameCar(previous.traffic, car.id) ?? car;
