@@ -14,6 +14,7 @@ import {
   startedRace,
   stepFor,
   STEPS_PER_SECOND,
+  WHOLE_RACES,
 } from "./test-helpers";
 
 describe("the countdown", () => {
@@ -65,7 +66,7 @@ describe("riding", () => {
     expect(seconds).toBeLessThan(3.8);
   });
 
-  it("reaches a top speed of 225 km/h and never goes faster", () => {
+  it("reaches a top speed of 225 km/h and never goes faster", WHOLE_RACES, () => {
     // On a closed road, so that no car holds the bike up on the straights.
     const race = startedRace(1, CLOSED_ROAD);
     const pilot = autopilot(race);
@@ -244,7 +245,7 @@ function rideToTheFinish(race: Race) {
 }
 
 describe("the finish", () => {
-  it("ends the player's race when they cross the finish line", () => {
+  it("ends the player's race when they cross the finish line", WHOLE_RACES, () => {
     const race = startedRace(1, NO_COPS);
 
     const clockBefore = rideToTheFinish(race);
@@ -262,7 +263,7 @@ describe("the finish", () => {
     expect(player(race)).toMatchObject({ status: "finished", finishTime: time, position });
   });
 
-  it("lets the finished bike coast to a stop before the road runs out, whatever the input", () => {
+  it("lets the finished bike coast to a stop before the road runs out, whatever the input", WHOLE_RACES, () => {
     const race = startedRace(1, NO_COPS);
     rideToTheFinish(race);
     race.drainEvents();
@@ -300,7 +301,7 @@ describe("fast-forwarding to the results", () => {
     for (const { time } of finishers) expect(time).toBeGreaterThan(0);
   });
 
-  it("can race the rest of the field a little at a time, saying until then that the standings aren't final", () => {
+  it("can race the rest of the field a little at a time, saying until then that the standings aren't final", WHOLE_RACES, () => {
     const allAtOnce = wreckedEarly().fastForward();
     const race = wreckedEarly();
 
@@ -363,7 +364,7 @@ describe("determinism", () => {
     return { snapshots, events };
   }
 
-  it("replays a race identically from the same seed and inputs", () => {
+  it("replays a race identically from the same seed and inputs", WHOLE_RACES, () => {
     const first = record(createRace({ seed: 42 }), 200);
     const second = record(createRace({ seed: 42 }), 200);
 

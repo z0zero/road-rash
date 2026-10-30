@@ -11,6 +11,7 @@ import {
   secondsUntil,
   startedRace,
   STEPS_PER_SECOND,
+  WHOLE_RACES,
   withinReach,
 } from "./test-helpers";
 
@@ -169,7 +170,7 @@ describe("attacks", () => {
     expect(thrown.length).toBeLessThanOrEqual(12);
   });
 
-  it("land on the nearest rider within reach, on either side, and on nobody out of reach", () => {
+  it("land on the nearest rider within reach, on either side, and on nobody out of reach", WHOLE_RACES, () => {
     const race = startedRace();
     const pilot = autopilot(race, { lane: 2 });
     // Swings too, if the player takes a club from a bully on the way.
