@@ -20,16 +20,16 @@ export function createPose(): RiderPose {
 
 /**
  * Fills `pose` with the interpolated pose for this frame of the rider or cop
- * that `whom` picks out of a snapshot: where they are, on their bike or off
- * it after a crash. Reuses `pose` to spare the garbage collector.
+ * whose entry `entryIn` picks out of a snapshot: where they are, on their
+ * bike or off it after a crash. Reuses `pose` to spare the garbage collector.
  */
-export function poseOf(view: RaceView, whom: (snapshot: RaceSnapshot) => OnTheRoad, pose: RiderPose): RiderPose {
-  return between(whom(view.previous), whom(view.current), view.alpha, pose);
+export function poseOf(view: RaceView, entryIn: (snapshot: RaceSnapshot) => OnTheRoad, pose: RiderPose): RiderPose {
+  return between(entryIn(view.previous), entryIn(view.current), view.alpha, pose);
 }
 
-/** Fills `pose` with where the bike of the rider or cop `whom` picks out is drawn this frame: under them, or wherever it slid to. */
-export function bikePoseOf(view: RaceView, whom: (snapshot: RaceSnapshot) => OnTheRoad, pose: RiderPose): RiderPose {
-  return between(whom(view.previous).bike, whom(view.current).bike, view.alpha, pose);
+/** Fills `pose` with where the bike of the rider or cop whose entry `entryIn` picks out is drawn this frame: under them, or wherever it slid to. */
+export function bikePoseOf(view: RaceView, entryIn: (snapshot: RaceSnapshot) => OnTheRoad, pose: RiderPose): RiderPose {
+  return between(entryIn(view.previous).bike, entryIn(view.current).bike, view.alpha, pose);
 }
 
 type TrackPosition = Pick<RiderPose, "distance" | "offset" | "speed">;
