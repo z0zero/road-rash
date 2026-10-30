@@ -1,5 +1,6 @@
 import { useEffect, useRef, type RefObject } from "react";
 import type { GameSession } from "@/game/session";
+import { clamp } from "@/math";
 import { COP_FULL_STAMINA, PLAYER, type RaceEvent, type RaceSnapshot, type RiderSnapshot } from "@/race";
 import { liveryOf } from "@/renderer/liveries";
 import { ClubIcon } from "./ClubIcon";
@@ -17,14 +18,14 @@ const FULL = 100;
 /**
  * Position, speed, race time, progress along the track with a marker for
  * every rider, the 3-2-1 countdown, the player's stamina and bike condition,
- * a weapon icon while the player holds a club, the nearest opponent's (or
+ * a club icon while the player holds one, the nearest opponent's (or
  * cop's) name, stamina and club, warning arrows for riders alongside or
- * coming up from behind, the cop alert while a cop is near, and callouts
- * when a club changes hands with the player or a cop fights back, goes down
- * or busts someone. It is updated straight from the frame loop through refs,
- * never through React state.
+ * coming up from behind, the cop alert while a cop is near (its lights
+ * flashing unless motion is reduced), and callouts when a club changes hands
+ * with the player or a cop fights back, goes down or busts someone. It is
+ * updated straight from the frame loop through refs, never through React state.
  */
-export function Hud({ session }: { session: GameSession }) {
+export function Hud({ session, reduceMotion }: { session: GameSession; reduceMotion: boolean }) {
   const speed = useRef<HTMLSpanElement>(null);
   const position = useRef<HTMLSpanElement>(null);
   const clock = useRef<HTMLSpanElement>(null);
@@ -33,15 +34,15 @@ export function Hud({ session }: { session: GameSession }) {
   const markers = useRef<(HTMLDivElement | null)[]>([]);
   const stamina = useRef<HTMLDivElement>(null);
   const condition = useRef<HTMLDivElement>(null);
-  const opponent = useRef<HTMLDivElement>(null);
-  const opponentName = useRef<HTMLDivElement>(null);
-  const opponentStamina = useRef<HTMLDivElement>(null);
+  const nearestPanel = useRef<HTMLDivElement>(null);
+  const nearestName = useRef<HTMLDivElement>(null);
+  const nearestStamina = useRef<HTMLDivElement>(null);
   const warnLeft = useRef<HTMLDivElement>(null);
   const warnRight = useRef<HTMLDivElement>(null);
   const status = useRef<HTMLDivElement>(null);
-  const weapon = useRef<HTMLDivElement>(null);
-  const opponentClub = useRef<HTMLSpanElement>(null);
-  const opponentIsCop = useRef<HTMLSpanElement>(null);
+  const playerClub = useRef<HTMLDivElement>(null);
+  const nearestClub = useRef<HTMLSpanElement>(null);
+  const nearestIsCop = useRef<HTMLSpanElement>(null);
   const copAlert = useRef<HTMLDivElement>(null);
   const callout = useRef<HTMLDivElement>(null);
   /** The stretch of race time the callout shows for. */
@@ -81,21 +82,21 @@ export function Hud({ session }: { session: GameSession }) {
         setBar(stamina.current, player.stamina, staminaColour);
         setBar(condition.current, player.condition, conditionColour);
         const nearest = current.nearestOpponentOrCop;
-        setShown(opponent.current, nearest !== null);
+        setShown(nearestPanel.current, nearest !== null);
         if (nearest) {
           const isCop = nearest.kind === "cop";
           const them = isCop ? current.cops[nearest.id] : current.riders[nearest.id];
-          setText(opponentName.current, them.name);
-          setBar(opponentStamina.current, them.stamina, staminaColour, isCop ? COP_FULL_STAMINA : FULL);
-          setShown(opponentClub.current, them.weapon === "club");
-          setShown(opponentIsCop.current, isCop);
+          setText(nearestName.current, them.name);
+          setBar(nearestStamina.current, them.stamina, staminaColour, isCop ? COP_FULL_STAMINA : FULL);
+          setShown(nearestClub.current, them.weapon === "club");
+          setShown(nearestIsCop.current, isCop);
         }
         setShown(warnLeft.current, current.warnings.left);
         setShown(warnRight.current, current.warnings.right);
         setShown(copAlert.current, current.cops.some((cop) => cop.near));
         const copComing = current.cops.some((cop) => cop.busting === PLAYER);
         setText(status.current, statusOf(player, knockedDown.current, copComing));
-        setShown(weapon.current, player.weapon === "club");
+        setShown(playerClub.current, player.weapon === "club");
         // A callout goes once its time is up, or straight away in a race that has started over.
         const { from, until } = calloutShown.current;
         if (current.clock >= until || current.clock < from) setText(callout.current, "");
@@ -130,9 +131,13 @@ export function Hud({ session }: { session: GameSession }) {
         className="absolute left-1/2 top-[4.75rem] hidden -translate-x-1/2"
       >
         <div className="flex items-center gap-3 rounded-full border-2 border-sand/80 bg-night/80 px-4 py-1 shadow-lg">
-          <span className="h-4 w-4 rounded-full bg-[#ff2a3d] shadow-[0_0_14px_4px_#ff2a3d] animate-cop-red motion-reduce:animate-none" />
+          <span
+            className={`h-4 w-4 rounded-full bg-cop-red shadow-[0_0_14px_4px_var(--color-cop-red)] ${reduceMotion ? "" : "animate-cop-red"}`}
+          />
           <span className="text-3xl uppercase italic leading-none tracking-wide text-sand">Cop</span>
-          <span className="h-4 w-4 rounded-full bg-[#2a7dff] shadow-[0_0_14px_4px_#2a7dff] animate-cop-blue motion-reduce:animate-none" />
+          <span
+            className={`h-4 w-4 rounded-full bg-cop-blue shadow-[0_0_14px_4px_var(--color-cop-blue)] ${reduceMotion ? "" : "animate-cop-blue"}`}
+          />
         </div>
       </div>
       <div className="absolute left-8 top-4 drop-shadow-[0_3px_0_rgba(27,16,38,0.85)]">
@@ -170,13 +175,13 @@ export function Hud({ session }: { session: GameSession }) {
         </div>
       </div>
       <div
-        ref={opponent}
+        ref={nearestPanel}
         data-testid="nearest-opponent"
         className="absolute right-8 top-4 hidden w-60 text-right drop-shadow-[0_3px_0_rgba(27,16,38,0.85)]"
       >
         <div className="flex items-center justify-end gap-2 text-sm uppercase tracking-widest text-sand/90">
           <span
-            ref={opponentIsCop}
+            ref={nearestIsCop}
             data-testid="nearest-opponent-cop"
             className="hidden rounded-sm bg-[#2a5bd7] px-1.5 py-px leading-tight text-sand"
           >
@@ -185,15 +190,15 @@ export function Hud({ session }: { session: GameSession }) {
           <span>Nearest</span>
         </div>
         <div className="flex items-center justify-end gap-2">
-          <span ref={opponentClub} data-testid="nearest-opponent-club" role="img" aria-label="Holding a club" className="hidden">
+          <span ref={nearestClub} data-testid="nearest-opponent-club" role="img" aria-label="Holding a club" className="hidden">
             <ClubIcon className="h-7 w-7 text-sun" />
           </span>
-          <div ref={opponentName} data-testid="nearest-opponent-name" className="truncate text-3xl italic leading-tight" />
+          <div ref={nearestName} data-testid="nearest-opponent-name" className="truncate text-3xl italic leading-tight" />
         </div>
-        <Bar fill={opponentStamina} label="Their stamina" />
+        <Bar fill={nearestStamina} label="Their stamina" />
       </div>
       <div className="absolute bottom-6 left-8 flex w-64 flex-col gap-2 drop-shadow-[0_3px_0_rgba(27,16,38,0.85)]">
-        <div ref={weapon} data-testid="weapon" className="hidden">
+        <div ref={playerClub} data-testid="club" className="hidden">
           <div role="img" aria-label="Holding a club" className="flex items-center gap-3">
             <div className="grid h-14 w-14 place-items-center rounded-md border-2 border-sun/80 bg-night/70">
               <ClubIcon className="h-10 w-10 text-sun" />
@@ -308,7 +313,7 @@ function conditionColour(share: number): string {
 /** Fills a meter to `value` out of `full`, coloured by how full it is. */
 function setBar(fill: HTMLDivElement | null, value: number, colour: (share: number) => string, full = FULL) {
   if (!fill) return;
-  const share = Math.max(0, Math.min(1, value / full));
+  const share = clamp(value / full, 0, 1);
   const width = `${(share * 100).toFixed(1)}%`;
   if (fill.style.width !== width) fill.style.width = width;
   const background = colour(share);
