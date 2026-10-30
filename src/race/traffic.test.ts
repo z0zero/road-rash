@@ -13,7 +13,9 @@ import {
   playerCrashed,
   secondsUntil,
   startedRace,
+  steerTowards,
   STEPS_PER_SECOND,
+  WHOLE_RACES,
 } from "./test-helpers";
 
 /** The car with this id, while it is on the road. */
@@ -46,6 +48,53 @@ function behindACar(seed = 1) {
   return { race, car: carAhead(race)?.id ?? -1 };
 }
 
+/**
+ * A started race with no cops, ridden with the autopilot until a car going
+ * the riders' way stands still in the road, 20 to 200 m ahead of the player,
+ * as cars do short of the fallen rock near 4 km when they can't change lanes;
+ * returns the car's id. The first of `seeds` in which one does.
+ */
+function behindAStoppedCar(seeds = [16, 10]) {
+  for (const seed of seeds) {
+    const race = startedRace(seed, NO_COPS);
+    const pilot = autopilot(race);
+    let stopped: CarSnapshot | undefined;
+    const standingAhead = () => {
+      const me = player(race);
+      stopped = race.snapshot().traffic.find((car) => {
+        const ahead = car.distance - me.distance;
+        return !car.oncoming && car.speed === 0 && ahead > 20 && ahead < 200;
+      });
+      return stopped !== undefined || me.distance > race.track.finishDistance - 300;
+    };
+    secondsUntil(race, pilot, standingAhead, 300);
+    race.drainEvents();
+    if (stopped) return { race, car: stopped.id, pilot };
+  }
+  throw new Error(`no car stood still ahead of the player in seeds ${seeds.join(", ")}`);
+}
+
+/**
+ * Input that rides with `pilot` to within 60 m of the car `id`, then into the
+ * middle of its back at about `speed` m/s, holding its line against the bends.
+ */
+function rideIntoTheBackOf(race: Race, id: number, speed: number, pilot: () => PlayerInput) {
+  let lastOffset = player(race).offset;
+  return (): PlayerInput => {
+    const me = player(race);
+    const sideways = (me.offset - lastOffset) / STEP_SECONDS;
+    lastOffset = me.offset;
+    const car = carOf(race, id);
+    if (!car || car.distance - me.distance > 60) return pilot();
+    return {
+      ...NO_INPUT,
+      steer: steerTowards(race, car.offset, sideways),
+      throttle: me.speed < speed ? 1 : 0,
+      brake: me.speed > speed + 1 ? Math.min(1, (me.speed - speed) / 4) : 0,
+    };
+  };
+}
+
 /** Input that rides up behind the car `id`, steering straight at it, and closes the last 20 m at about `closing` m/s faster than it. */
 function chaseCar(race: Race, id: number, closing: number) {
   return (): PlayerInput => {
@@ -63,7 +112,7 @@ function chaseCar(race: Race, id: number, closing: number) {
 }
 
 describe("traffic", () => {
-  it("drives in the race direction in the right lanes at 15 to 25 m/s, and oncoming in the left lanes at 18 to 28 m/s", () => {
+  it("drives in the race direction in the right lanes at 15 to 25 m/s, and oncoming in the left lanes at 18 to 28 m/s", WHOLE_RACES, () => {
     const race = startedRace();
     const pilot = autopilot(race);
     const { roadHalfWidth } = race.track;
@@ -106,7 +155,7 @@ describe("traffic", () => {
     expect(player(race).distance).toBeGreaterThan(race.track.startDistance + 1000);
   });
 
-  it("fills a window around the player, from 150 m behind them to 600 m ahead, with about one car per 120 m in each direction", () => {
+  it("fills a window around the player, from 150 m behind them to 600 m ahead, with about one car per 120 m in each direction", WHOLE_RACES, () => {
     // With no cops, who would bust the player if they crashed in traffic, ending their ride through it; and on a seed
     // the player rides without a crash, since cars in the race direction come onto the road only while the player is
     // catching them up.
@@ -138,7 +187,7 @@ describe("traffic", () => {
     }
   });
 
-  it("keeps both directions busy around a player who rides slowly or stands still: cars going their way come up from behind", () => {
+  it("keeps both directions busy around a player who rides slowly or stands still: cars going their way come up from behind", WHOLE_RACES, () => {
     const mean = (values: readonly number[]) => values.reduce((total, value) => total + value, 0) / values.length;
     for (const targetSpeed of [12, 0]) {
       // Under way first, then slowly, or standing still, for two minutes.
@@ -291,6 +340,40 @@ describe("running into a car", () => {
     expect(player(race).crash).not.toBeNull();
     expect(inside).toEqual([]);
     expect(knockedDownByIt).toEqual([]);
+  });
+
+  it("throws a rider who runs into the back of it standing still down behind it, not through it, and never knocks them down", WHOLE_RACES, () => {
+    const { race, car, pilot } = behindAStoppedCar();
+    const events = eventsUntil(race, rideIntoTheBackOf(race, car, 15, pilot), playerCrashed, 60);
+    const crashedAt = race.snapshot().clock;
+    expect(events.filter(playerCrashed)).toEqual([{ type: "crash", rider: PLAYER, cause: "traffic", impactSpeed: expect.any(Number) }]);
+    expect(carOf(race, car)?.speed).toBe(0);
+    /** When the rider, tumbling or on foot, was inside the car they ran into, and when they were knocked down. */
+    const inside: number[] = [];
+    const knockedDown: number[] = [];
+
+    // The rider runs straight back to their bike, while the car stands where it is.
+    secondsUntil(
+      race,
+      NO_INPUT,
+      () => {
+        const me = player(race);
+        const them = carOf(race, car);
+        const { clock } = race.snapshot();
+        // A rider on the ground takes up about 0.6 m either way.
+        if (them && Math.abs(them.distance - me.distance) < them.length / 2 + 0.3 && Math.abs(them.offset - me.offset) < them.width / 2 + 0.3) {
+          inside.push(clock);
+        }
+        if (race.drainEvents().some((event) => event.type === "knocked-down" && event.rider === PLAYER)) knockedDown.push(clock);
+        return me.crash === null;
+      },
+      10,
+    );
+
+    expect(inside).toEqual([]);
+    expect(knockedDown).toEqual([]);
+    // Back on their bike as after any slow crash: a tumble, then a few steps back to it.
+    expect(race.snapshot().clock - crashedAt).toBeLessThan(2.5);
   });
 
   it("slows down behind a slower rider on their bike in its lane, rather than running into them from behind", () => {
