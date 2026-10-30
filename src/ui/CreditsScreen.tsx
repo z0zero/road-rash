@@ -30,7 +30,7 @@ export function CreditsScreen({ onBack }: { onBack: () => void }) {
         Rev &amp; Wreck is inspired by Road Rash, but is not affiliated with Road Rash or Electronic Arts. Road
         Rash is a trademark of Electronic Arts.
       </p>
-      <Button autoFocus onClick={onBack}>
+      <Button data-back autoFocus onClick={onBack}>
         Back
       </Button>
     </Dialog>
