@@ -78,6 +78,9 @@ export default function Game() {
     let last: number | null = null;
     let frame = requestAnimationFrame(function tick(now) {
       controls.current?.poll();
+      // A punch or kick pressed while no race is ridden, on the pause menu say, goes nowhere: it is read and
+      // dropped here, so it isn't thrown the moment the race resumes.
+      if (session.getState().screen !== "racing") controls.current?.read();
       session.advance(last === null ? 0 : (now - last) / 1000);
       // R3F derives useFrame's delta from this timestamp: pass seconds, as its clock expects.
       advance(now / 1000);
