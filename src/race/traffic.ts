@@ -26,6 +26,13 @@ const MEAN_GAP = 120;
 /** ...each car this many metres, give or take, from the one in front of it in its direction. */
 const GAP_SPREAD = 60;
 
+/**
+ * The road never holds more than this many cars at once, both ways together:
+ * the window around the player holds about a dozen, and at most about 17
+ * once the cars bunch up, so this leaves them plenty of room.
+ */
+export const MOST_CARS = 32;
+
 /** Some cars change lanes now and then: this share of them... */
 const LANE_CHANGERS = 0.35;
 /** ...each first after this many seconds on the road... */
@@ -205,7 +212,7 @@ export function createTraffic(track: Track, random: Random, player: Around, clea
   for (const oncoming of [false, true]) {
     const nearest = oncoming ? start.back : Math.max(start.back, clearUntil);
     let distance = start.front - random.between(0, MEAN_GAP);
-    while (distance >= nearest) {
+    while (distance >= nearest && cars.length < MOST_CARS) {
       bringOn(oncoming, distance);
       distance -= (oncoming ? next.oncoming : next.raceDirection).gap;
     }
@@ -234,7 +241,7 @@ export function createTraffic(track: Track, random: Random, player: Around, clea
         if (!oncoming && (speed >= player.speed || player.distance + AHEAD >= track.length)) continue;
         let furthest = -Infinity;
         for (const car of cars) if (car.oncoming === oncoming) furthest = Math.max(furthest, car.distance);
-        if (front - furthest >= gap) bringOn(oncoming, front);
+        if (front - furthest >= gap && cars.length < MOST_CARS) bringOn(oncoming, front);
       }
     },
   };
