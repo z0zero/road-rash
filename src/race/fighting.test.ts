@@ -41,32 +41,76 @@ describe("punching", () => {
   });
 });
 
+/**
+ * Two identical races in which the player rides alongside a racer with the
+ * same input until nobody else rides within 10 m of the racer, and then kicks
+ * it in one of them. Returns the kicked race, the events up to the kick
+ * landing, and a function that steps both races on and returns how much
+ * further from the player the kick has put the racer: metres sideways, away
+ * from the player.
+ */
+function kickTheRacer(seed = 1) {
+  const kicked = alongsideARacer(seed);
+  const spared = alongsideARacer(seed);
+  const { target } = kicked;
+  const stepBoth = (kick = false) => {
+    const input = spared.input();
+    kicked.race.step({ ...input, kick });
+    spared.race.step(input);
+    return kicked.race.drainEvents();
+  };
+  const alone = () => {
+    const { riders } = spared.race.snapshot();
+    const them = riders[target];
+    return riders.every(
+      (other) =>
+        other.id === PLAYER ||
+        other.id === target ||
+        other.status !== "racing" ||
+        Math.hypot(other.distance - them.distance, other.offset - them.offset) > 10,
+    );
+  };
+  for (let step = 0; !alone(); step++) {
+    if (step > 30 * STEPS_PER_SECOND) throw new Error(`seed ${seed}: nobody ever left the racer alone`);
+    stepBoth();
+  }
+  const events = stepBoth(true);
+  for (let step = 0; !events.some((event) => event.type === "attack-landed" && event.attacker.id === PLAYER); step++) {
+    if (step > STEPS_PER_SECOND) throw new Error(`seed ${seed}: the kick never landed`);
+    events.push(...stepBoth());
+  }
+  const awayFromThePlayer = Math.sign(kicked.race.snapshot().riders[target].offset - player(kicked.race).offset);
+  const pushedAway = () => {
+    stepBoth();
+    const [kickedOffset, sparedOffset] = [kicked, spared].map(({ race }) => race.snapshot().riders[target].offset);
+    return (kickedOffset - sparedOffset) * awayFromThePlayer;
+  };
+  return { ...kicked, events, pushedAway };
+}
+
 describe("kicking", () => {
   it("lowers the target's stamina by 6 and shoves them sideways at about 6 m/s, away from the kicker", () => {
-    // Two identical races, ridden with the same input; in one of them the player kicks.
-    const kicked = alongsideARacer();
-    const spared = alongsideARacer();
-    const { target } = kicked;
-    const stepBoth = (kick = false) => {
-      const input = spared.input();
-      kicked.race.step({ ...input, kick });
-      spared.race.step(input);
-      return kicked.race.drainEvents();
-    };
-    let events = stepBoth(true);
+    const { race, target, events, pushedAway } = kickTheRacer();
     expect(events).toContainEqual({ type: "attack-thrown", attacker: ME, target: rider(target), kind: "kick" });
-    while (!events.some((event) => event.type === "attack-landed")) events = stepBoth();
     expect(events).toContainEqual({ type: "attack-landed", attacker: ME, target: rider(target), kind: "kick" });
-    const awayFromThePlayer = Math.sign(kicked.race.snapshot().riders[target].offset - player(kicked.race).offset);
-    const offsets = () => [kicked, spared].map(({ race }) => race.snapshot().riders[target].offset);
-    const [kickedBefore, sparedBefore] = offsets();
-    stepBoth();
-    const [kickedAfter, sparedAfter] = offsets();
 
-    expect(kicked.race.snapshot().riders[target].stamina).toBe(94);
-    const shove = ((kickedAfter - kickedBefore - (sparedAfter - sparedBefore)) / STEP_SECONDS) * awayFromThePlayer;
+    const before = pushedAway();
+    const shove = (pushedAway() - before) / STEP_SECONDS;
+
+    expect(race.snapshot().riders[target].stamina).toBe(94);
     expect(shove).toBeGreaterThan(5);
     expect(shove).toBeLessThan(7);
+  });
+
+  it("carries the target about 3 m further sideways than it would have gone: far enough to push them off the road or into traffic", () => {
+    for (const seed of [1, 3]) {
+      const { pushedAway } = kickTheRacer(seed);
+
+      const furthest = Math.max(...Array.from({ length: 2 * STEPS_PER_SECOND }, pushedAway));
+
+      expect(furthest, `seed ${seed}`).toBeGreaterThan(2.5);
+      expect(furthest, `seed ${seed}`).toBeLessThan(4);
+    }
   });
 });
 

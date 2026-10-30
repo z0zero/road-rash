@@ -153,11 +153,11 @@ test("shows the player's stamina and bike condition, full at the start", async (
   await expect(page.getByRole("meter", { name: "Bike condition", exact: true })).toHaveAttribute("aria-valuenow", "100");
 });
 
-test("starts the player without a club, so the HUD's weapon icon is hidden", async ({ page }) => {
+test("starts the player without a club, so the HUD's club icon is hidden", async ({ page }) => {
   await startRacing(page);
 
-  await expect(page.getByTestId("weapon")).toHaveCount(1);
-  await expect(page.getByTestId("weapon")).toBeHidden();
+  await expect(page.getByTestId("club")).toHaveCount(1);
+  await expect(page.getByTestId("club")).toBeHidden();
 });
 
 test("starts with the cops waiting far up the road, so the HUD's cop alert is hidden", async ({ page }) => {
@@ -463,15 +463,20 @@ function spyOnSound() {
       spy.contexts.push(this);
     }
   };
-  const connect = AudioNode.prototype.connect as (this: AudioNode, ...args: unknown[]) => unknown;
-  AudioNode.prototype.connect = function (this: AudioNode, ...args: unknown[]) {
-    if (args[0] instanceof AudioDestinationNode) {
-      const output = this.context.createAnalyser();
-      connect.call(this, output);
-      spy.outputs.push(output);
-    }
-    return connect.apply(this, args);
-  } as typeof AudioNode.prototype.connect;
+  const connect = AudioNode.prototype.connect;
+  // Replaced as a property and called through Reflect: the method is overloaded, so no one signature fits it.
+  Object.defineProperty(AudioNode.prototype, "connect", {
+    configurable: true,
+    writable: true,
+    value(this: AudioNode, ...args: unknown[]): unknown {
+      if (args[0] instanceof AudioDestinationNode) {
+        const output = this.context.createAnalyser();
+        Reflect.apply(connect, this, [output]);
+        spy.outputs.push(output);
+      }
+      return Reflect.apply(connect, this, args);
+    },
+  });
 }
 
 /** The state of every audio context the page made, oldest first. */
@@ -511,11 +516,15 @@ test.describe("sound", () => {
 
 /** Runs in the page before its scripts: a browser that refuses to make audio contexts. */
 function refuseAudio() {
-  window.AudioContext = class {
-    constructor() {
-      throw new DOMException("Audio is blocked here.", "NotAllowedError");
-    }
-  } as unknown as typeof AudioContext;
+  Object.defineProperty(window, "AudioContext", {
+    configurable: true,
+    writable: true,
+    value: class {
+      constructor() {
+        throw new DOMException("Audio is blocked here.", "NotAllowedError");
+      }
+    },
+  });
 }
 
 /** Runs in the page before its scripts: a browser that makes audio contexts but never lets them play. */
@@ -554,11 +563,11 @@ for (const [behaviour, blockAudio] of [
 
 /** Runs in the page before its scripts: a browser without WebGL 2, or with it turned off. */
 function withoutWebGL2() {
-  const getContext = HTMLCanvasElement.prototype.getContext as (this: HTMLCanvasElement, ...args: unknown[]) => unknown;
+  const getContext = HTMLCanvasElement.prototype.getContext;
   Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
     configurable: true,
-    value(this: HTMLCanvasElement, type: string, ...options: unknown[]) {
-      return type === "webgl2" ? null : getContext.call(this, type, ...options);
+    value(this: HTMLCanvasElement, type: string, ...options: unknown[]): unknown {
+      return type === "webgl2" ? null : Reflect.apply(getContext, this, [type, ...options]);
     },
   });
 }

@@ -1,4 +1,5 @@
 import { type Group, Quaternion, Vector3 } from "three";
+import { smoothstep } from "@/math";
 import type { AttackSnapshot, Weapon } from "@/race";
 import type { Limb, RiderModel } from "./rider-model";
 
@@ -78,8 +79,8 @@ export function poseAttack(model: RiderModel, attack: AttackSnapshot) {
  * rising through the wind-up, held a moment after the strike, then easing back.
  */
 function attackWeight(attack: AttackSnapshot): number {
-  if (attack.stage === "wind-up") return ease(attack.progress);
-  return attack.progress < HOLD ? 1 : 1 - ease((attack.progress - HOLD) / (1 - HOLD));
+  if (attack.stage === "wind-up") return smoothstep(0, 1, attack.progress);
+  return attack.progress < HOLD ? 1 : 1 - smoothstep(HOLD, 1, attack.progress);
 }
 
 /** A club swing sweeps from raised to struck over this share of its recovery. */
@@ -102,7 +103,7 @@ const struckWay = new Vector3();
 /** The way a swing points on `side` at this moment: `raised` through the wind-up, then swept round to `struck` just after the strike. */
 function swingDirection(raised: Direction, struck: Direction, side: -1 | 1, attack: AttackSnapshot): Vector3 {
   mirrored(swung, raised, side);
-  if (attack.stage === "recovery") swung.lerp(mirrored(struckWay, struck, side), ease(attack.progress / SWEEP)).normalize();
+  if (attack.stage === "recovery") swung.lerp(mirrored(struckWay, struck, side), smoothstep(0, SWEEP, attack.progress)).normalize();
   return swung;
 }
 
@@ -188,10 +189,4 @@ export function poseRun(model: RiderModel, stride: number, speed: number) {
 /** Hips above the ground for a rider off their bike: rolling about their middle while tumbling, standing once on foot. */
 export function hipsHeight(tumbling: boolean, tumble: number): number {
   return tumbling ? TUMBLING_HIPS + 0.3 * Math.abs(Math.sin(tumble / 2)) : STANDING_HIPS;
-}
-
-/** Slow at both ends: 0 to 1 as `t` goes from 0 to 1. */
-function ease(t: number) {
-  const clamped = Math.min(1, Math.max(0, t));
-  return clamped * clamped * (3 - 2 * clamped);
 }

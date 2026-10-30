@@ -73,14 +73,24 @@ export class LowPoly {
 
   /** The finished model. */
   build(): BufferGeometry {
-    const geometry = new BufferGeometry();
-    geometry.setAttribute("position", new Float32BufferAttribute(this.positions, 3));
-    geometry.setAttribute("color", new Float32BufferAttribute(this.colors, 3));
-    geometry.computeVertexNormals();
+    const geometry = geometryFrom(this.positions, this.colors);
     geometry.computeBoundingSphere();
     geometry.computeBoundingBox();
     return geometry;
   }
+}
+
+/**
+ * A geometry from separate triangles, given as each corner's position and
+ * colour (three numbers each), with its normals worked out: flat-shaded, as
+ * no two triangles share a corner.
+ */
+export function geometryFrom(positions: readonly number[], colors: readonly number[]): BufferGeometry {
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
+  geometry.computeVertexNormals();
+  return geometry;
 }
 
 /**

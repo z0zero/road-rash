@@ -1,4 +1,5 @@
 import type { GameSession, RaceView, Screen, SessionState } from "@/game/session";
+import { clamp } from "@/math";
 import {
   PLAYER,
   STEP_SECONDS,
@@ -25,7 +26,7 @@ import {
   Siren,
   Skid,
 } from "./sounds";
-import { clamp, createKit, type Kit } from "./synth";
+import { createKit, type Kit } from "./synth";
 
 /** What the sound follows: the session's screens and settings, the race's events, and the race as it is drawn. */
 export type SoundSource = Pick<GameSession, "getState" | "subscribe" | "onRaceEvent" | "onFrame" | "view">;

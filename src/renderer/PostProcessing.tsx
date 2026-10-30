@@ -3,6 +3,7 @@ import { Bloom, EffectComposer, ToneMapping, Vignette } from "@react-three/postp
 import { ToneMappingMode } from "postprocessing";
 import { useEffect, useMemo } from "react";
 import type { GameSession } from "@/game/session";
+import { smoothstep } from "@/math";
 import { ColorGradeEffect, SpeedBlurEffect, SpeedLinesEffect } from "./effects";
 import type { RiderMotion } from "./rider-motion";
 
@@ -58,11 +59,6 @@ function driveSpeedEffects(
 ) {
   const racing = session.getState().screen === "racing";
   const speed = racing ? player.pose.speed : 0;
-  lines.setStrength(ramp(SPEED_LINES_FROM, FULL_SPEED, speed));
-  blur.setStrength(ramp(SPEED_BLUR_FROM, FULL_SPEED, speed));
-}
-
-function ramp(from: number, to: number, value: number) {
-  const t = Math.min(1, Math.max(0, (value - from) / (to - from)));
-  return t * t * (3 - 2 * t);
+  lines.setStrength(smoothstep(SPEED_LINES_FROM, FULL_SPEED, speed));
+  blur.setStrength(smoothstep(SPEED_BLUR_FROM, FULL_SPEED, speed));
 }

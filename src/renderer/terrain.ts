@@ -1,6 +1,8 @@
-import { BufferGeometry, Color, Float32BufferAttribute } from "three";
-import type { Track } from "@/race";
+import { type BufferGeometry, Color } from "three";
+import { smoothstep } from "@/math";
+import type { Track, WorldPoint } from "@/race";
 import { groundDirection, seaward } from "./geography";
+import { geometryFrom } from "./low-poly";
 import { hash, smoothNoise } from "./noise";
 
 /**
@@ -14,6 +16,8 @@ import { hash, smoothNoise } from "./noise";
 export interface Terrain {
   /** Metres above sea level of the ground at a world position near the road. */
   groundAt(x: number, z: number): number;
+  /** How steep the ground is at a world position near the road: the most it rises or falls over a metre, any way. */
+  slopeAt(x: number, z: number): number;
   /** The land between two distances along the track, flat-shaded with a colour per face. */
   buildGeometry(fromDistance: number, toDistance: number): BufferGeometry;
 }
@@ -148,20 +152,32 @@ function createTerrain(track: Track): Terrain {
     return best;
   }
 
+  /** Metres above sea level of the ground at (x, z). */
+  function groundAt(x: number, z: number): number {
+    const i = nearestSection(x, z);
+    const dx = x - xs[i];
+    const dz = z - zs[i];
+    const across = dx * rightX[i] + dz * rightZ[i];
+    // Forward is a quarter turn anticlockwise from the right.
+    const along = dx * rightZ[i] - dz * rightX[i];
+    const s = across < 0 ? 0 : 1;
+    const at = Math.min(count - 1, Math.max(0, i + along / SPACING));
+    const i0 = Math.min(count - 2, Math.floor(at));
+    const t = at - i0;
+    const l = Math.abs(across);
+    return heightAcross(s, i0, l) * (1 - t) + heightAcross(s, i0 + 1, l) * t;
+  }
+
   return {
-    groundAt(x, z) {
-      const i = nearestSection(x, z);
-      const dx = x - xs[i];
-      const dz = z - zs[i];
-      const across = dx * rightX[i] + dz * rightZ[i];
-      // Forward is a quarter turn anticlockwise from the right.
-      const along = dx * rightZ[i] - dz * rightX[i];
-      const s = across < 0 ? 0 : 1;
-      const at = Math.min(count - 1, Math.max(0, i + along / SPACING));
-      const i0 = Math.min(count - 2, Math.floor(at));
-      const t = at - i0;
-      const l = Math.abs(across);
-      return heightAcross(s, i0, l) * (1 - t) + heightAcross(s, i0 + 1, l) * t;
+    groundAt,
+
+    slopeAt(x, z) {
+      const y = groundAt(x, z);
+      let slope = 0;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        slope = Math.max(slope, Math.abs(groundAt(x + dx, z + dz) - y));
+      }
+      return slope;
     },
 
     buildGeometry(fromDistance, toDistance) {
@@ -169,7 +185,7 @@ function createTerrain(track: Track): Terrain {
       const last = Math.min(count - 1, Math.ceil(toDistance / SPACING));
       const positions: number[] = [];
       const colors: number[] = [];
-      const point = (s: number, i: number, k: number): Point => {
+      const point = (s: number, i: number, k: number): WorldPoint => {
         const side = s === 0 ? -1 : 1;
         const l = lateral[s][i * POINTS + k];
         return { x: xs[i] + side * rightX[i] * l, y: height[s][i * POINTS + k], z: zs[i] + side * rightZ[i] * l };
@@ -187,22 +203,14 @@ function createTerrain(track: Track): Terrain {
           }
         }
       }
-      const geometry = new BufferGeometry();
-      geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
-      geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
-      geometry.computeVertexNormals();
+      const geometry = geometryFrom(positions, colors);
       geometry.computeBoundingSphere();
       return geometry;
     },
   };
 }
 
-interface Point {
-  x: number;
-  y: number;
-  z: number;
-}
-type Quad = [Point, Point, Point, Point];
+type Quad = [WorldPoint, WorldPoint, WorldPoint, WorldPoint];
 
 /** Metres of coast per step when tracing the coastline. */
 const COAST_STEP = 10;
@@ -352,7 +360,7 @@ const scratch = new Color();
 
 /** Adds a quad as two triangles, each coloured by its slope and height: rock, scrub, grass or the shore. */
 function pushQuad(positions: number[], colors: number[], [a, b, c, d]: Quad, seed: number, skirt: boolean) {
-  const triangles: [Point, Point, Point][] = [
+  const triangles: [WorldPoint, WorldPoint, WorldPoint][] = [
     [a, b, c],
     [a, c, d],
   ];
@@ -385,9 +393,4 @@ function pushQuad(positions: number[], colors: number[], [a, b, c, d]: Quad, see
       colors.push(scratch.r, scratch.g, scratch.b);
     }
   });
-}
-
-function smoothstep(from: number, to: number, value: number) {
-  const t = Math.min(1, Math.max(0, (value - from) / (to - from)));
-  return t * t * (3 - 2 * t);
 }

@@ -63,7 +63,7 @@ const winningRace = remembered((seed) => rideToTheFinish(seed, Infinity));
 /** A race ridden to the finish at up to 45 m/s, too slowly to qualify. */
 const slowRace = remembered((seed) => rideToTheFinish(seed, 45));
 /** Seeds in which nobody knocks the player off near a cop on the slow ride, which would get them busted. */
-const SLOW_SEEDS = [1, 2, 4];
+const SLOW_SEEDS = [2, 4, 5];
 const wreckedRace = remembered(rideToAWreck);
 
 /** Who a remark comes from, as the standings name them. */
