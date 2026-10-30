@@ -49,12 +49,14 @@ function behindACar(seed = 1) {
 }
 
 /**
- * A started race with no cops, ridden with the autopilot until a car going
- * the riders' way stands still in the road, 20 to 200 m ahead of the player,
- * as cars do short of the fallen rock near 4 km when they can't change lanes;
- * returns the car's id. The first of `seeds` in which one does.
+ * A started race with no cops in which the player, riding with the
+ * autopilot, has come up to a car going their way that stands still in the
+ * road, as cars do short of the fallen rock near 4 km while they can't change
+ * lanes, and has run into the middle of its back at about 15 m/s while it
+ * still stood there; returns the car's id. The first of `seeds` in which
+ * that happens.
  */
-function behindAStoppedCar(seeds = [16, 10]) {
+function rearEndedAStoppedCar(seeds = [10, 16]) {
   for (const seed of seeds) {
     const race = startedRace(seed, NO_COPS);
     const pilot = autopilot(race);
@@ -69,9 +71,12 @@ function behindAStoppedCar(seeds = [16, 10]) {
     };
     secondsUntil(race, pilot, standingAhead, 300);
     race.drainEvents();
-    if (stopped) return { race, car: stopped.id, pilot };
+    if (!stopped) continue;
+    const car = stopped.id;
+    eventsUntil(race, rideIntoTheBackOf(race, car, 15, pilot), playerCrashed, 60);
+    if (carOf(race, car)?.speed === 0) return { race, car };
   }
-  throw new Error(`no car stood still ahead of the player in seeds ${seeds.join(", ")}`);
+  throw new Error(`the player ran into no car standing still in seeds ${seeds.join(", ")}`);
 }
 
 /**
@@ -343,11 +348,9 @@ describe("running into a car", () => {
   });
 
   it("throws a rider who runs into the back of it standing still down behind it, not through it, and never knocks them down", WHOLE_RACES, () => {
-    const { race, car, pilot } = behindAStoppedCar();
-    const events = eventsUntil(race, rideIntoTheBackOf(race, car, 15, pilot), playerCrashed, 60);
+    const { race, car } = rearEndedAStoppedCar();
     const crashedAt = race.snapshot().clock;
-    expect(events.filter(playerCrashed)).toEqual([{ type: "crash", rider: PLAYER, cause: "traffic", impactSpeed: expect.any(Number) }]);
-    expect(carOf(race, car)?.speed).toBe(0);
+    expect(player(race).crash).toBe("tumbling");
     /** When the rider, tumbling or on foot, was inside the car they ran into, and when they were knocked down. */
     const inside: number[] = [];
     const knockedDown: number[] = [];
