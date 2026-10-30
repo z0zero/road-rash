@@ -150,7 +150,8 @@ export function installSunsetHaze(sun: Vector3) {
       #else
         float fogFactor = smoothstep( fogNear, fogFar, vFogDepth );
       #endif
-      vec3 hazed = mix( sunsetHaze( fogColor, vFogDirection ), sunsetSky( vFogDirection ), smoothstep( 0.6, 1.0, fogFactor ) );
+      float skyward = smoothstep( 0.6, 1.0, fogFactor );
+      vec3 hazed = mix( sunsetHaze( fogColor, vFogDirection ), sunsetSky( vFogDirection ), skyward );
       gl_FragColor.rgb = mix( gl_FragColor.rgb, hazed, fogFactor );
       ${STOP_NAN_GLSL}
     #endif
