@@ -195,11 +195,13 @@ test("punches and kicks with J and K while riding", async ({ page }) => {
 /** Buttons of the standard gamepad mapping, named as on an Xbox controller. */
 const GAMEPAD = { a: 0, b: 1, x: 2, leftTrigger: 6, rightTrigger: 7, start: 9, up: 12, down: 13, left: 14, right: 15 };
 
-/** What the fake gamepad lets a test do: hold and let go of its buttons, and push its left stick. */
+/** What the fake gamepad lets a test do: hold and let go of its buttons, push its left stick, and unplug it and plug it back in. */
 interface FakeGamepad {
   press(button: number, value?: number): void;
   release(button: number): void;
   push(x: number, y: number): void;
+  unplug(): void;
+  plugIn(): void;
 }
 
 declare global {
@@ -232,6 +234,13 @@ function plugInAGamepad() {
       axes[1] = y;
       pad.timestamp++;
     },
+    unplug: () => {
+      pad.connected = false;
+    },
+    plugIn: () => {
+      pad.connected = true;
+      pad.timestamp++;
+    },
   };
 }
 
@@ -253,6 +262,16 @@ function gamepad(page: Page) {
         if (!window.fakeGamepad) throw new Error("No gamepad plugged in: add plugInAGamepad first");
         window.fakeGamepad.push(px, py);
       }, [x, y]),
+    unplug: () =>
+      page.evaluate(() => {
+        if (!window.fakeGamepad) throw new Error("No gamepad plugged in: add plugInAGamepad first");
+        window.fakeGamepad.unplug();
+      }),
+    plugIn: () =>
+      page.evaluate(() => {
+        if (!window.fakeGamepad) throw new Error("No gamepad plugged in: add plugInAGamepad first");
+        window.fakeGamepad.plugIn();
+      }),
   };
 }
 
@@ -336,6 +355,47 @@ test.describe("with a gamepad", () => {
     // Back is in focus on the Controls screen.
     await tap(page, GAMEPAD.a, () => expect(controls).toBeHidden());
     await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
+  });
+
+  test("counts the press that shows a gamepad to the page, as a browser does with its first press", async ({ page }) => {
+    await gamepad(page).unplug();
+    await nextFrames(page);
+    await expect(page.getByRole("button", { name: "Start Race" })).toBeFocused();
+
+    await gamepad(page).press(GAMEPAD.a);
+    await gamepad(page).plugIn();
+
+    await expect(page.getByTestId("countdown")).toBeVisible();
+  });
+
+  test("doesn't press a button again for its being held through a lost focus", async ({ page }) => {
+    await tap(page, GAMEPAD.down, () => expect(page.getByRole("button", { name: "Controls" })).toBeFocused());
+    const controls = page.getByRole("dialog", { name: "Controls" });
+    await gamepad(page).press(GAMEPAD.a);
+    await expect(controls).toBeVisible();
+
+    await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+    await nextFrames(page);
+    await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+    await nextFrames(page);
+
+    // A, held all along, didn't press Back, which has the focus on the Controls screen.
+    await expect(controls).toBeVisible();
+    await gamepad(page).release(GAMEPAD.a);
+  });
+
+  test("moves through a menu once for a stick wavering at the edge of a push", async ({ page }) => {
+    await expect(page.getByRole("button", { name: "Start Race" })).toBeFocused();
+
+    await gamepad(page).push(0, 0.7);
+    await expect(page.getByRole("button", { name: "Controls" })).toBeFocused();
+    for (const y of [0.5, 0.7, 0.5, 0.7]) {
+      await gamepad(page).push(0, y);
+      await nextFrames(page);
+    }
+
+    await expect(page.getByRole("button", { name: "Controls" })).toBeFocused();
+    await gamepad(page).push(0, 0);
   });
 
   test("turns a volume slider in focus with the D-pad", async ({ page }) => {
