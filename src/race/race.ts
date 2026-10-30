@@ -403,6 +403,8 @@ export function createRace(options: RaceOptions): Race {
 
   /** Riders still racing on their bikes: the ones who ride, bump and fight. */
   const onTheirBikes = () => riders.filter((rider) => rider.status === "racing" && !rider.crash);
+  /** Where the riders still racing are on the road, on their bikes or off them. */
+  const ridersOnTheRoad = () => riders.filter((rider) => rider.status === "racing").map(whereIs);
   const edge = track.roadHalfWidth + track.shoulderWidth;
 
   /** Cops riding in the race: the ones who patrol, bust riders and fight. */
@@ -726,7 +728,7 @@ export function createRace(options: RaceOptions): Race {
     track,
     step(input) {
       // The traffic drives on whatever the riders do, even while they wait for the countdown.
-      if (stepsTaken < COUNTDOWN_STEPS) traffic.step(whereIs(riders[PLAYER]));
+      if (stepsTaken < COUNTDOWN_STEPS) traffic.step(whereIs(riders[PLAYER]), ridersOnTheRoad());
       else {
         const clockBefore = clock();
         // Everyone decides what to do from where things stand, then everyone moves.
@@ -781,7 +783,7 @@ export function createRace(options: RaceOptions): Race {
             carryOn(cop.crash, cop.motion, STAND_STILL, edge);
           }
         });
-        traffic.step(whereIs(player));
+        traffic.step(whereIs(player), ridersOnTheRoad());
         bustTheCaught();
         joinThePlayer();
         for (const { rider, speedDifference } of settleContact(riding, edge)) crash(rider, "rider", speedDifference);
