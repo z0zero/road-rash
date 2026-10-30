@@ -375,7 +375,12 @@ function pushQuad(positions: number[], colors: number[], [a, b, c, d]: Quad, see
     const nx = uy * vz - uz * vy;
     const ny = uz * vx - ux * vz;
     const nz = ux * vy - uy * vx;
-    const up = ny / (Math.hypot(nx, ny, nz) || 1);
+    // Where a cross-section is cut short, its points stack up on one spot, and their triangles cover
+    // nothing: they would have no normal to light them by, and the odd pixel of one would come out
+    // not a number.
+    const twiceArea = Math.hypot(nx, ny, nz);
+    if (twiceArea < 1e-6) return;
+    const up = ny / twiceArea;
     const middle = (p.y + q.y + r.y) / 3;
     // Patches a few tens of metres across, so neighbouring faces mostly share a colour.
     const patch = smoothNoise((p.x + p.z * 0.7) / 23, 30);
