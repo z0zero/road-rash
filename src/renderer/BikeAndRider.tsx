@@ -29,7 +29,7 @@ const LYING_HEIGHT = 0.24;
  * tucking in at speed, punching and kicking, and holding and swinging a club
  * if they have one. After a crash the rider drops any club and leaves the
  * bike, which falls on its side and slides to a stop: they tumble along the
- * road, then get up and run back to it. A cop's bike is a `police` bike, its
+ * road, then get up and run back to it. A `cop`'s bike has panniers, its
  * light bar flashing red and blue while they ride in the race. It updates
  * `motion` first each frame, so whatever follows this rider (the camera
  * follows the player) reads it fresh.
@@ -38,14 +38,14 @@ export function BikeAndRider({
   session,
   motion,
   livery,
-  police = false,
+  cop = false,
 }: {
   session: GameSession;
   motion: BikeMotion;
   livery: Livery;
-  police?: boolean;
+  cop?: boolean;
 }) {
-  const model = useMemo(() => createRiderModel(livery, { police }), [livery, police]);
+  const model = useMemo(() => createRiderModel(livery, { cop }), [livery, cop]);
   // Where the rider is on their own after a crash; while they ride, the model's rider sits on the bike.
   const body = useMemo(() => ({ group: new Group(), seat: model.rider.position.clone() }), [model]);
   useEffect(() => () => model.dispose(), [model]);
@@ -77,7 +77,7 @@ function poseRiding(model: RiderModel, body: { group: Group; seat: Vector3 }, mo
     rider.rotation.set(0, 0, 0);
   }
   rider.position.copy(body.seat);
-  root.position.set(motion.x, motion.y, motion.z);
+  root.position.copy(motion.bikeAt);
   root.rotation.set(motion.pitch, motion.yaw, -(motion.lean + motion.bank), "YXZ");
   for (const wheel of wheels) wheel.rotation.x = -motion.wheelTurn;
   rider.position.x = -motion.lean * HANG_OFF;
@@ -96,7 +96,8 @@ function poseRiding(model: RiderModel, body: { group: Group; seat: Vector3 }, mo
 function poseCrashed(model: RiderModel, body: { group: Group; seat: Vector3 }, motion: BikeMotion) {
   const { root, wheels, rider } = model;
   const roll = motion.fallSide * LYING * motion.fallen;
-  root.position.set(motion.x, motion.y + LYING_HEIGHT * motion.fallen, motion.z);
+  root.position.copy(motion.bikeAt);
+  root.position.y += LYING_HEIGHT * motion.fallen;
   root.rotation.set(motion.pitch, motion.yaw, -(roll + motion.bank), "YXZ");
   for (const wheel of wheels) wheel.rotation.x = -motion.wheelTurn;
 
@@ -104,7 +105,7 @@ function poseCrashed(model: RiderModel, body: { group: Group; seat: Vector3 }, m
   // Whatever the race says they still hold: a rider who crashes has dropped their club.
   poseClub(model, motion);
   const tumbling = motion.crash === "tumbling";
-  body.group.position.set(motion.bodyX, motion.bodyY, motion.bodyZ);
+  body.group.position.copy(motion.bodyAt);
   body.group.rotation.set(0, motion.bodyYaw, 0);
   rider.position.set(0, hipsHeight(tumbling, motion.tumble), 0);
   if (tumbling) {

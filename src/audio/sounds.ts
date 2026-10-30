@@ -1,4 +1,5 @@
-import { amplify, clamp, filter, glide, noise, strike, swell, tone, type Kit } from "./synth";
+import { clamp } from "@/math";
+import { amplify, filter, glide, noise, strike, swell, tone, type Kit } from "./synth";
 
 /**
  * The game's sound effects, synthesized: hits, crashes, skids, the siren and

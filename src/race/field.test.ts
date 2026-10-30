@@ -217,7 +217,8 @@ describe("the opponents", () => {
       }
       for (const rider of riders) {
         if (rider.id === PLAYER || rider.status !== "racing" || rider.crash !== null) continue;
-        const justKicked = step - (kickedAt.get(rider.id) ?? -Infinity) < 2 * STEPS_PER_SECOND;
+        // A kick can carry a rider a few metres, onto the shoulder, before they steer back.
+        const justKicked = step - (kickedAt.get(rider.id) ?? -Infinity) < 3 * STEPS_PER_SECOND;
         if (Math.abs(rider.offset) > track.roadHalfWidth && !justKicked) {
           offTheRoad.add(`${rider.name} at ${rider.distance.toFixed(0)} m`);
         }
@@ -249,11 +250,18 @@ describe("the opponents", () => {
     expect(passes.length).toBeGreaterThanOrEqual(10);
   });
 
-  it("steer around each other: no two opponents ever ride into each other", () => {
+  it("steer around each other: no two opponents ever ride into each other, unless a kick shoves one into another", () => {
     for (const seed of [1, 2, 3]) {
       let overlaps = 0;
-      raceWithoutThePlayer(seed, 300, (riders) => {
-        const racing = riders.filter((rider) => rider.id !== PLAYER && rider.status === "racing");
+      let step = 0;
+      const kickedAt = new Map<number, number>();
+      raceWithoutThePlayer(seed, 300, (riders, events) => {
+        step++;
+        for (const event of events) {
+          if (event.type === "attack-landed" && event.kind === "kick") kickedAt.set(event.target.id, step);
+        }
+        const justKicked = (rider: RiderSnapshot) => step - (kickedAt.get(rider.id) ?? -Infinity) < 2 * STEPS_PER_SECOND;
+        const racing = riders.filter((rider) => rider.id !== PLAYER && rider.status === "racing" && !justKicked(rider));
         for (const a of racing) {
           for (const b of racing) {
             if (a.id < b.id && Math.abs(a.distance - b.distance) < 2 && Math.abs(a.offset - b.offset) < 0.8) overlaps++;
@@ -419,9 +427,10 @@ describe("catch-up", () => {
 
 describe("the results", () => {
   it("qualify a player who finishes third or better, and only them", () => {
-    // On a closed road, where how fast the player rides alone decides their position.
+    // On a closed road, where how fast the player rides alone decides their position, with no cops, who would bust a
+    // player knocked off near one.
     const results = [Infinity, 52, 45].map(
-      (targetSpeed) => rideToTheResults(1, (race) => autopilot(race, { targetSpeed }), CLOSED_ROAD).results,
+      (targetSpeed) => rideToTheResults(1, (race) => autopilot(race, { targetSpeed }), { ...CLOSED_ROAD, ...NO_COPS }).results,
     );
 
     for (const { outcome, position, qualified } of results) {

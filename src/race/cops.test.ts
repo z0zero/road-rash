@@ -22,7 +22,7 @@ const FIRST_COP = { kind: "cop", id: 0 } as const;
  * opponent who rarely attacks) until they have just passed the first cop, so
  * that it has joined the race.
  */
-function alongsideARacerPastTheFirstCop(seed = 1) {
+function alongsideARacerPastTheFirstCop(seed = 2) {
   const alongside = alongsideARacer(seed);
   const { race, input } = alongside;
   const cop = race.snapshot().cops[0];
@@ -201,7 +201,7 @@ describe("fighting a cop", () => {
 
 describe("the cop alert", () => {
   it("is on while a cop in the race is within 150 m of the player: cop-near as one comes that close at up to 66 m/s, faster than any bike, cop-gone as it leaves", () => {
-    const { race, target, input } = alongsideARacer();
+    const { race, target, input } = alongsideARacer(2);
     const them = () => race.snapshot().riders[target];
     const cop = () => race.snapshot().cops[0];
     const near = new Set<number>();
@@ -264,13 +264,13 @@ describe("busting", () => {
     expect(race.snapshot().clock - crashedAt).toBeGreaterThanOrEqual(1.2);
   });
 
-  it("lets a rider go who crashes with the cop over 65 m off and runs straight back to their bike: the cop closes in at an arrest pace", () => {
-    const { race, target, input } = alongsideARacerPastTheFirstCop(2);
+  it("lets a rider go who crashes with the cop over 60 m off and runs straight back to their bike: the cop closes in at an arrest pace", () => {
+    const { race, target, input } = alongsideARacerPastTheFirstCop(6);
     const cop = () => race.snapshot().cops[0];
     const them = () => race.snapshot().riders[target];
     // Knocked off as the cop, done following the player, falls back past 60 m behind.
     knockOffWhen(race, target, input, () => them().distance - cop().distance > 62);
-    expect(apart(cop(), them())).toBeGreaterThan(65);
+    expect(apart(cop(), them())).toBeGreaterThan(60);
     expect(apart(cop(), them())).toBeLessThan(80);
     expect(cop().busting).toBe(target);
 

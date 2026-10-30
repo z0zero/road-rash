@@ -1,4 +1,5 @@
-import { amplify, clamp, filter, glide, noise, roughen, tone, type Kit } from "./synth";
+import { clamp } from "@/math";
+import { amplify, filter, glide, noise, roughen, tone, type Kit } from "./synth";
 
 /**
  * The sound of a bike's four-cylinder engine, pitched by the bike's speed.

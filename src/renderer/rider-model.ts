@@ -82,19 +82,23 @@ const GRIP_TAPE = "#2a2320";
 /** A cop's bike: white panniers either side of the rear wheel, and a black light bar on a mast behind the seat. */
 const PANNIER = "#f2f3f5";
 const LIGHT_BAR = "#16161a";
-/** A light bar's lamps: their colours, and how bright they glow when lit (far brighter than white, so they bloom) and when dark. */
-const LAMP_RED = new Color("#ff1f35");
-const LAMP_BLUE = new Color("#1f63ff");
+/**
+ * A light bar's lamps: their colours, the same as the HUD's cop alert
+ * (`--color-cop-red` and `--color-cop-blue` in globals.css), and how bright
+ * they glow when lit (far brighter than white, so they bloom) and when dark.
+ */
+const LAMP_RED = new Color("#ff2a3d");
+const LAMP_BLUE = new Color("#2a7dff");
 const LAMP_LIT = 6;
 const LAMP_DARK = 0.18;
-/** The lamps take turns, each lit for this many seconds. */
+/** The lamps take turns, each lit for this many seconds, as the HUD's cop alert does (`--animate-cop-red` in globals.css). */
 const LAMP_TURN_SECONDS = 0.3;
 
 /**
- * Builds a rider and their bike in a livery: a cop on a police bike, with
- * panniers and a light bar, if `police`. Call `dispose` when done with it.
+ * Builds a rider and their bike in a livery: a cop on a bike with panniers
+ * and a light bar, if `cop`. Call `dispose` when done with it.
  */
-export function createRiderModel(livery: Livery, { police = false } = {}): RiderModel {
+export function createRiderModel(livery: Livery, { cop = false } = {}): RiderModel {
   const geometries: BufferGeometry[] = [];
   const surface = new MeshPhongMaterial({ vertexColors: true, shininess: 38, specular: "#3a3a3a" });
   // The lamps glow far brighter than white, so they bloom.
@@ -202,8 +206,8 @@ export function createRiderModel(livery: Livery, { police = false } = {}): Rider
   const legs: [Limb, Limb] = [leg(-1), leg(1)];
 
   let lightBar: LightBar | null = null;
-  if (police) {
-    root.add(mesh(policeGeometry()));
+  if (cop) {
+    root.add(mesh(copBikeGeometry()));
     lightBar = { red: new MeshBasicMaterial({ color: LAMP_RED }), blue: new MeshBasicMaterial({ color: LAMP_BLUE }) };
     materials.push(lightBar.red, lightBar.blue);
     for (const [material, side] of [
@@ -324,8 +328,8 @@ function clubGeometry(): BufferGeometry {
     .build();
 }
 
-/** What makes a bike a police bike: white panniers either side of the rear wheel, and the light bar's mast and housing. */
-function policeGeometry(): BufferGeometry {
+/** What makes a bike a cop's: white panniers either side of the rear wheel, and the light bar's mast and housing. */
+function copBikeGeometry(): BufferGeometry {
   return new LowPoly()
     .add(new BoxGeometry(0.2, 0.34, 0.5), PANNIER, { at: [-0.3, 0.66, 0.55] })
     .add(new BoxGeometry(0.2, 0.34, 0.5), PANNIER, { at: [0.3, 0.66, 0.55] })

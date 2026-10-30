@@ -59,7 +59,7 @@ export function lineUpCops(track: Track): Cop[] {
     kind: "cop",
     id,
     name: COP_NAMES[id],
-    motion: { distance: track.startDistance + along, offset: shoulder, speed: 0, steering: 0, shove: 0 },
+    motion: { distance: track.startDistance + along, offset: shoulder, speed: 0, steering: 0, shove: 0, kickShove: 0 },
     status: "waiting",
     stamina: COP_FULL_STAMINA,
     stepsSinceHit: Infinity,
@@ -247,8 +247,9 @@ export function moveCop(motion: Motion, intent: CopIntent, edge: number): void {
   const reach = Math.min(sideways, maxSidewaysSpeed(Math.abs(motion.speed)));
   motion.steering = clamp(response * (intent.line - motion.offset), -reach, reach);
   motion.distance += motion.speed * STEP_SECONDS;
-  motion.offset = clamp(motion.offset + (motion.steering + motion.shove) * STEP_SECONDS, -edge, edge);
+  motion.offset = clamp(motion.offset + (motion.steering + motion.shove + motion.kickShove) * STEP_SECONDS, -edge, edge);
   motion.shove *= Math.exp(-TUNING.shoveDecay * STEP_SECONDS);
+  motion.kickShove *= Math.exp(-TUNING.kickShoveDecay * STEP_SECONDS);
 }
 
 /** A cop follows the player for this many seconds near them after anything last happened to it (a crash it rode to, a fight)... */

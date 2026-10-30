@@ -1,6 +1,7 @@
-import { useEffect, useMemo } from "react";
+import { useMemo } from "react";
 import { type BufferGeometry, InstancedMesh, Matrix4, MeshLambertMaterial, Quaternion, Vector3 } from "three";
 import type { ObstacleKind, ObstaclePlacement, Track } from "@/race";
+import { InstancedMeshes } from "./InstancedMeshes";
 import { hash } from "./noise";
 import {
   BOULDER_WIDTH,
@@ -26,28 +27,11 @@ const MODELS: Record<ObstacleKind, { readonly build: () => BufferGeometry; reado
  * hairpins, each kind drawn with instancing where the race says it stands.
  */
 export function Obstacles({ track }: { track: Track }) {
-  const { meshes, material } = useMemo(() => buildObstacles(track), [track]);
-  useEffect(
-    () => () => {
-      for (const mesh of meshes) {
-        mesh.geometry.dispose();
-        mesh.dispose();
-      }
-      material.dispose();
-    },
-    [meshes, material],
-  );
-
-  return (
-    <group>
-      {meshes.map((mesh) => (
-        <primitive key={mesh.uuid} object={mesh} />
-      ))}
-    </group>
-  );
+  const meshes = useMemo(() => buildObstacles(track), [track]);
+  return <InstancedMeshes meshes={meshes} />;
 }
 
-function buildObstacles(track: Track) {
+function buildObstacles(track: Track): InstancedMesh[] {
   const material = new MeshLambertMaterial({ vertexColors: true });
   const placed = new Map<ObstacleKind, Matrix4[]>();
   track.obstacles.forEach((obstacle, index) => {
@@ -55,7 +39,7 @@ function buildObstacles(track: Track) {
     matrices.push(placing(track, obstacle, index));
     placed.set(obstacle.kind, matrices);
   });
-  const meshes = [...placed].map(([kind, matrices]) => {
+  return [...placed].map(([kind, matrices]) => {
     const mesh = new InstancedMesh(MODELS[kind].build(), material, matrices.length);
     matrices.forEach((matrix, i) => mesh.setMatrixAt(i, matrix));
     mesh.instanceMatrix.needsUpdate = true;
@@ -64,7 +48,6 @@ function buildObstacles(track: Track) {
     mesh.receiveShadow = true;
     return mesh;
   });
-  return { meshes, material };
 }
 
 const UP = new Vector3(0, 1, 0);
