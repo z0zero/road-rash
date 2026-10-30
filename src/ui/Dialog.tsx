@@ -1,4 +1,5 @@
 import { type ReactNode, useId } from "react";
+import { PANEL, PANEL_TITLE } from "./panel";
 
 /**
  * A screen over the game, such as Settings or the pause menu: the game dimmed
@@ -28,10 +29,8 @@ export function Dialog({
         if (event.key === "Escape") onBack?.();
       }}
     >
-      <div
-        className={`flex flex-col items-center rounded-xl border border-sun/40 bg-night/85 py-8 shadow-2xl ${panelClassName}`}
-      >
-        <h2 id={titleId} className="font-display text-5xl uppercase italic tracking-wide text-sun">
+      <div className={`flex flex-col items-center py-8 ${PANEL} ${panelClassName}`}>
+        <h2 id={titleId} className={`text-5xl ${PANEL_TITLE}`}>
           {title}
         </h2>
         {children}
