@@ -2,7 +2,15 @@ import type { Crash } from "./crashing";
 import type { CopId, RiderId } from "./events";
 import type { Attack, Weapon } from "./fighting";
 import type { Footprint } from "./footprint";
-import { lineAround, safeSpeedAt, type BendLimits } from "./opponent-riding";
+import {
+  BRAKING_LEAD,
+  EDGE_MARGIN,
+  levelWith,
+  lineAround,
+  safeSpeedAt,
+  sidewaysTowards,
+  type BendLimits,
+} from "./opponent-riding";
 import { clamp, maxSidewaysSpeed, type Motion } from "./riding";
 import { STEP_SECONDS, stepsIn } from "./steps";
 import type { Track } from "./track";
@@ -99,12 +107,8 @@ export interface Place {
 
 /** Cops ride in the inner of the two lanes that run in the race direction, this many metres right of the centreline. */
 const PATROL_LINE = 1.5;
-/** Cops keep their line at least this far inside the road's edges (metres). */
-const EDGE_MARGIN = 0.8;
 /** Cops ride a faster bike than the riders', and hold their line through bends with little steering to spare. */
 const COP_LIMITS: BendLimits = { topSpeed: TUNING.cops.topSpeed, grip: 0.95, braking: 16 };
-/** Cops slow for what lies this many seconds ahead, to allow for the time braking takes to bite. */
-const BRAKING_LEAD = 0.3;
 /**
  * A cop following the player rides about this many seconds behind them: further back the faster they ride, far
  * enough that a rider who crashes in front of it and runs straight back to their bike usually gets away...
@@ -126,12 +130,6 @@ const SPEED_RESPONSE = 4;
 const HURRIED_SPEED_RESPONSE = 8;
 /** A cop rides back down the road, to a crashed rider behind it, speeding up to its arrest pace at this many m/s². */
 const BACK_ACCELERATION = 4;
-/** Cops steer for the line they want this quickly (1/s)... */
-const LINE_RESPONSE = 1.5;
-/** ...at up to this many metres per second sideways; in a hurry, quicker still, as far as the bike's steering allows. */
-const LINE_CHANGE_SPEED = 4;
-const HURRIED_LINE_RESPONSE = 4;
-const HURRIED_LINE_CHANGE_SPEED = 7;
 /** A cop riding to bust a crashed rider pulls up this many metres to their side, nearer the middle of the road... */
 const PULL_UP_BESIDE = 1.2;
 /** ...slowing as it gets there to stop by them, as if braking at this rate (m/s²). */
@@ -195,20 +193,14 @@ export function bustingIntent(
 
 /** A cop fighting back swings its club about once every this many seconds. */
 export const COP_ATTACK_EVERY_SECONDS = 1;
-/** A cop fighting back rides this many metres to the side of the rider it fights... */
-const FIGHTING_GAP = 1.4;
-/** ...closing in on them along the track at this many metres per second for every metre between them... */
-const LEVEL_GAIN = 0.8;
-/** ...but no faster than this (m/s). */
-const MAX_CLOSING = 5;
 
 /**
  * Where a cop rides to fight back against the rider who hit it, who is at
- * `rider`: level with them, `FIGHTING_GAP` to their side (the side it is on,
- * unless that is off the road), within the reach of its club, and no faster
- * than it can safely go. It finds its way around the riders on the road
- * (`field`, the motions of everyone on their bikes) and the cars and
- * obstacles on it as on patrol.
+ * `rider`: level with them and to their side, within the reach of its club,
+ * as an opponent rides up to fight (`levelWith`), and no faster than it can
+ * safely go. It finds its way around the riders on the road (`field`, the
+ * motions of everyone on their bikes) and the cars and obstacles on it as on
+ * patrol.
  */
 export function fightingBackIntent(
   me: Readonly<Motion>,
@@ -218,13 +210,10 @@ export function fightingBackIntent(
   carsAndObstacles: readonly Footprint[],
 ): CopIntent {
   const edge = track.roadHalfWidth - EDGE_MARGIN;
-  const side = me.offset >= rider.offset ? 1 : -1;
-  const beside = rider.offset + side * FIGHTING_GAP;
-  const wanted = clamp(Math.abs(beside) <= edge ? beside : rider.offset - side * FIGHTING_GAP, -edge, edge);
-  const { line, holdBehind } = lineAround(me, wanted, field, carsAndObstacles, edge);
-  const closing = clamp(LEVEL_GAIN * (rider.distance - me.distance), -MAX_CLOSING, MAX_CLOSING);
+  const level = levelWith(me, rider, edge);
+  const { line, holdBehind } = lineAround(me, level.line, field, carsAndObstacles, edge);
   const safe = safeSpeedAt(track, me.distance + me.speed * BRAKING_LEAD, COP_LIMITS);
-  return { speed: clamp(Math.min(rider.speed + closing, safe, holdBehind), 0, TUNING.cops.topSpeed), line, hurrying: true };
+  return { speed: clamp(Math.min(level.speed, safe, holdBehind), 0, TUNING.cops.topSpeed), line, hurrying: true };
 }
 
 /** A cop standing by a rider it has busted: it stops where it is. */
@@ -246,11 +235,9 @@ export function moveCop(motion: Motion, intent: CopIntent, edge: number): void {
   const before = motion.speed;
   motion.speed += clamp(change, -most, most) * STEP_SECONDS;
   if (braking && Math.sign(motion.speed) !== Math.sign(before)) motion.speed = 0;
-  const [response, sideways] = intent.hurrying
-    ? [HURRIED_LINE_RESPONSE, HURRIED_LINE_CHANGE_SPEED]
-    : [LINE_RESPONSE, LINE_CHANGE_SPEED];
-  const reach = Math.min(sideways, maxSidewaysSpeed(Math.abs(motion.speed)));
-  motion.steering = clamp(response * (intent.line - motion.offset), -reach, reach);
+  // It steers for its line as an opponent does, briskly in a hurry, as far as the bike's steering allows.
+  const reach = maxSidewaysSpeed(Math.abs(motion.speed));
+  motion.steering = clamp(sidewaysTowards(intent.line, motion.offset, intent.hurrying === true), -reach, reach);
   motion.distance += motion.speed * STEP_SECONDS;
   motion.offset = clamp(motion.offset + (motion.steering + motion.shove + motion.kickShove) * STEP_SECONDS, -edge, edge);
   motion.shove *= Math.exp(-TUNING.shoveDecay * STEP_SECONDS);
