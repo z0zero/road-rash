@@ -5,6 +5,7 @@ import {
   alongsideTheFirstCop,
   apart,
   autopilot,
+  chase,
   CLOSED_ROAD,
   eventsDuring,
   eventsUntil,
@@ -396,6 +397,34 @@ describe("busting", () => {
     expect(events.at(-1)).toEqual({ type: "remounted", rider: target });
     expect(them()).toMatchObject({ status: "racing", crash: null });
     expect(apart(cop(), them())).toBeGreaterThan(2.5);
+  });
+
+  it("lets the player go who runs into a rider with the cop following at its usual gap, 1.5 s behind them, and runs straight back to their bike", () => {
+    // On a closed road, with the first cop following the player for a good while.
+    const race = startedRace(1, CLOSED_ROAD);
+    const pilot = autopilot(race);
+    const cop = () => race.snapshot().cops[0];
+    secondsUntil(race, pilot, () => player(race).distance >= cop().distance, 150);
+    const joined = race.snapshot().clock;
+    const ahead = () =>
+      race
+        .snapshot()
+        .riders.filter((rider) => rider.id !== PLAYER && rider.status === "racing" && rider.crash === null)
+        .filter((rider) => rider.distance - player(race).distance > 10 && rider.distance - player(race).distance < 60)
+        .sort((a, b) => a.distance - b.distance)[0];
+    secondsUntil(race, pilot, () => race.snapshot().clock > joined + 10 && player(race).speed > 25 && ahead() !== undefined, 60);
+    const target = ahead().id;
+    let speed = NaN;
+    let behind = NaN;
+    const runningIn = chase(race, target, 12);
+    eventsUntil(race, () => ((speed = player(race).speed), (behind = player(race).distance - cop().distance), runningIn()), (event) => event.type === "crash" && event.rider === PLAYER, 20);
+    expect(cop().busting).toBe(PLAYER);
+    expect(behind).toBeGreaterThanOrEqual(1.4 * speed);
+
+    const events = eventsUntil(race, NO_INPUT, (event) => (event.type === "remounted" || event.type === "busted") && "rider" in event && event.rider === PLAYER, 15);
+
+    expect(events.at(-1)).toEqual({ type: "remounted", rider: PLAYER });
+    expect(player(race)).toMatchObject({ status: "racing", crash: null });
   });
 
   it("lets a rider go who crashes with the cop over 60 m off and runs straight back to their bike: the cop closes in at an arrest pace", () => {
