@@ -265,10 +265,11 @@ export function createTraffic(track: Track, random: Random, player: Around, clea
   };
 
   /**
-   * A car slows to the speed of a car close ahead of it in its lane, so it
-   * never runs into it, and so does a car in the race direction for a slower
-   * rider on their bike ahead of it (`riders`); it stops short of a fallen
-   * rock in its way; otherwise it drives at its own speed.
+   * A car slows to the speed of a car close ahead of it in its lane, and in
+   * time for a much slower one further on, so it never runs into it, and so
+   * does a car in the race direction for a slower rider on their bike ahead of
+   * it (`riders`); it stops short of a fallen rock in its way; otherwise it
+   * drives at its own speed.
    */
   const keepDistance = (car: Car, riders: readonly RiderOnTheRoad[]) => {
     let wanted = car.cruise;
@@ -285,9 +286,10 @@ export function createTraffic(track: Track, random: Random, player: Around, clea
       const along = car.oncoming ? car.distance - them.distance : them.distance - car.distance;
       const ahead = along - (car.length + them.length) / 2;
       const sideBySide = Math.abs(them.offset - car.offset) < (them.width + car.width) / 2;
-      if (sideBySide && along > 0 && ahead < FOLLOWING_GAP + car.speed * FOLLOWING_SECONDS) {
-        wanted = Math.min(wanted, them.speed);
-      }
+      if (!sideBySide || along <= 0) continue;
+      if (ahead < FOLLOWING_GAP + car.speed * FOLLOWING_SECONDS) wanted = Math.min(wanted, them.speed);
+      // And it slows in time for a much slower car further on, such as one stopped short of a fallen rock.
+      wanted = Math.min(wanted, them.speed + Math.sqrt(2 * BRAKING * Math.max(0, ahead - FOLLOWING_GAP)));
     }
     car.speed += clamp(wanted - car.speed, -BRAKING * STEP_SECONDS, ACCELERATION * STEP_SECONDS);
   };
