@@ -19,6 +19,7 @@ import {
   secondsUntil,
   startedRace,
   steerOnto,
+  steerTowards,
   STEPS_PER_SECOND,
   WHOLE_RACES,
 } from "./test-helpers";
@@ -649,6 +650,36 @@ describe("cops", () => {
     expect(following).toBeGreaterThan(30);
     expect(following).toBeLessThan(45);
     expect(away).toBeGreaterThan(45);
+  });
+});
+
+describe("a cop following the player", () => {
+  it("comes up beside a player who stops dead in its lane, rather than wait behind them", () => {
+    const race = startedRace(1, CLOSED_ROAD);
+    const cop = () => race.snapshot().cops[0];
+    // The player rides past the first cop in the inner lane, its lane, and lets it follow them there for a while...
+    const pilot = autopilot(race, { lane: 1.5, targetSpeed: 30 });
+    secondsUntil(race, pilot, () => player(race).distance >= cop().distance, 150);
+    const joined = race.snapshot().clock;
+    secondsUntil(race, pilot, () => race.snapshot().clock > joined + 8, 20);
+    expect(player(race).distance - cop().distance).toBeGreaterThan(20);
+    expect(Math.abs(cop().offset - player(race).offset)).toBeLessThan(0.5);
+    // ...then stops dead in it.
+    let lastOffset = player(race).offset;
+    const stopping = (): PlayerInput => {
+      const sideways = (player(race).offset - lastOffset) * STEPS_PER_SECOND;
+      lastOffset = player(race).offset;
+      return { ...NO_INPUT, brake: 1, steer: steerTowards(race, 1.5, sideways) };
+    };
+    secondsUntil(race, stopping, () => player(race).speed === 0, 5);
+
+    const level = secondsUntil(race, stopping, () => Math.abs(cop().distance - player(race).distance) < 2, 10);
+    eventsDuring(race, 5, stopping);
+
+    expect(level).toBeLessThan(3);
+    // Beside them, not behind them, for as long as they stand there.
+    expect(Math.abs(cop().distance - player(race).distance)).toBeLessThan(2);
+    expect(Math.abs(cop().offset - player(race).offset)).toBeGreaterThan(0.8);
   });
 });
 
