@@ -504,7 +504,8 @@ export function createRace(options: RaceOptions): Race {
    * crashed rider who hasn't got away yet; or fights back against the rider
    * who hit it, riding alongside them and swinging at them when they are
    * within reach; or stands by a rider it has just busted; or else patrols
-   * near the player. Cops find their way around everyone on a bike, the
+   * near the player, pulling over while the player is down after a crash it
+   * isn't riding to. Cops find their way around everyone on a bike, the
    * riders (`field`) and each other, and the cars and obstacles on the road.
    * Returns each cop's intent, or null for a cop not riding in the race.
    */
@@ -535,7 +536,10 @@ export function createRace(options: RaceOptions): Race {
         return fightingBackIntent(cop.motion, fighting.motion, track, everyoneOnABike, carsAndObstacles);
       }
       if (cop.standingBySteps > 0) return standingByIntent(cop.motion);
-      return patrolIntent(cop.motion, player, cop.following, track, everyoneOnABike, carsAndObstacles);
+      // A cop follows the player only while they ride: while they are down, one not riding to bust them holds back,
+      // which pulls it over where it is.
+      const following = cop.following && !riders[PLAYER].crash;
+      return patrolIntent(cop.motion, player, following, track, everyoneOnABike, carsAndObstacles);
     });
   }
 

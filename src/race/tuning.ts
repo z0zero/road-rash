@@ -87,6 +87,8 @@ export const TUNING = {
     alertRange: 150,
     /** A cop rides to a rider who crashes this many metres from it or closer... */
     bustingRange: 80,
+    /** ...braking down to this arrest pace (m/s) and riding no faster all the way... */
+    arrestPace: 8,
     /** ...and busts them on getting this close to them (m) before they are back on their bike... */
     bustingReach: 2.5,
     /** ...then stands by them for this many seconds before riding on. */
