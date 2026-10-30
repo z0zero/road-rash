@@ -16,6 +16,9 @@ const BANNERS: Record<RaceOutcome, string> = { finished: "Finished", wrecked: "W
  */
 const FOCUS_RESTART_AFTER_MS = 1500;
 
+/** Restart shows its focus ring when it takes the focus, so it is clear what A or Enter will press. */
+const SHOW_FOCUS: FocusOptions & { focusVisible: boolean } = { focusVisible: true };
+
 export function ResultsScreen({
   results,
   personalBest,
@@ -37,7 +40,7 @@ export function ResultsScreen({
   const newBests = [newBestTime && "time", newBestPosition && "position"].filter(Boolean).join(" and ");
   const restart = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    const focusing = window.setTimeout(() => restart.current?.focus(), FOCUS_RESTART_AFTER_MS);
+    const focusing = window.setTimeout(() => restart.current?.focus(SHOW_FOCUS), FOCUS_RESTART_AFTER_MS);
     return () => window.clearTimeout(focusing);
   }, []);
   return (
