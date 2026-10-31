@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 /** Console errors and uncaught exceptions seen by the current test. */
 let errors: string[] = [];
@@ -161,6 +161,64 @@ for (const viewport of [
     });
   });
 }
+
+/**
+ * The size of a screen's overlay (`clientWidth`, `clientHeight`) and of all it
+ * holds (`scrollWidth`, `scrollHeight`), which is larger where the screen
+ * doesn't fit in the window and the overlay scrolls.
+ */
+function scrollSizes(screen: Locator) {
+  return screen.evaluate(({ scrollWidth, scrollHeight, clientWidth, clientHeight }) => ({
+    scrollWidth,
+    scrollHeight,
+    clientWidth,
+    clientHeight,
+  }));
+}
+
+for (const viewport of [
+  { width: 1280, height: 577 },
+  { width: 1024, height: 576 },
+  // Tall enough for the screens' full spacing, but not for Controls' with it.
+  { width: 1280, height: 700 },
+]) {
+  test.describe(`in a window ${viewport.width}x${viewport.height}`, () => {
+    test.use({ viewport });
+
+    test("fits the Controls screen in without scrolling it", async ({ page }) => {
+      await page.getByRole("button", { name: "Controls" }).click();
+
+      const controls = page.getByRole("dialog", { name: "Controls" });
+      await expect(controls.getByRole("button", { name: "Back" })).toBeFocused();
+      const { scrollHeight, clientHeight } = await scrollSizes(controls);
+      expect(scrollHeight).toBeLessThanOrEqual(clientHeight);
+    });
+  });
+}
+
+test.describe("in a window 480x800, as a browser snapped to a third of a wide screen leaves", () => {
+  test.use({ viewport: { width: 480, height: 800 } });
+
+  test("fits the Controls screen's width in, without scrolling it sideways", async ({ page }) => {
+    await page.getByRole("button", { name: "Controls" }).click();
+
+    const controls = page.getByRole("dialog", { name: "Controls" });
+    await expect(controls.getByRole("button", { name: "Back" })).toBeFocused();
+    const { scrollWidth, clientWidth } = await scrollSizes(controls);
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+  });
+
+  test("fits a race's results' width in, without scrolling them sideways", async ({ page }) => {
+    // Half a minute of racing, a frame at a time.
+    test.slow();
+    const results = await wreckedEarly(page);
+    await play(page, 1.6);
+    await expect(results.getByRole("button", { name: "Restart" })).toBeFocused();
+
+    const { scrollWidth, clientWidth } = await scrollSizes(results);
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+  });
+});
 
 test("pauses on Esc, offering resume, restart and quit to title", async ({ page }) => {
   await startRacing(page);
