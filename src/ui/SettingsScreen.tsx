@@ -19,7 +19,7 @@ export function SettingsScreen({
   onBack: () => void;
 }) {
   return (
-    <Dialog title="Settings" onBack={onBack} panelClassName="w-[min(32rem,90vw)] gap-6 px-10">
+    <Dialog title="Settings" panelClassName="w-[min(32rem,90vw)] gap-6 px-10">
       <VolumeSlider
         label="Master volume"
         volume={settings.masterVolume}

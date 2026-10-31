@@ -249,6 +249,21 @@ const HIT_EARLY = "/?seed=9";
 /** A race that a rider who just holds the throttle wrecks in the first half-minute. Any seed will do in which that is so. */
 const WRECKED_EARLY = "/?seed=17";
 
+/**
+ * Rides the race at `WRECKED_EARLY`, with `query` added to its address,
+ * holding the throttle until the results show, then lets go; returns the
+ * results.
+ */
+async function wreckedEarly(page: Page, query = "") {
+  await page.goto(WRECKED_EARLY + query);
+  await startRacing(page);
+  await page.keyboard.down("w");
+  const results = page.getByRole("dialog", { name: "Wrecked" });
+  expect(await playUntil(page, 60, () => results.isVisible())).toBe(true);
+  await page.keyboard.up("w");
+  return results;
+}
+
 /** Whether the save data says the player has ever attacked in a race, as a punch or kick thrown in one does. */
 function hasAttacked(page: Page) {
   return page.evaluate(() => Object.values(localStorage).some((saved) => /"hasAttacked":true/.test(String(saved))));
@@ -307,24 +322,29 @@ test("stops prompting the player to hit back as soon as they attack, and for goo
   await expect(prompt).toBeHidden();
 });
 
-test("goes back to the title from the results with Esc, once they can be pressed", async ({ page }) => {
+test("goes back to the title from the results with Esc once they can be pressed, though not for an Esc held from the race", async ({
+  page,
+}) => {
   // Half a minute of racing, a frame at a time.
   test.slow();
-  await page.goto(WRECKED_EARLY);
-  await startRacing(page);
-  await page.keyboard.down("w");
-  const results = page.getByRole("dialog", { name: "Wrecked" });
-  expect(await playUntil(page, 40, () => results.isVisible())).toBe(true);
-  await page.keyboard.up("w");
+  const results = await wreckedEarly(page);
 
   // Esc pressed as the race ends, to pause it say, leaves the results up...
   await page.keyboard.press("Escape");
   await play(page, 0.2);
   await expect(results).toBeVisible();
-
-  // ...and once Restart has the focus, goes back to the title.
-  await play(page, 1.4);
+  // ...and so does one pressed then and held, the keyboard repeating it, after Restart has taken the focus.
+  await page.keyboard.down("Escape");
+  for (let frame = 0; frame < 10; frame++) {
+    await page.clock.fastForward(FRAME_MS);
+    await page.keyboard.down("Escape");
+  }
   await expect(results.getByRole("button", { name: "Restart" })).toBeFocused();
+  await expect(results).toBeVisible();
+  await page.keyboard.up("Escape");
+
+  // A fresh press goes back to the title, wherever the focus is: here, off the buttons after a click on the standings.
+  await results.getByTestId("standings").click();
   await page.keyboard.press("Escape");
   await expect(results).toBeHidden();
   await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
@@ -338,19 +358,18 @@ test("shows the difficulty beside the seed on the results, with the personal bes
     (saved) => localStorage.setItem("rev-and-wreck:v2", JSON.stringify(saved)),
     { personalBests: { easy: best(200.5, 1), normal: best(185.25, 4), hard: best(190.75, 6) } },
   );
-  await page.goto(WRECKED_EARLY + "&difficulty=hard");
-  await expect(page.getByTestId("title-personal-best")).toHaveText(/^Personal best on Hard 3:10\.75 · Best position 6th$/);
-  await startRacing(page);
-  await page.keyboard.down("w");
-  const results = page.getByRole("dialog", { name: "Wrecked" });
-  expect(await playUntil(page, 60, () => results.isVisible())).toBe(true);
-  await page.keyboard.up("w");
+  const results = await wreckedEarly(page, "&difficulty=hard");
 
   await expect(results.getByTestId("race-difficulty")).toHaveText(/^Hard$/i);
   await expect(results.getByTestId("race-seed")).toHaveText(/^Race seed 17$/i);
   await expect(results.getByText("Best on Hard")).toBeVisible();
   await expect(results.getByTestId("personal-best")).toHaveText("3:10.75");
   await expect(results.getByTestId("best-position")).toHaveText("6th");
+
+  // The title screen shows it too.
+  await play(page, 1.6);
+  await results.getByRole("button", { name: "Back to title" }).click();
+  await expect(page.getByTestId("title-personal-best")).toHaveText(/^Personal best on Hard 3:10\.75 · Best position 6th$/);
 });
 
 /** Buttons of the standard gamepad mapping, named as on an Xbox controller. */
@@ -520,18 +539,13 @@ test.describe("with a gamepad", () => {
   }) => {
     // Half a minute of racing, a frame at a time.
     test.slow();
-    await page.goto(WRECKED_EARLY);
-    await startRacing(page);
-    await gamepad(page).press(GAMEPAD.rightTrigger);
-    const results = page.getByRole("dialog", { name: "Wrecked" });
-    expect(await playUntil(page, 40, () => results.isVisible())).toBe(true);
+    const results = await wreckedEarly(page);
 
     // Still steering, throttling and kicking as the race ends: the stick's push would move the focus to a button,
     // A press it and B go back to the title.
     await gamepad(page).push(-0.7, 0.7);
     await page.clock.fastForward(FRAME_MS);
     await gamepad(page).push(0, 0);
-    await gamepad(page).release(GAMEPAD.rightTrigger);
     await page.clock.fastForward(FRAME_MS);
     for (const button of [GAMEPAD.a, GAMEPAD.b]) {
       await gamepad(page).press(button);
@@ -697,6 +711,31 @@ test("opens Settings from the title screen and goes back", async ({ page }) => {
 
   await settings.getByRole("button", { name: "Back" }).click();
   await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
+});
+
+test("goes back to the title from the screens it opens with Esc, wherever the focus is", async ({ page }) => {
+  // Three screens, and a few frames each, drawn over the scene.
+  test.slow();
+  for (const name of ["Controls", "Settings", "Credits"]) {
+    await page.getByRole("button", { name, exact: true }).click();
+    const screen = page.getByRole("dialog", { name });
+    // A click on the screen's title takes the focus off its buttons.
+    await screen.getByRole("heading", { name }).click();
+
+    await page.keyboard.press("Escape");
+    await expect(screen).toBeHidden();
+    await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
+  }
+
+  // An Esc that the keyboard's layout puts on another key, such as Caps Lock made an extra Esc: the browser says
+  // which key it is, Escape, but not where it is.
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await expect(settings).toBeVisible();
+  const browser = await page.context().newCDPSession(page);
+  await browser.send("Input.dispatchKeyEvent", { type: "rawKeyDown", key: "Escape", code: "CapsLock", windowsVirtualKeyCode: 27 });
+  await browser.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "CapsLock", windowsVirtualKeyCode: 27 });
+  await expect(settings).toBeHidden();
 });
 
 test("credits the music and disclaims any tie to Road Rash, from the title screen", async ({ page }) => {
