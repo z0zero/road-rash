@@ -7,6 +7,7 @@ import {
   type PlayerInput,
   type Race,
   type RaceEvent,
+  type RaceOptions,
   type RaceResults,
   type RaceSnapshot,
   type Track,
@@ -32,8 +33,13 @@ export interface SessionState {
   readonly screen: Screen;
   /** The last race's results, while the results screen shows. */
   readonly results: RaceResults | null;
-  /** The difficulty of the race on now, or of the next one, as the title screen shows it. */
-  readonly difficulty: Difficulty;
+  /**
+   * The race on now, or last raced: its seed and difficulty, as `createRace`
+   * was given them, so the screens show what is raced, and the page's address
+   * can ask for it again (`raceAddress`). On the title screen, the difficulty
+   * is the one the next race is run at.
+   */
+  readonly raceOptions: Required<RaceOptions>;
   /** The personal best on that difficulty. */
   readonly personalBest: PersonalBest;
   /** Whether the last race set a new best time. */
@@ -42,8 +48,6 @@ export interface SessionState {
   readonly newBestPosition: boolean;
   /** The player's settings, as saved. */
   readonly settings: Settings;
-  /** The seed of the race on now, or last raced: `?seed=` in the page's address, with `&difficulty=`, plays it again. */
-  readonly seed: number;
 }
 
 /**
@@ -117,20 +121,21 @@ export class GameSession {
 
   constructor(private readonly options: SessionOptions) {
     this.saveData = loadSaveData(options.storage);
-    const seed = options.newSeed();
-    const difficulty = options.askedDifficulty ?? this.saveData.settings.difficulty;
-    this.race = createRace({ seed, difficulty });
+    const raceOptions = {
+      seed: options.newSeed(),
+      difficulty: options.askedDifficulty ?? this.saveData.settings.difficulty,
+    };
+    this.race = createRace(raceOptions);
     const snapshot = this.race.snapshot();
     this.frame = { track: this.race.track, previous: snapshot, current: snapshot, alpha: 1 };
     this.state = {
       screen: "title",
       results: null,
-      difficulty,
-      personalBest: this.saveData.personalBests[difficulty],
+      raceOptions,
+      personalBest: this.saveData.personalBests[raceOptions.difficulty],
       newBestTime: false,
       newBestPosition: false,
       settings: this.saveData.settings,
-      seed,
     };
   }
 
@@ -161,8 +166,8 @@ export class GameSession {
 
   /** Starts a new race with its countdown, from any screen. */
   startRace = () => {
-    const seed = this.loadRace();
-    this.setState({ screen: "racing", results: null, newBestTime: false, newBestPosition: false, seed });
+    const raceOptions = this.loadRace();
+    this.setState({ screen: "racing", results: null, newBestTime: false, newBestPosition: false, raceOptions });
   };
 
   restart = () => this.startRace();
@@ -181,8 +186,8 @@ export class GameSession {
   };
 
   quitToTitle = () => {
-    const seed = this.loadRace();
-    this.setState({ screen: "title", results: null, newBestTime: false, newBestPosition: false, seed });
+    const raceOptions = this.loadRace();
+    this.setState({ screen: "title", results: null, newBestTime: false, newBestPosition: false, raceOptions });
   };
 
   /** Shows one of the screens the title screen opens (Settings, Credits or Controls); only from the title screen. */
@@ -200,7 +205,10 @@ export class GameSession {
   chooseDifficulty = (difficulty: Difficulty) => {
     if (this.state.screen !== "title") return;
     this.changeSettings({ difficulty });
-    this.setState({ difficulty, personalBest: this.saveData.personalBests[difficulty] });
+    this.setState({
+      raceOptions: { ...this.state.raceOptions, difficulty },
+      personalBest: this.saveData.personalBests[difficulty],
+    });
   };
 
   /** Changes some of the player's settings and saves them. */
@@ -253,7 +261,7 @@ export class GameSession {
     const results = this.race.fastForward(0);
     this.race.drainEvents();
     this.frame.previous = this.frame.current;
-    const { difficulty } = this.state;
+    const { difficulty } = this.state.raceOptions;
     const bestBefore = this.saveData.personalBests[difficulty];
     this.saveData = recordRaceResult(this.saveData, difficulty, results);
     storeSaveData(this.options.storage, this.saveData);
@@ -289,10 +297,10 @@ export class GameSession {
     if (results.complete || settled(results) !== settled(shown)) this.setState({ results });
   }
 
-  /** Loads a new race at the difficulty chosen, ready for its countdown, and returns its seed. */
-  private loadRace(): number {
-    const seed = this.options.newSeed();
-    this.race = createRace({ seed, difficulty: this.state.difficulty });
+  /** Loads a new race at the difficulty chosen, ready for its countdown, and returns what it was created with. */
+  private loadRace(): Required<RaceOptions> {
+    const raceOptions = { seed: this.options.newSeed(), difficulty: this.state.raceOptions.difficulty };
+    this.race = createRace(raceOptions);
     const snapshot = this.race.snapshot();
     this.frame.track = this.race.track;
     this.frame.previous = snapshot;
@@ -300,7 +308,7 @@ export class GameSession {
     this.frame.alpha = 1;
     this.accumulator = 0;
     this.framesBeforeStepping = FRAMES_BEFORE_STEPPING;
-    return seed;
+    return raceOptions;
   }
 
   private setState(change: Partial<SessionState>) {

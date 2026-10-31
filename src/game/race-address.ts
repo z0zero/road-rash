@@ -1,9 +1,15 @@
-import { DEFAULT_DIFFICULTY, isDifficulty, type Difficulty } from "@/race";
+import { DEFAULT_DIFFICULTY, isDifficulty, type Difficulty, type RaceOptions } from "@/race";
 
 /**
  * The page's address can ask for a race to be raced again, as a bug report's
- * does: `?seed=1234&difficulty=hard`.
+ * does: `?seed=1234&difficulty=hard`. This module writes that address for a
+ * race and reads it back.
  */
+
+/** The query (the `?` part of an address) that asks for the race created with `raceOptions` again. */
+export function raceAddress({ seed, difficulty }: Required<RaceOptions>): string {
+  return `?${new URLSearchParams({ seed: String(seed), difficulty })}`;
+}
 
 /** What the page's address asks races to be run with: each null where it asks for nothing, or for something there isn't. */
 export interface AskedInAddress {

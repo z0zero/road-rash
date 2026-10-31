@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   PLAYER,
   QUALIFYING_POSITION,
-  type Difficulty,
+  type RaceOptions,
   type RaceOutcome,
   type RaceResults,
   type Remark,
@@ -14,7 +14,7 @@ import { Button } from "./Button";
 import { useBackKey } from "./Dialog";
 import { difficultyName, formatPosition, formatRaceTime } from "./format";
 import { PANEL, PANEL_TITLE } from "./panel";
-import { RaceSeed } from "./RaceSeed";
+import { RaceReplay } from "./RaceReplay";
 
 const BANNERS: Record<RaceOutcome, string> = { finished: "Finished", wrecked: "Wrecked", busted: "Busted" };
 
@@ -37,8 +37,7 @@ export function ResultsScreen({
   personalBest,
   newBestTime,
   newBestPosition,
-  seed,
-  difficulty,
+  raceOptions,
   onRestart,
   onTitle,
 }: {
@@ -47,10 +46,8 @@ export function ResultsScreen({
   personalBest: PersonalBest;
   newBestTime: boolean;
   newBestPosition: boolean;
-  /** The race's seed, shown for a bug report. */
-  seed: number;
-  /** The race's difficulty, shown with its seed. */
-  difficulty: Difficulty;
+  /** The race's seed and difficulty, shown for a bug report. */
+  raceOptions: Required<RaceOptions>;
   onRestart: () => void;
   onTitle: () => void;
 }) {
@@ -103,7 +100,7 @@ export function ResultsScreen({
             <dd data-testid="results-time" className="text-right font-semibold tabular-nums text-sand">
               {results.time === null ? "–" : formatRaceTime(results.time)}
             </dd>
-            <dt className="text-sand/80">Best on {difficultyName(difficulty)}</dt>
+            <dt className="text-sand/80">Best on {difficultyName(raceOptions.difficulty)}</dt>
             <dd data-testid="personal-best" className="text-right font-semibold tabular-nums text-sand">
               {personalBest.time === null ? "–" : formatRaceTime(personalBest.time)}
             </dd>
@@ -121,7 +118,7 @@ export function ResultsScreen({
             </Button>
             <Button data-back onClick={onTitle}>Back to title</Button>
           </div>
-          <RaceSeed seed={seed} difficulty={difficulty} />
+          <RaceReplay raceOptions={raceOptions} />
         </div>
         <Standings standings={results.standings} complete={results.complete} />
       </div>
