@@ -97,9 +97,9 @@ const WALKING_PACE = 2;
  * ...and riding no faster than this (m/s), it sees a car or an obstacle
  * ahead of it, in its path, as something to steer round, not as one alongside
  * it, even nose to tail with it; and it goes round a rider just in front of
- * it, in its path, on whichever side of them has room for its bike, if it can
- * get clear of them there before it reaches them, and otherwise waits behind
- * them (see `sideToPass`).
+ * it, in its path, on its side of them if there is room there for its bike,
+ * or else on their other side if it can get clear of them there before it
+ * reaches them, and otherwise waits behind them (see `sideToPass`).
  */
 const CRAWLING = 2 * WALKING_PACE;
 /** An opponent shoved sideways by a kick faster than this (m/s) rides the kick out before it steers back to its line. */
@@ -354,10 +354,10 @@ function sideToPass(me: Readonly<Motion>, other: Readonly<Motion>, ahead: number
  * of it on their side `side` (1 for their right, -1 for their left), gets
  * clear of their bike before it reaches their back, were they to stand still.
  * It rolls on at walking pace, or at its own speed if faster, and steering
- * takes it across as fast as it does at that speed, up to `LINE_CHANGE_SPEED`,
- * less the way it loses while its steering builds up from how fast it already
- * moves that way: so a bike that has set off round them keeps going round
- * them.
+ * moves it across as fast as it moves a bike at that speed, up to
+ * `LINE_CHANGE_SPEED`, less the way it loses while its steering builds up to
+ * that from how fast it already moves that way: so a bike that has set off
+ * round them keeps going round them.
  */
 function clearInTime(me: Readonly<Motion>, other: Readonly<Motion>, ahead: number, side: number): boolean {
   const rolling = Math.max(me.speed, WALKING_PACE);
