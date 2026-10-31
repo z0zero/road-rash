@@ -687,6 +687,27 @@ test.describe("with a gamepad", () => {
     await gamepad(page).push(0, 0);
   });
 
+  test("moves through a menu one way at a time, for a stick pushed or a D-pad pressed between two ways", async ({ page }) => {
+    // A few pushes and presses, each waiting for the frames that read it.
+    test.slow();
+    await expect(page.getByRole("button", { name: "Start Race" })).toBeFocused();
+    const normal = difficultyChoices(page).getByRole("radio", { name: "Normal" });
+
+    // Down and right as far: down, onto the difficulty beside Start Race, without moving it along.
+    await gamepad(page).push(0.72, 0.72);
+    await nextFrames(page);
+    await expect(normal).toBeFocused();
+    await expect(normal).toBeChecked();
+    await gamepad(page).push(0, 0);
+    await nextFrames(page);
+
+    await tap(page, GAMEPAD.up, () => expect(page.getByRole("button", { name: "Start Race" })).toBeFocused());
+    await page.evaluate((buttons) => buttons.forEach((button) => window.fakeGamepad?.press(button)), [GAMEPAD.down, GAMEPAD.right]);
+    await nextFrames(page);
+    await expect(normal).toBeFocused();
+    await expect(normal).toBeChecked();
+  });
+
   test("moves the difficulty beside Start Race with the D-pad's left and right, and races it", async ({ page }) => {
     // Nine presses, each waiting for the frames that read it, then a race's first frames.
     test.slow();
