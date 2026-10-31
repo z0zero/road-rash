@@ -173,8 +173,8 @@ export function createRace(options: RaceOptions): Race {
 export function setUpRace({ seed, difficulty = DEFAULT_DIFFICULTY }: RaceOptions, setup: TestSetup): Race {
   const random = createRandom(seed);
   const track = getCoastalTrack();
-  const tuning = DIFFICULTY_TUNING[difficulty];
-  const riders = lineUpRiders(track, random, tuning, setup.playerCondition);
+  const difficultyTuning = DIFFICULTY_TUNING[difficulty];
+  const riders = lineUpRiders(track, random, difficultyTuning, setup.playerCondition);
   const traffic: Traffic = setup.parkedCars
     ? parkedCars(setup.parkedCars)
     : setup.traffic === false
@@ -187,7 +187,7 @@ export function setUpRace({ seed, difficulty = DEFAULT_DIFFICULTY }: RaceOptions
         );
   const race: RaceState = {
     seed,
-    difficulty: tuning,
+    difficultyTuning,
     random,
     track,
     edge: track.roadHalfWidth + track.shoulderWidth,
