@@ -51,7 +51,7 @@ export const playerCrashed = (event: RaceEvent): event is Crash => isCrash(event
 export const WHOLE_RACES = { timeout: 300_000 } as const;
 
 /** Sets a race up on a closed road, with no traffic. */
-export const CLOSED_ROAD: TestSetup = { traffic: false };
+export const CLOSED_ROAD: TestSetup = { traffic: "closed" };
 
 /** Sets a race up with no cops, so that nobody is busted. */
 export const NO_COPS: TestSetup = { cops: false };

@@ -105,7 +105,7 @@ A rider on their bike running into another rider on a bike, a cop, a car or an o
 _Avoid_: Nudge, collision
 
 **Squeezing past**:
-An opponent, or a cop, held to a standstill by what is in its way with no clear way round it, as when a rider stands beside it with a roadside rock ahead, rolling on at walking pace through the nearest gap its bike fits through, out onto the shoulder if need be. Held back behind a rider who has all but stopped, it rolls on round them at walking pace too, rather than wait behind them.
+An opponent, or a cop, held to a standstill by what is in its way with no clear way round it, as when a rider stands beside it with a roadside rock ahead, rolling on at walking pace through the nearest gap its bike fits through, never across the path of a car close ahead. Boxed in like that in the path of a car coming at it, it squeezes out of the car's way. An opponent goes out onto the shoulder for it if need be, and so does a cop riding to bust someone or pulling over; a cop on patrol or fighting back squeezes past only on the road. Held back behind a rider who has all but stopped, it rolls on round them at walking pace too, rather than wait behind them.
 _Avoid_: Nudging through, forcing past
 
 **Run-in**:
@@ -125,7 +125,7 @@ A rider off their bike after a crash, once they have stopped tumbling along the 
 _Avoid_: Running, walking, dismounted
 
 **Knock-down**:
-A car driving into a rider on foot and throwing them to the ground: they tumble again, then get up and carry on back to their bike. It is not a crash, so it costs their bike nothing. Not a knock-off, which a hit does. Only a car closing in on them along its own way, at over 1 m/s, knocks them down: one standing still, or going slower than them, that they run into only pushes them clear of it, and they go round it.
+A car driving into a rider on foot and throwing them to the ground: they tumble again, then get up and carry on back to their bike. It is not a crash, so it costs their bike nothing. Not a knock-off, which a hit does. Only a car closing in on them along its own way, at over 1 m/s, with them in front of its middle, knocks them down: one standing still, or going slower than them, that they run into, or one already half past them when they touch it, only pushes them clear of it, and they go round it.
 _Avoid_: Run over, hit
 
 **Wrecked**:
@@ -185,7 +185,7 @@ One of the traffic's cars: a hatchback, saloon, van or pickup, driving in the ra
 _Avoid_: Vehicle, NPC
 
 **Closed road**:
-A road with no traffic, which a test can set a race up on, with cars parked where it puts them if it needs one in a rider's way; the game's races always run in traffic.
+A road with no traffic, which a test can set a race up on, with cars where it puts them if it needs one in a rider's way, each standing still or driving on at a steady speed; the game's races always run in traffic.
 _Avoid_: Empty road, private road
 
 **Traffic**:
