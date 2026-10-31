@@ -12,8 +12,9 @@ import type { Direction } from "./gamepad";
  */
 
 /**
- * What a gamepad can move the focus to on the game's screens: buttons and
- * sliders, not links, which open pages a gamepad can't get back from.
+ * What a gamepad can move the focus to on the game's screens: buttons,
+ * sliders and choices (radio buttons, of which only the chosen one counts),
+ * not links, which open pages a gamepad can't get back from.
  */
 const FOCUSABLE = "button:not(:disabled), input:not(:disabled)";
 
