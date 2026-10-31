@@ -158,6 +158,10 @@ _Avoid_: Queue, slot
 The 3 s (5 s on Easy, 1 s on Hard) an opponent whose hit has just landed on the player gives them before it attacks them again. On Normal it gives none to a player who is fighting it back, who has hit it in the last 5 s; on Easy and Hard it gives them one all the same, so hitting back never brings its attacks on faster.
 _Avoid_: Cooldown, grace period
 
+**Fighting back**:
+The player fighting an opponent back: having hit it in the last 5 s. Its hits on them then don't wear its patience, it attacks them even while it waits its turn or has given up on them, and on Normal it gives them no breather (see Breather, Patience, Turn). A cop fights back too: hit by a rider, it comes after them and swings its club at them, until a while after it was last hit.
+_Avoid_: Revenge, aggro
+
 **Weapon**:
 A club a rider swings instead of punching. A rider takes one with a hit thrown at its holder during the wind-up of a swing, and drops it in a crash.
 _Avoid_: Item, power-up, tool
@@ -219,10 +223,6 @@ _Avoid_: Waiting, idling
 **Cop alert**:
 The warning on the HUD, with the siren, that a cop in the race is near the player: within 150 m.
 _Avoid_: Wanted level, police alert
-
-**Fighting back**:
-A cop hit by a rider coming after them and swinging its club at them, until a while after it was last hit.
-_Avoid_: Revenge, aggro
 
 **Busted**:
 The end of a rider's race because a cop caught them after a crash: a cop within 80 m of a rider who crashes rides to them at the arrest pace, and busts them if it reaches them, once they are on their feet, before they are back on their bike.
