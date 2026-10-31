@@ -1,5 +1,6 @@
 import { NO_INPUT, type PlayerInput } from "@/race";
 import { codesOf, KEYS } from "./bindings";
+import type { Direction } from "./gamepad";
 import { Presses } from "./presses";
 
 const THROTTLE = codesOf(KEYS.throttle);
@@ -12,6 +13,22 @@ const PAUSE = codesOf(KEYS.pause);
 const BACK = codesOf(KEYS.back);
 const RIDING = new Set([...THROTTLE, ...BRAKE, ...LEFT, ...RIGHT]);
 
+/** The arrow keys, by the way each points (`KeyboardEvent.key`, so a number pad's work too, its Num Lock off). */
+const ARROW_KEYS: Readonly<Partial<Record<string, Direction>>> = {
+  ArrowUp: "up",
+  ArrowDown: "down",
+  ArrowLeft: "left",
+  ArrowRight: "right",
+};
+
+/** What the keyboard's presses do, besides the riding: pausing, and getting round the screens. */
+export interface KeyboardHandlers {
+  /** A pause key was pressed. */
+  onPause(): void;
+  /** An arrow key was pressed (see `listenToKeyboard`). */
+  onMenuMove(direction: Direction): void;
+}
+
 export interface Keyboard {
   /** The player's input for one step, from the keys held now and the attack keys pressed since the last read. */
   read(): PlayerInput;
@@ -21,21 +38,32 @@ export interface Keyboard {
 
 /**
  * Turns the keyboard into the player's input, reading the keys in `KEYS`
- * (bindings.ts), and calls `onPause` for the pause keys. A punch or kick
- * press counts once, in the next step read, however briefly the key was held.
- * Keys held with Ctrl, Cmd or Alt are left to the browser. Losing window
- * focus releases every held key.
+ * (bindings.ts), and calls `onPause` for the pause keys. The arrow keys also
+ * get round the screens, as a gamepad's D-pad does (`onMenuMove`), whatever
+ * has the focus, a slider or a choice too: up and down once a press, so that
+ * one held from the race doesn't run on through the menu that comes up, left
+ * and right as often as a held one repeats, as a slider's own do. In a race,
+ * where nothing takes the focus, they only ride. A punch or kick press counts
+ * once, in the next step read, however briefly the key was held. Keys held
+ * with Ctrl, Cmd or Alt are left to the browser. Losing window focus releases
+ * every held key.
  */
-export function listenToKeyboard(target: Window, onPause: () => void): Keyboard {
+export function listenToKeyboard(target: Window, { onPause, onMenuMove }: KeyboardHandlers): Keyboard {
   const held = new Set<string>();
   const isHeld = (codes: readonly string[]) => codes.some((code) => held.has(code));
   const presses = new Presses();
 
   const keyDown = (event: KeyboardEvent) => {
-    // Sliders and other form controls keep their own keys, such as the arrows.
-    if (event.target instanceof HTMLInputElement) return;
-    // Browser shortcuts stay the browser's: Ctrl+P prints, Cmd+D bookmarks.
+    // Browser shortcuts stay the browser's: Ctrl+P prints, Cmd+D bookmarks, Alt+← goes back.
     if (event.ctrlKey || event.metaKey || event.altKey) return;
+    const way = ARROW_KEYS[event.key];
+    if (way) {
+      // On a slider or a choice too, instead of its own arrows. (The game has no text field, whose arrows these would take.)
+      event.preventDefault();
+      if (!event.repeat || way === "left" || way === "right") onMenuMove(way);
+    }
+    // Sliders and choices keep their other keys, such as Home and End, and Space.
+    if (event.target instanceof HTMLInputElement) return;
     if (isOneOf(event, PAUSE)) {
       event.preventDefault();
       if (!event.repeat) onPause();

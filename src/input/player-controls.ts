@@ -1,6 +1,6 @@
 import { clamp } from "@/math";
 import type { PlayerInput } from "@/race";
-import { listenToGamepads } from "./gamepad";
+import { listenToGamepads, type Direction } from "./gamepad";
 import { listenToKeyboard } from "./keyboard";
 import { goBackInMenu, moveThroughMenu, pressInMenu } from "./menus";
 
@@ -21,14 +21,16 @@ export interface PlayerControls {
 /**
  * The player's controls: the keyboard and any gamepads, read together, so
  * the player can ride with either, or both at once. Esc, P and a gamepad's
- * Start call `onPause`. A gamepad also gets round the screens: its D-pad or
- * left stick moves between their buttons, A presses them and B goes back.
+ * Start call `onPause`. Both get round the screens too: the arrow keys, or a
+ * gamepad's D-pad or left stick, move between their buttons, and a gamepad's
+ * A presses them and its B goes back.
  */
 export function listenToPlayer(target: Window, onPause: () => void): PlayerControls {
-  const keyboard = listenToKeyboard(target, onPause);
+  const onMenuMove = (direction: Direction) => moveThroughMenu(target.document, direction);
+  const keyboard = listenToKeyboard(target, { onPause, onMenuMove });
   const gamepads = listenToGamepads(target, {
     onPause,
-    onMenuMove: (direction) => moveThroughMenu(target.document, direction),
+    onMenuMove,
     onMenuPress: () => pressInMenu(target.document),
     onBack: () => goBackInMenu(target.document),
   });

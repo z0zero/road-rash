@@ -1,14 +1,13 @@
 import type { Direction } from "./gamepad";
 
 /**
- * Getting round the game's screens without a mouse, as a gamepad does: up and
- * down move the focus from button to button, as Tab and Shift+Tab would; left
- * and right turn a slider in focus, or move a choice in focus along, such as
- * the difficulty, as their arrow keys would; pressing presses the button, or
- * the choice, in focus, as Enter would; and going back presses the open
- * screen's way back, as Esc would. Only the open dialog's buttons count while
- * one is open; otherwise the whole page's, as on the title screen. On a
- * choice, the arrow keys move as the D-pad does (`moveForArrowKey`).
+ * Getting round the game's screens without a mouse, as a gamepad and the
+ * arrow keys do: up and down move the focus from button to button, as Tab and
+ * Shift+Tab would; left and right turn a slider in focus, or move a choice in
+ * focus along, such as the difficulty; pressing presses the button, or the
+ * choice, in focus, as Enter would; and going back presses the open screen's
+ * way back, as Esc would. Only the open dialog's buttons count while one is
+ * open; otherwise the whole page's, as on the title screen.
  */
 
 /**
@@ -23,8 +22,9 @@ const SHOW_FOCUS: FocusOptions & { focusVisible: boolean } = { focusVisible: tru
 
 /**
  * Moves the focus to the next or previous button, coming round at the ends,
- * or turns the slider, or moves the choice, in focus. A row of choices is one
- * stop, its chosen one, as it is for Tab.
+ * or turns the slider, or moves the choice along, in focus, stopping at the
+ * ends, rather than going round as a browser's radio buttons do. A row of
+ * choices is one stop, its chosen one, as it is for Tab.
  */
 export function moveThroughMenu(document: Document, direction: Direction) {
   const focused = document.activeElement;
@@ -64,28 +64,6 @@ export function pressInMenu(document: Document) {
   else if (isChoice(focused)) {
     focused.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
   }
-}
-
-/** The arrow keys, by the way each points. */
-const ARROW_KEYS: Readonly<Partial<Record<string, Direction>>> = {
-  ArrowUp: "up",
-  ArrowDown: "down",
-  ArrowLeft: "left",
-  ArrowRight: "right",
-};
-
-/**
- * Moves through the menu for `key` (a `KeyboardEvent.key`) pressed on a
- * choice, if it is an arrow key, as the D-pad would: left and right move the
- * choice along, stopping at the ends, and up and down leave the row of
- * choices, rather than going round it as a browser's radio buttons do. Says
- * whether it was an arrow key.
- */
-export function moveForArrowKey(document: Document, key: string): boolean {
-  const direction = ARROW_KEYS[key];
-  if (direction === undefined) return false;
-  moveThroughMenu(document, direction);
-  return true;
 }
 
 /**
