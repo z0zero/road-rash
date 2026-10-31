@@ -12,12 +12,12 @@ import { decideOpponents, opponentsAttack } from "./opponents";
 import { clock, COUNTDOWN_STEPS, copsInTheRace, onTheirBikes, type RaceState } from "./race-state";
 import { createRandom } from "./random";
 import { finishCrossings, resultsOf, type RaceResults } from "./results";
-import { PLAYER, whereIs } from "./riders";
+import { PLAYER, whereIs, type Rider } from "./riders";
 import { ride, type Controls } from "./riding";
 import { snapshotOf, type RaceSnapshot } from "./snapshot";
 import { STEP_SECONDS, STEPS_PER_SECOND } from "./steps";
-import type { Track, TrackPosition } from "./track";
-import { CLOSED_ROAD, createTraffic, parkedCars, type RiderOrCopOnTheRoad, type Traffic } from "./traffic";
+import type { Track } from "./track";
+import { CLOSED_ROAD, createTraffic, testCars, type RiderOrCopOnTheRoad, type TestCar, type Traffic } from "./traffic";
 
 /** Once over the finish line, a rider lets go of the throttle and brakes to a stop. */
 const FINISHED_CONTROLS: Controls = { throttle: 0, brake: 0.7, steer: 0 };
@@ -71,14 +71,13 @@ export interface TestSetup {
    * opponent's bike starts perfect.
    */
   readonly playerCondition?: number;
-  /** Whether cars drive on the road (the default). Without them, the race runs on a closed road. */
-  readonly traffic?: boolean;
   /**
-   * Cars standing still on the road, where a test puts them, so that it can
-   * put one in a rider's way. The road is closed to every other car, and
-   * these never move.
+   * The cars on the road: the traffic, as in every race (the default); none,
+   * on a closed road; or only the `cars` a test puts on a road closed to
+   * every other car, so that it can put one in a rider's way: each stands
+   * still, or drives on at a steady speed, whatever is in its way.
    */
-  readonly parkedCars?: readonly TrackPosition[];
+  readonly traffic?: "flowing" | "closed" | { readonly cars: readonly TestCar[] };
   /** Whether cops wait along the track to join the race (the default). Without them, nobody is busted. */
   readonly cops?: boolean;
 }
@@ -165,6 +164,14 @@ function step(race: RaceState, input: PlayerInput) {
   if (race.stepsTaken === COUNTDOWN_STEPS) race.events.push({ type: "race-started" });
 }
 
+/** The cars on the road of a race with the seed `seed` and these `riders` lined up: its traffic, unless `setup` closes the road or puts a test's cars on it. */
+function trafficFor(setup: TestSetup, track: Track, seed: number, riders: readonly Rider[]): Traffic {
+  if (setup.traffic === "closed") return CLOSED_ROAD;
+  if (typeof setup.traffic === "object") return testCars(setup.traffic.cars);
+  const clearUntil = Math.max(...riders.map((rider) => rider.motion.distance)) + CLEAR_OF_THE_GRID;
+  return createTraffic(track, createRandom(seed ^ TRAFFIC_SEED), riders[PLAYER].motion, clearUntil);
+}
+
 export function createRace(options: RaceOptions): Race {
   return setUpRace(options, {});
 }
@@ -175,16 +182,7 @@ export function setUpRace({ seed, difficulty = DEFAULT_DIFFICULTY }: RaceOptions
   const track = getCoastalTrack();
   const tuning = DIFFICULTY_TUNING[difficulty];
   const riders = lineUpRiders(track, random, tuning, setup.playerCondition);
-  const traffic: Traffic = setup.parkedCars
-    ? parkedCars(setup.parkedCars)
-    : setup.traffic === false
-      ? CLOSED_ROAD
-      : createTraffic(
-          track,
-          createRandom(seed ^ TRAFFIC_SEED),
-          riders[PLAYER].motion,
-          Math.max(...riders.map((rider) => rider.motion.distance)) + CLEAR_OF_THE_GRID,
-        );
+  const traffic = trafficFor(setup, track, seed, riders);
   const race: RaceState = {
     seed,
     difficulty: tuning,
