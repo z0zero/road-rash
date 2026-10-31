@@ -15,7 +15,7 @@ export interface Settings {
   readonly reduceMotion: boolean | null;
   /** Whether the player has ever attacked in a race: until they have, the HUD shows them the hit-back prompt. */
   readonly hasAttacked: boolean;
-  /** The difficulty the player last chose on the title screen, which their races are run at. */
+  /** The difficulty the player last chose on the title screen, which their races are run at unless the page's address replays a race. */
   readonly difficulty: Difficulty;
 }
 

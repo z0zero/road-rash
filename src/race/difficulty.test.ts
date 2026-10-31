@@ -186,7 +186,7 @@ function racersTimes(race: Race, results: RaceResults) {
 }
 
 describe("the opponents' pace", () => {
-  it("is a little slower on Easy and closer to the limit on Hard: every racer finishes later on Easy, and sooner on Hard", WHOLE_RACES, () => {
+  it("is slower on Easy and closer to the limit on Hard: every racer finishes later on Easy, and sooner on Hard", WHOLE_RACES, () => {
     const [easy, normal, hard] = (["easy", "normal", "hard"] as const).map((difficulty) => {
       const race = wreckedAtTheStart(difficulty);
       return racersTimes(race, race.fastForward());
