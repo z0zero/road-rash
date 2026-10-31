@@ -1,3 +1,4 @@
+import type { Press } from "@/input/menus";
 import type { RaceOptions } from "@/race";
 import { Button } from "./Button";
 import { Dialog } from "./Dialog";
@@ -13,7 +14,7 @@ export function PauseMenu({
   /** The race's seed and difficulty. */
   raceOptions: Required<RaceOptions>;
   onResume: () => void;
-  onRestart: () => void;
+  onRestart: (press: Press) => void;
   onQuit: () => void;
 }) {
   return (

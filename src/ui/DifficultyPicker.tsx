@@ -1,5 +1,5 @@
 import { useId } from "react";
-import { moveForArrowKey } from "@/input/menus";
+import { moveForArrowKey, type Press } from "@/input/menus";
 import { DIFFICULTIES, type Difficulty } from "@/race";
 import { difficultyName } from "./format";
 import { MENU_CHOICE_LIT, MENU_CONTROL } from "./panel";
@@ -19,7 +19,7 @@ export function DifficultyPicker({
   difficulty: Difficulty;
   onChoose: (difficulty: Difficulty) => void;
   /** Starts the race, at the difficulty chosen. */
-  onStart: () => void;
+  onStart: (press: Press) => void;
 }) {
   const group = useId();
   return (
@@ -37,7 +37,7 @@ export function DifficultyPicker({
               if (moveForArrowKey(document, event.key)) event.preventDefault();
               else if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
-                onStart();
+                onStart(event);
               }
             }}
             className="peer sr-only"
