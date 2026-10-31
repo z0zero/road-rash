@@ -43,7 +43,10 @@ export function TitleScreen({
   return (
     // Centred by its margins, which give way where the window is too short even for the tighter spacing of a short
     // one: then it starts at the top and scrolls, rather than overflowing both ways out of reach.
-    <div className="absolute inset-0 flex flex-col overflow-y-auto bg-gradient-to-b from-night/75 via-dusk/35 to-transparent px-6 py-4">
+    <div
+      data-testid="title-screen"
+      className="absolute inset-0 flex flex-col overflow-y-auto bg-gradient-to-b from-night/75 via-dusk/35 to-transparent px-6 py-4"
+    >
       <div className="my-auto flex flex-col items-center gap-6 text-center short:gap-4">
         <GameTitle />
         <p className={`text-lg text-sand ${OVER_THE_SCENE}`}>Race the coastal cliff road at sunset. Don&apos;t wreck it.</p>
