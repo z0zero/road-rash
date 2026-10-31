@@ -331,7 +331,8 @@ export function lineAround(
  * in its way, or, crawling, it squeezes past it (see `squeezeThrough`); but
  * in the path of a car that holding back won't get it out of the way of, it
  * squeezes into the nearest gap between the cars and obstacles, clear of the
- * riders, that it can get to, down its middle, if there is one.
+ * riders, that it can get to, down its middle, if there is one, or else,
+ * crawling, it squeezes out of the car's path as past anything else.
  */
 function nearestClearLine(
   racingLine: number,
@@ -345,7 +346,7 @@ function nearestClearLine(
   const inside = (at: number, [from, to]: Stretch) => at > from && at < to;
   const close = unsafe.filter((room) => room.close);
   // The lines it can get to without cutting across the path of a car or an obstacle close ahead.
-  let [lowest, highest] = [-edge, edge];
+  let [lowest, highest] = [-Infinity, Infinity];
   for (const room of close) {
     const [from, to] = room.body;
     if (to <= current) lowest = Math.max(lowest, to);
@@ -356,7 +357,7 @@ function nearestClearLine(
       if (!ways.right) highest = Math.min(highest, from);
     }
   }
-  const reachable = (line: number) => line >= lowest && line <= highest;
+  const reachable = (line: number) => line >= Math.max(lowest, -edge) && line <= Math.min(highest, edge);
   const inThePath = close.some(({ body }) => inside(current, body));
   const stretches = merge([...blocked, ...unsafe.map(({ keepClear }) => keepClear)]);
   const covering = stretches.find((stretch) => inside(racingLine, stretch));
@@ -376,9 +377,8 @@ function nearestClearLine(
   const around = inThePath ? [covering, stretches.find((stretch) => inside(current, stretch))] : [covering];
   const ends = around.flatMap((stretch) => stretch ?? []).filter(reachable);
   if (ends.length > 0) return nearest(ends);
-  if (!unsafe.some(({ body, dodgeSideways }) => dodgeSideways && inside(current, body))) {
-    return squeeze ? squeezeThrough(current, squeeze) : current;
-  }
+  const squeezed = () => (squeeze ? squeezeThrough(current, squeeze, [lowest, highest]) : current);
+  if (!unsafe.some(({ body, dodgeSideways }) => dodgeSideways && inside(current, body))) return squeezed();
   // Boxed in, in the path of a car: down the middle of the nearest gap between the cars and obstacles, and clear of the riders.
   const gaps: number[] = [];
   let from = -edge;
@@ -388,7 +388,7 @@ function nearestClearLine(
   }
   if (from < edge) gaps.push((from + edge) / 2);
   const reachableGaps = gaps.filter(reachable);
-  return reachableGaps.length > 0 ? nearest(reachableGaps) : current;
+  return reachableGaps.length > 0 ? nearest(reachableGaps) : squeezed();
 }
 
 /** Where a crawling bike can squeeze through: what the riders' bikes and the cars and obstacles take up, out to `edge`. */
@@ -401,17 +401,19 @@ interface Squeeze {
  * Where a crawling bike at `current`, with no clear line, squeezes past what
  * keeps it there: on where it is, if nothing takes that up (`bodies`), or
  * else down the middle of the nearest gap between them that it fits through,
- * out to the `edge` (beyond the road's, on the shoulder); where it is, if
- * there is none.
+ * out to the `edge` (beyond the road's, on the shoulder), keeping to the lines
+ * it can get to without cutting across the path of a car close ahead
+ * (`reachable`); where it is, if there is none.
  */
-function squeezeThrough(current: number, { bodies, edge }: Squeeze): number {
+function squeezeThrough(current: number, { bodies, edge }: Squeeze, reachable: Stretch): number {
+  const [lowest, highest] = [Math.max(reachable[0], -edge), Math.min(reachable[1], edge)];
   const gaps: Stretch[] = [];
-  let from = -edge;
+  let from = lowest;
   for (const [start, end] of merge(bodies)) {
-    if (start > from) gaps.push([from, Math.min(start, edge)]);
+    if (start > from) gaps.push([from, Math.min(start, highest)]);
     from = Math.max(from, end);
   }
-  if (from < edge) gaps.push([from, edge]);
+  if (from < highest) gaps.push([from, highest]);
   const fits = gaps.filter(([start, end]) => end > start);
   if (fits.some(([start, end]) => current >= start && current <= end)) return current;
   const away = ([start, end]: Stretch) => (current < start ? start - current : current - end);
