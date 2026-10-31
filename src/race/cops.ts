@@ -146,7 +146,8 @@ function patrolIntent(
   const behind = player.distance - me.distance;
   const gap = following ? FOLLOW_SECONDS * Math.max(0, player.speed) : HOLD_BACK_GAP;
   const speed = Math.min(safe, player.speed + Math.max(-FOLLOW_MOST_EASING, FOLLOW_GAIN * (behind - gap)));
-  const { line, holdBehind, evading } = lineAround(me, PATROL_LINE, field, carsAndObstacles, edge);
+  // It squeezes past only on the road.
+  const { line, holdBehind, evading } = lineAround(me, PATROL_LINE, field, carsAndObstacles, edge, edge);
   return { speed: clamp(Math.min(speed, holdBehind), 0, TUNING.cops.topSpeed), line: lookingBehind(me, line, field, carsAndObstacles), hurrying: evading };
 }
 
@@ -226,7 +227,8 @@ function bustingIntent(
   const gap = rider.distance - me.distance;
   const pullingUp = rider.speed + Math.sign(gap) * Math.sqrt(2 * PULL_UP_BRAKING * Math.abs(gap));
   const beside = clamp(rider.offset - (rider.offset >= 0 ? 1 : -1) * PULL_UP_BESIDE, -edge, edge);
-  const { line, holdBehind } = lineAround(me, beside, field, carsAndObstacles, edge);
+  // It squeezes past out onto the shoulder if need be, as far as `edge`.
+  const { line, holdBehind } = lineAround(me, beside, field, carsAndObstacles, edge, edge);
   const speed = clamp(pullingUp, -ARREST_PACE, ARREST_PACE);
   return { speed: speed > 0 ? Math.min(speed, holdBehind) : speed, line, hurrying: true };
 }
@@ -251,7 +253,8 @@ function fightingBackIntent(
 ): CopIntent {
   const edge = track.roadHalfWidth - EDGE_MARGIN;
   const level = levelWith(me, rider, edge);
-  const { line, holdBehind } = lineAround(me, level.line, field, carsAndObstacles, edge);
+  // It squeezes past only on the road.
+  const { line, holdBehind } = lineAround(me, level.line, field, carsAndObstacles, edge, edge);
   const safe = safeSpeedAt(track, me.distance + me.speed * BRAKING_LEAD, COP_LIMITS);
   return { speed: clamp(Math.min(level.speed, safe, holdBehind), 0, TUNING.cops.topSpeed), line, hurrying: true };
 }
@@ -277,7 +280,8 @@ function pullingOverIntent(
   const side = me.offset >= 0 ? 1 : -1;
   const shoulder = side * (track.roadHalfWidth + BIKE_WIDTH);
   const onTheShoulder = Math.abs(me.offset) >= track.roadHalfWidth + BIKE_WIDTH / 2;
-  const { line, holdBehind } = lineAround(me, shoulder, field, carsAndObstacles, Math.abs(shoulder));
+  // It squeezes past out onto the shoulder if need be, as far as the line it pulls over to.
+  const { line, holdBehind } = lineAround(me, shoulder, field, carsAndObstacles, Math.abs(shoulder), Math.abs(shoulder));
   const followed = comingUpBehind(me, me.offset - BIKE_HALF_WIDTH, me.offset + BIKE_HALF_WIDTH, field, carsAndObstacles);
   return {
     speed: onTheShoulder ? 0 : Math.min(CREEP, holdBehind),

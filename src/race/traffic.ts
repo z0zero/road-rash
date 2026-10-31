@@ -122,23 +122,40 @@ export interface Traffic {
 /** A closed road: no traffic at all. */
 export const CLOSED_ROAD: Traffic = { cars: [], step() {} };
 
-/** Saloons standing still where they are put, in the race direction, on a road closed to every other car: a test's parked cars. They never move. */
-export function parkedCars(where: readonly TrackPosition[]): Traffic {
+/** A car a test puts on the road: where it is, and how it drives on. */
+export interface TestCar extends TrackPosition {
+  /** Metres per second in its own direction of travel, which it keeps whatever is in its way: 0, standing still, unless given. */
+  readonly speed?: number;
+  /** Whether it drives towards the riders, against the race direction. */
+  readonly oncoming?: boolean;
+}
+
+/**
+ * Saloons where a test puts them (`placed`), on a road closed to every other
+ * car: each stands still, or drives on at a steady speed in its own
+ * direction, keeping to its offset, whatever is in its way.
+ */
+export function testCars(placed: readonly TestCar[]): Traffic {
   const { kind, length, width } = KINDS.find((each) => each.kind === "saloon") ?? KINDS[0];
-  const cars: Car[] = where.map(({ distance, offset }, id) => ({
+  const cars: Car[] = placed.map(({ distance, offset, speed = 0, oncoming = false }, id) => ({
     id,
     kind,
-    oncoming: false,
+    oncoming,
     length,
     width,
     distance,
     offset,
-    speed: 0,
-    cruise: 0,
+    speed,
+    cruise: speed,
     lane: offset,
     laneChangeIn: Infinity,
   }));
-  return { cars, step() {} };
+  return {
+    cars,
+    step() {
+      for (const car of cars) car.distance += velocityOf(car) * STEP_SECONDS;
+    },
+  };
 }
 
 /** A car's speed along the track (m/s): negative for an oncoming car. */
