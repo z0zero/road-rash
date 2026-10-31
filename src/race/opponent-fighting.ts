@@ -127,8 +127,9 @@ export function whoseTurn<T extends { readonly motion: Readonly<Motion> }>(
 
 /**
  * The player is fighting an opponent back while they have hit it within this
- * many steps; otherwise, once an opponent's hit lands on them, it gives them
- * a breather (the difficulty's) before attacking them again.
+ * many steps. Once an opponent's hit lands on a player who isn't, it gives
+ * them a breather (the difficulty's) before attacking them again, and on some
+ * difficulties on a player who is, too.
  */
 const FIGHTING_BACK_STEPS = stepsIn(5);
 
@@ -145,18 +146,17 @@ interface HittingThePlayer {
 }
 
 /**
- * What an opponent whose hit has just landed on the player does about it:
- * nothing while they fight it back, so a brawl is a brawl; but to a player
- * who doesn't hit back it gives a breather before it attacks them again, and
- * once as many of its hits as the `difficulty` allows have landed on them
- * unanswered, it loses its patience with them and gives up on them.
+ * What an opponent whose hit has just landed on the player does about it: it
+ * gives them a breather before it attacks them again, unless they are
+ * fighting it back on a difficulty that gives no breather then, where a brawl
+ * is a brawl; and once as many of its hits as the `difficulty` allows have
+ * landed on them unanswered, it loses its patience with them and gives up on
+ * them.
  */
 export function afterHittingThePlayer(opponent: HittingThePlayer, difficulty: DifficultyTuning): void {
-  if (isFightingBack(opponent.stepsSinceThePlayerHitIt)) {
-    opponent.breatherSteps = 0;
-    return;
-  }
-  opponent.breatherSteps = stepsIn(difficulty.breatherSeconds);
+  const foughtBack = isFightingBack(opponent.stepsSinceThePlayerHitIt);
+  opponent.breatherSteps = foughtBack && !difficulty.breatherWhenFoughtBack ? 0 : stepsIn(difficulty.breatherSeconds);
+  if (foughtBack) return;
   opponent.patience.unansweredHits++;
   if (opponent.patience.unansweredHits < difficulty.unansweredHits) return;
   opponent.patience.unansweredHits = 0;
