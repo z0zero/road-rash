@@ -172,6 +172,17 @@ test("pauses on Esc, offering resume, restart and quit to title", async ({ page 
   await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
 });
 
+test("pauses and resumes with an Esc that the keyboard's layout puts on another key", async ({ page }) => {
+  await startRace(page);
+  await play(page, 0.2);
+  const menu = page.getByRole("dialog", { name: "Paused" });
+
+  await pressEscOnCapsLock(page);
+  await expect(menu).toBeVisible();
+  await pressEscOnCapsLock(page);
+  await expect(menu).toBeHidden();
+});
+
 test("shows the race's seed on the pause menu: the one the page's address asks for", async ({ page }) => {
   await page.goto("/?seed=1234");
   await startRacing(page);
@@ -876,16 +887,23 @@ test("goes back to the title from the screens it opens with Esc, wherever the fo
     await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
   }
 
-  // An Esc that the keyboard's layout puts on another key, such as Caps Lock made an extra Esc: the browser says
-  // which key it is, Escape, but not where it is.
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   const settings = page.getByRole("dialog", { name: "Settings" });
   await expect(settings).toBeVisible();
+  await pressEscOnCapsLock(page);
+  await expect(settings).toBeHidden();
+});
+
+/**
+ * Presses an Esc that the keyboard's layout puts on another key, here Caps Lock made an extra Esc: the browser says
+ * which key it is, Escape, but not where it is.
+ */
+async function pressEscOnCapsLock(page: Page) {
   const browser = await page.context().newCDPSession(page);
   await browser.send("Input.dispatchKeyEvent", { type: "rawKeyDown", key: "Escape", code: "CapsLock", windowsVirtualKeyCode: 27 });
   await browser.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "CapsLock", windowsVirtualKeyCode: 27 });
-  await expect(settings).toBeHidden();
-});
+  await browser.detach();
+}
 
 test("credits the music and disclaims any tie to Road Rash, from the title screen", async ({ page }) => {
   await page.getByRole("button", { name: "Credits" }).click();
