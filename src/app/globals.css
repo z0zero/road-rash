@@ -50,11 +50,15 @@
 }
 
 /*
- * A window too short for the screens' full spacing: a laptop at 150% scaling
- * leaves about 580 px of browser window below the tabs, address bar and
- * bookmarks.
+ * A window too short for the screens' full spacing: less than 768 px tall, as
+ * many laptops' maximized browsers are, about 650 px tall on a 1366x768
+ * screen, 700 on a 1280x800 one, and 730 or 580 on a 1920x1080 one at 125% or
+ * 150% scaling. The tighter spacing fits every screen in a window down to
+ * 1024x576. With the full spacing, the tallest screen, the results after a
+ * first finish with a new best, needs a window about 760 px tall, its panel
+ * and the overlay's padding: 768 leaves a few pixels to spare for other fonts.
  */
-@custom-variant short (@media (max-height: 640px));
+@custom-variant short (@media (max-height: 767px));
 
 html,
 body {

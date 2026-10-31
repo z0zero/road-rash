@@ -106,6 +106,31 @@ describe("getting round a rider", () => {
     expect(line).toBeGreaterThan(8.3);
   });
 
+  it("holds a bike stopped at the shoulder's edge back behind a rider stopped just in front of it, rather than make for a narrow gap beside them", () => {
+    // Stopped 8.5 m out, 2.95 m behind a rider stopped 8.3 m out, with another stopped level with them 6.4 m out: their
+    // bikes leave a gap 0.3 m wider than a bike between them, whose middle is only 0.15 m past clear of the first rider.
+    // Steering more and more gently as it nears its line there, it would run into the first rider's back before it got
+    // clear of them.
+    const me = bike(1000, 8.5, 0);
+
+    const { line, holdBehind } = lineAround(me, 4.5, [me, bike(1002.95, 8.3, 0), bike(1002.95, 6.4, 0)], [], EDGE, SHOULDER_EDGE);
+
+    // It waits behind them, on its side of them.
+    expect(holdBehind).toBeLessThanOrEqual(0);
+    expect(line).toBeGreaterThan(8.3 - 0.8);
+  });
+
+  it("holds a bike crawling up behind a rider stopped just in front of it back, though it is a hair's breadth on their side nearer the road", () => {
+    // Slowing through 2.5 m/s, 2.62 m behind a rider stopped 7.9 m out, and 2 mm nearer the road than them, as a bike
+    // held back on their other side drifts: their side nearer the road is its own, with room for its bike, but it would
+    // run into their back before it got a bike's width across.
+    const me = bike(1000, 7.898, 2.5);
+
+    const { holdBehind } = lineAround(me, 4.5, [me, bike(1002.62, 7.9, 0)], [], EDGE, SHOULDER_EDGE);
+
+    expect(holdBehind).toBeLessThanOrEqual(0);
+  });
+
   it("keeps a bike already steering round a rider stopped just in front of it going round them, rather than give up partway", () => {
     // Rolling at walking pace at the shoulder's edge, already moving across to its left as fast as steering takes a bike
     // at that speed (1.6 m/s for every m/s), with a rider stopped 2.75 m ahead and 0.2 m inside it. Not yet steering, it
@@ -141,6 +166,48 @@ describe("an obstacle close ahead", () => {
     const { line } = lineAround(me, 4.5, [me, bike(1002.9, 8.3, 0)], [rock(1003, 7)], EDGE, SHOULDER_EDGE);
 
     expect(line).toBeGreaterThanOrEqual(7 + 0.8 + 0.4);
+  });
+
+  it("gives a crawling bike behind a rider stopped on the shoulder the same line whether it rolls on at walking pace or has all but stopped, with a cop's bike standing just beyond them", () => {
+    // Crawling on the shoulder 7.9 m out, 2.9 m behind a rider stopped there, with a cop's bike standing 2 m beyond them
+    // and 1.1 m nearer the road (a bike's length and width).
+    const copsBike: Footprint = { distance: 1004.9, offset: 6.8, movingTo: 6.8, velocity: 0, halfLength: 1, halfWidth: 0.4 };
+    const rolling = bike(1000, 7.9, 2);
+    const stopping = bike(1000, 7.9, 0.3);
+
+    const atWalkingPace = lineAround(rolling, 4.5, [rolling, bike(1002.9, 7.9, 0)], [copsBike], EDGE, SHOULDER_EDGE);
+    const allButStopped = lineAround(stopping, 4.5, [stopping, bike(1002.9, 7.9, 0)], [copsBike], EDGE, SHOULDER_EDGE);
+
+    // Slowing down never changes its mind, so it never stops and starts behind them: it either rolls on round them or
+    // waits behind them.
+    expect(allButStopped.line).toBeCloseTo(atWalkingPace.line, 6);
+    expect(allButStopped.holdBehind > 0).toBe(atWalkingPace.holdBehind > 0);
+  });
+
+  it("takes a crawling bike round a rider stopped on the shoulder and across the path of a rock just beyond them, when it gets across in time", () => {
+    // Rolling at walking pace 8.3 m out, 3 m behind a rider stopped there, with a rock (0.5 m across its base each way)
+    // 2 m beyond them, 6.9 m out: 3.5 m to go before it gets to the rock, and 2.3 m to get across its path.
+    const me = bike(1000, 8.3, 2);
+    const smallRock: Footprint = { distance: 1005, offset: 6.9, movingTo: 6.9, velocity: 0, halfLength: 0.5, halfWidth: 0.5 };
+
+    const { line, holdBehind } = lineAround(me, 4.5, [me, bike(1003, 8.3, 0)], [smallRock], EDGE, SHOULDER_EDGE);
+
+    // Out of the rock's path, which reaches 6.9 - 0.5 - 0.4 m, and rolling on, rather than wait behind them.
+    expect(line).toBeLessThanOrEqual(6);
+    expect(holdBehind).toBeGreaterThan(0);
+  });
+
+  it("keeps a crawling bike already moving across the path of a rock close ahead going across, once it is too close to stop short of it", () => {
+    // Rolling at walking pace 7.05 m out, moving across to its left at 3.1 m/s, beside a rider stopped 8.3 m out and level
+    // with a rock (0.5 m across its base each way) 6 m out, whose back is 1.2 m ahead of its front: steering, which
+    // takes a tenth of a second to die away, carries it the 0.15 m into the rock's path whatever it does now.
+    const me: Motion = { ...bike(1000, 7.05, 1.94), steering: -3.09 };
+    const smallRock: Footprint = { distance: 1002.7, offset: 6, movingTo: 6, velocity: 0, halfLength: 0.5, halfWidth: 0.5 };
+
+    const { line } = lineAround(me, 4.5, [me, bike(1002.7, 8.3, 0)], [smallRock], EDGE, SHOULDER_EDGE);
+
+    // It carries on across, to beyond the rock's path, which reaches 6 - 0.5 - 0.4 m, rather than stop in it.
+    expect(line).toBeLessThanOrEqual(5.1);
   });
 });
 
