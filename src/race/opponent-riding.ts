@@ -230,7 +230,9 @@ interface Room {
  * no faster than it when it gets there; but if its line takes it clear past
  * either, it rolls on at walking pace at least. Crawling, with no clear line,
  * it squeezes past through the nearest gap its bike fits through, out to
- * `squeezeEdge`. Cops find their way around the same way.
+ * `squeezeEdge`: an opponent out onto the shoulder. Cops find their way
+ * around the same way, out to the edges they give: a cop on patrol or
+ * fighting back squeezes past only on the road.
  */
 export function lineAround(
   me: Readonly<Motion>,
@@ -238,7 +240,7 @@ export function lineAround(
   field: readonly Readonly<Motion>[],
   carsAndObstacles: readonly Footprint[],
   edge: number,
-  squeezeEdge = edge,
+  squeezeEdge: number,
 ) {
   const blocked: Stretch[] = [];
   /** The same, but no more than a bike's width from the riders: where a bike can squeeze past them. */
