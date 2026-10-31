@@ -161,9 +161,11 @@ export function startGameAudio(session: SoundSource, onLockChange: (locked: bool
   /**
    * A key press or click while the browser holds the sound back asks it again
    * to play it: now it may. If it still doesn't, it isn't waiting for one.
+   * Only the player's own count: not one the game makes, such as the Enter a
+   * gamepad's A presses a choice with, which no browser plays sound for.
    */
-  const askAgain = () => {
-    if (!heldBack()) return;
+  const askAgain = (event: Event) => {
+    if (!event.isTrusted || !heldBack()) return;
     withSound((sound) => sound.setAudible(true));
     keyCheck ??= window.setTimeout(() => {
       keyCheck = undefined;

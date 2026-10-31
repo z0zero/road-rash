@@ -170,6 +170,8 @@ function difficultyChoices(page: Page) {
 test("chooses the difficulty beside Start Race with the mouse or the arrow keys, remembers it, and shows it on the pause menu", async ({
   page,
 }) => {
+  // A reload, then a race's countdown, a frame at a time: a busy machine takes a while.
+  test.slow();
   const difficulty = difficultyChoices(page);
   await expect(difficulty.getByRole("radio", { name: "Normal" })).toBeChecked();
 
@@ -1098,6 +1100,36 @@ test.describe("sound", () => {
     await expect(notice).toBeHidden();
     await play(page, 2);
     await expect(notice).toBeHidden();
+  });
+
+  test("keeps saying that a key press or click turns the sound on through races started with the gamepad alone", async ({
+    page,
+  }) => {
+    // A race's first second, then a dozen presses, each played on for its frames to read it, and another first second.
+    test.slow();
+    await page.addInitScript(plugInAGamepad);
+    await page.addInitScript(activatedOnlyByKeysAndClicks);
+    await page.addInitScript(lockSoundUntilAKeyOrClick);
+    await page.reload();
+    await startRaceWithTheGamepad(page);
+    const notice = page.getByTestId("sound-locked");
+    await play(page, 1.2);
+    await expect(notice).toBeVisible();
+    /** Presses a gamepad button and lets go of it, playing the race on while the game reads both. */
+    const press = async (button: number) => {
+      await gamepad(page).press(button);
+      await play(page, 0.2);
+      await gamepad(page).release(button);
+      await play(page, 0.2);
+    };
+
+    // Start pauses; down twice is Quit to title; down from Start Race is the difficulty, where A starts a race.
+    for (const button of [GAMEPAD.start, GAMEPAD.down, GAMEPAD.down, GAMEPAD.a, GAMEPAD.down, GAMEPAD.a]) await press(button);
+    await expect(page.getByTestId("countdown")).toBeVisible();
+    await play(page, 1.2);
+
+    expect(await audioStates(page)).toEqual(["suspended"]);
+    await expect(notice).toBeVisible();
   });
 
   for (const [silenced, volumes] of [
