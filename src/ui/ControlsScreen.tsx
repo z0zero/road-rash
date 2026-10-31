@@ -17,7 +17,7 @@ function sayOr(controls: readonly PadControl[]): string {
 export function ControlsScreen({ onBack }: { onBack: () => void }) {
   const labels = useKeyboardLabels();
   return (
-    <Dialog title="Controls" onBack={onBack} panelClassName="w-[min(42rem,94vw)] gap-6 px-6 sm:px-10">
+    <Dialog title="Controls" panelClassName="w-[min(42rem,94vw)] gap-6 px-6 sm:px-10">
       <table className="w-full border-separate border-spacing-y-2 text-left">
         <thead>
           <tr className="font-display text-xl uppercase tracking-wider text-sunset">

@@ -1,4 +1,4 @@
-import { DEFAULT_DIFFICULTY, DIFFICULTIES, type Difficulty, type RaceResults } from "@/race";
+import { DEFAULT_DIFFICULTY, isDifficulty, type Difficulty, type RaceResults } from "@/race";
 
 /**
  * Save data: the player's settings and personal bests, kept in the browser's
@@ -136,10 +136,6 @@ function isTime(value: unknown): value is number {
 
 function isPosition(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 1;
-}
-
-function isDifficulty(value: unknown): value is Difficulty {
-  return DIFFICULTIES.some((difficulty) => difficulty === value);
 }
 
 /**

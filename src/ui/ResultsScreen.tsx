@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { codesOf, KEYS } from "@/input/bindings";
 import {
   PLAYER,
   QUALIFYING_POSITION,
-  type Difficulty,
+  type RaceOptions,
   type RaceOutcome,
   type RaceResults,
   type Remark,
@@ -12,9 +11,10 @@ import {
 import { liveryOf } from "@/renderer/liveries";
 import type { PersonalBest } from "@/save-data/save-data";
 import { Button } from "./Button";
+import { useBackKey } from "./Dialog";
 import { difficultyName, formatPosition, formatRaceTime } from "./format";
 import { PANEL, PANEL_TITLE } from "./panel";
-import { RaceSeed } from "./RaceSeed";
+import { RaceReplay } from "./RaceReplay";
 
 const BANNERS: Record<RaceOutcome, string> = { finished: "Finished", wrecked: "Wrecked", busted: "Busted" };
 
@@ -25,11 +25,9 @@ const BANNERS: Record<RaceOutcome, string> = { finished: "Finished", wrecked: "W
  * in focus and its B goes back to the title, but A is also a throttle and B
  * a kick, so a rider still pressing them as the race ends, or pushing the
  * stick that moves the focus, would otherwise leave the results before they
- * had read them. Esc goes back to the title from then on too.
+ * had read them. Esc goes back to the title from then on too, as B does.
  */
 const FOCUS_RESTART_AFTER_MS = 1500;
-
-const BACK = codesOf(KEYS.back);
 
 /** Restart shows its focus ring when it takes the focus, so it is clear what A or Enter will press. */
 const SHOW_FOCUS: FocusOptions & { focusVisible: boolean } = { focusVisible: true };
@@ -39,8 +37,7 @@ export function ResultsScreen({
   personalBest,
   newBestTime,
   newBestPosition,
-  seed,
-  difficulty,
+  raceOptions,
   onRestart,
   onTitle,
 }: {
@@ -49,10 +46,8 @@ export function ResultsScreen({
   personalBest: PersonalBest;
   newBestTime: boolean;
   newBestPosition: boolean;
-  /** The race's seed, shown for a bug report. */
-  seed: number;
-  /** The race's difficulty, shown with its seed. */
-  difficulty: Difficulty;
+  /** The race's seed and difficulty, shown for a bug report. */
+  raceOptions: Required<RaceOptions>;
   onRestart: () => void;
   onTitle: () => void;
 }) {
@@ -60,6 +55,7 @@ export function ResultsScreen({
   const restart = useRef<HTMLButtonElement>(null);
   const buttons = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
+  useBackKey();
   useEffect(() => {
     const readying = window.setTimeout(() => setReady(true), FOCUS_RESTART_AFTER_MS);
     return () => window.clearTimeout(readying);
@@ -73,9 +69,6 @@ export function ResultsScreen({
       aria-modal="true"
       aria-labelledby="results-title"
       className="absolute inset-0 flex items-center justify-center overflow-y-auto bg-night/55 p-4 backdrop-blur-[2px]"
-      onKeyDown={(event) => {
-        if (ready && BACK.includes(event.code)) onTitle();
-      }}
     >
       <div className={`flex w-[min(52rem,94vw)] flex-col gap-6 px-8 py-7 md:flex-row md:gap-10 ${PANEL}`}>
         <div className="flex flex-col items-center gap-4 md:w-72 md:shrink-0">
@@ -107,7 +100,7 @@ export function ResultsScreen({
             <dd data-testid="results-time" className="text-right font-semibold tabular-nums text-sand">
               {results.time === null ? "–" : formatRaceTime(results.time)}
             </dd>
-            <dt className="text-sand/80">Best on {difficultyName(difficulty)}</dt>
+            <dt className="text-sand/80">Best on {difficultyName(raceOptions.difficulty)}</dt>
             <dd data-testid="personal-best" className="text-right font-semibold tabular-nums text-sand">
               {personalBest.time === null ? "–" : formatRaceTime(personalBest.time)}
             </dd>
@@ -125,7 +118,7 @@ export function ResultsScreen({
             </Button>
             <Button data-back onClick={onTitle}>Back to title</Button>
           </div>
-          <RaceSeed seed={seed} difficulty={difficulty} />
+          <RaceReplay raceOptions={raceOptions} />
         </div>
         <Standings standings={results.standings} complete={results.complete} />
       </div>
