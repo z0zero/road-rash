@@ -36,13 +36,15 @@ export type SoundSource = Pick<GameSession, "getState" | "subscribe" | "onRaceEv
 /** The game's sound. */
 export interface GameAudio {
   /**
-   * Creates the audio context, or resumes it. Call it straight from a click
-   * that starts a race (Start Race, Restart): browsers only let sound start
-   * from a click or a key press. Where a gamepad pressed the button, a browser
-   * may keep the sound locked until the next key press or click. Never
-   * throws: if the browser blocks sound, the game carries on without it.
+   * Creates the audio context, or resumes it. Call it straight from the press
+   * that starts a race (Start Race, Restart), saying whether it was the
+   * player's own key press or click, which browsers let sound start from,
+   * rather than one the game made for a gamepad (see `Press`). After a
+   * gamepad's press, a browser may keep the sound locked until the next key
+   * press or click. Never throws: if the browser blocks sound, the game
+   * carries on without it.
    */
-  unlock(): void;
+  unlock(byAKeyOrClick: boolean): void;
   /** Stops everything and lets go of the browser's audio. */
   dispose(): void;
 }
@@ -177,7 +179,7 @@ export function startGameAudio(session: SoundSource, onLockChange: (locked: bool
   for (const gesture of GESTURES) window.addEventListener(gesture, askAgain, { capture: true, passive: true });
 
   return {
-    unlock() {
+    unlock(byAKeyOrClick) {
       if (broken || loading.signal.aborted) return;
       if (!sound) {
         sound = Sound.create();
@@ -199,8 +201,8 @@ export function startGameAudio(session: SoundSource, onLockChange: (locked: bool
       });
       window.clearTimeout(lockCheck);
       // Asked for from a key press or click, the sound plays now if the browser ever lets it. Asked for without
-      // one, as from a gamepad's press, it may be kept locked until one.
-      if (hasUserActivation()) setLocked(false);
+      // one, as from a gamepad's press, it may be kept locked until one, even just after one.
+      if (byAKeyOrClick) setLocked(false);
       else {
         // Still locked from the last race, it is told so again at once, unless the volumes have gone down since.
         setLocked(locked);
@@ -220,16 +222,6 @@ export function startGameAudio(session: SoundSource, onLockChange: (locked: bool
       sound = null;
     },
   };
-}
-
-/**
- * Whether the page has the player's activation, which browsers let sound
- * start from: a key press, click or tap in the last moment. A gamepad's press
- * gives it in some browsers, but not in Safari, nor in Firefox before 155.
- * Where the browser can't say, it hasn't.
- */
-function hasUserActivation(): boolean {
-  return navigator.userActivation?.isActive === true;
 }
 
 /** Whether anything would be heard at the player's volumes: not with the master volume, or both the others, at 0. */

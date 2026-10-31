@@ -3,6 +3,7 @@
 import { advance } from "@react-three/fiber";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { startGameAudio, type GameAudio } from "@/audio/game-audio";
+import type { Press } from "@/input/menus";
 import { listenToPlayer, type PlayerControls } from "@/input/player-controls";
 import { NO_INPUT } from "@/race";
 import { Scene } from "@/renderer/Scene";
@@ -60,13 +61,13 @@ export default function Game() {
     };
   }, [session]);
 
-  // The clicks that start a race start the sound too: browsers only let sound start from a click or a key press.
-  const startRace = () => {
-    audio.current?.unlock();
+  // The presses that start a race start the sound too: browsers only let sound start from a key press or click.
+  const startRace = (press: Press) => {
+    audio.current?.unlock(press.isTrusted);
     session.startRace();
   };
-  const restart = () => {
-    audio.current?.unlock();
+  const restart = (press: Press) => {
+    audio.current?.unlock(press.isTrusted);
     session.restart();
   };
   // The same function every render, so that the HUD subscribes to the race's events once.
