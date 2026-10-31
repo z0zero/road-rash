@@ -3,7 +3,9 @@ import { NO_INPUT, PLAYER, STEP_SECONDS, type PlayerInput, type Race, type RaceE
 import {
   alongsideAn,
   alongsideARacer,
+  type AttackOnThePlayer,
   type AttackThrown,
+  attacksOnThePlayer,
   autopilot,
   CLOSED_ROAD,
   eventsUntil,
@@ -12,6 +14,7 @@ import {
   player,
   secondsUntil,
   startedRace,
+  STEPS_PER_SECOND,
   WHOLE_RACES,
 } from "./test-helpers";
 
@@ -183,34 +186,10 @@ describe("opponents", () => {
   });
 });
 
-/** An attack an opponent threw at the player, or landed on them: who, and when (race clock, seconds). */
-interface AtThePlayer {
-  readonly kind: "thrown" | "landed";
-  readonly attacker: number;
-  readonly at: number;
-}
-
-/**
- * Rides `race` with `input` for `seconds` and lists the attacks opponents of
- * `temperaments` threw at the player and landed on them, and the player's
- * knock-offs (by race clock).
- */
-function attacksOnThePlayer(race: Race, input: () => PlayerInput, seconds: number, temperaments: readonly Temperament[]) {
-  const attacks: AtThePlayer[] = [];
-  const knockOffs: number[] = [];
-  for (let step = 0; step < seconds / STEP_SECONDS; step++) {
-    race.step(input());
-    const { clock, riders } = race.snapshot();
-    for (const event of race.drainEvents()) {
-      if (event.type === "crash" && event.rider === PLAYER && event.cause === "knocked-off") knockOffs.push(clock);
-      if (event.type !== "attack-thrown" && event.type !== "attack-landed") continue;
-      if (event.target?.kind !== "rider" || event.target.id !== PLAYER || event.attacker.kind !== "rider") continue;
-      const temperament = riders[event.attacker.id].temperament;
-      if (!temperament || !temperaments.includes(temperament)) continue;
-      attacks.push({ kind: event.type === "attack-thrown" ? "thrown" : "landed", attacker: event.attacker.id, at: clock });
-    }
-  }
-  return { attacks, knockOffs };
+/** The attacks on the player, of those tallied, that brawlers and bullies in `race` made. */
+function byFighters(race: Race, attacks: readonly AttackOnThePlayer[]) {
+  const { riders } = race.snapshot();
+  return attacks.filter(({ attacker }) => riders[attacker].temperament === "brawler" || riders[attacker].temperament === "bully");
 }
 
 describe("fights with the player", () => {
@@ -220,12 +199,12 @@ describe("fights with the player", () => {
     let thrown = 0;
     for (const seed of [1, 2, 3]) {
       const race = startedRace(seed, { ...CLOSED_ROAD, ...NO_COPS });
-      const { attacks } = attacksOnThePlayer(race, autopilot(race, { targetSpeed: 40, lane: 1.5 }), 60, ["brawler", "bully"]);
-      const throws = attacks.filter(({ kind }) => kind === "thrown");
+      const { attacks } = attacksOnThePlayer(race, autopilot(race, { targetSpeed: 40, lane: 1.5 }), 60);
+      const throws = byFighters(race, attacks).filter(({ kind }) => kind === "thrown");
       thrown += throws.length;
       // Two fighters' attacks at the player within 2 s of each other: they are ganging up on them.
-      throws.forEach(({ attacker, at }, index) => {
-        if (throws.slice(0, index).some((other) => other.attacker !== attacker && at - other.at < 2)) pileOns++;
+      throws.forEach(({ attacker, step }, index) => {
+        if (throws.slice(0, index).some((other) => other.attacker !== attacker && step - other.step < 2 * STEPS_PER_SECOND)) pileOns++;
       });
     }
     expect(thrown).toBeGreaterThan(10);
@@ -239,15 +218,15 @@ describe("fights with the player", () => {
     let landed = 0;
     for (const seed of [1, 2, 3]) {
       const race = startedRace(seed, { ...CLOSED_ROAD, ...NO_COPS });
-      const { attacks } = attacksOnThePlayer(race, autopilot(race, { targetSpeed: 40, lane: 1.5 }), 90, ["brawler", "bully"]);
-      const hits = attacks.filter(({ kind }) => kind === "landed");
+      const { attacks } = attacksOnThePlayer(race, autopilot(race, { targetSpeed: 40, lane: 1.5 }), 90);
+      const hits = byFighters(race, attacks).filter(({ kind }) => kind === "landed");
       landed += hits.length;
       for (const attacker of new Set(hits.map((hit) => hit.attacker))) {
         let run: number[] = [];
-        for (const { at } of hits.filter((hit) => hit.attacker === attacker)) {
-          if (run.length > 0 && at - run[run.length - 1] >= 10) run = [];
-          run.push(at);
-          if (run.length > UNANSWERED_HITS) runs.push(`seed ${seed}, rider ${attacker}: ${run.map((time) => time.toFixed(1)).join(", ")} s`);
+        for (const { step } of hits.filter((hit) => hit.attacker === attacker)) {
+          if (run.length > 0 && step - run[run.length - 1] >= 10 * STEPS_PER_SECOND) run = [];
+          run.push(step);
+          if (run.length > UNANSWERED_HITS) runs.push(`seed ${seed}, rider ${attacker}: ${run.map((at) => (at / STEPS_PER_SECOND).toFixed(1)).join(", ")} s`);
         }
       }
     }
@@ -258,19 +237,19 @@ describe("fights with the player", () => {
 
   it("give a player who doesn't hit back 3 s after each hit that lands on them, and trade blows at the full rate with one who does", () => {
     const { race, target, input } = alongsideAn("brawler");
-    const theirs = (attacks: readonly AtThePlayer[]) => attacks.filter(({ attacker }) => attacker === target);
-    const passive = theirs(attacksOnThePlayer(race, input, 30, ["brawler"]).attacks);
+    const theirs = (attacks: readonly AttackOnThePlayer[]) => attacks.filter(({ attacker }) => attacker === target);
+    const passive = theirs(attacksOnThePlayer(race, input, 30).attacks);
     const landed = passive.filter(({ kind }) => kind === "landed");
     expect(landed.length).toBeGreaterThanOrEqual(3);
     for (const hit of landed) {
-      const next = passive.find(({ kind, at }) => kind === "thrown" && at > hit.at);
-      if (next) expect(next.at - hit.at).toBeGreaterThanOrEqual(3);
+      const next = passive.find(({ kind, step }) => kind === "thrown" && step > hit.step);
+      if (next) expect(next.step - hit.step).toBeGreaterThanOrEqual(BREATHER_SECONDS * STEPS_PER_SECOND);
     }
 
     // Hitting back, the player gets no such pause: once one of their punches lands, the brawler trades blows at once.
     const punching = () => ({ ...input(), punch: true });
     eventsUntil(race, punching, (event) => event.type === "attack-landed" && event.attacker.id === PLAYER && event.target.id === target, 10);
-    const brawl = theirs(attacksOnThePlayer(race, input, BREATHER_SECONDS, ["brawler"]).attacks).filter(({ kind }) => kind === "thrown");
+    const brawl = theirs(attacksOnThePlayer(race, input, BREATHER_SECONDS).attacks).filter(({ kind }) => kind === "thrown");
     expect(brawl.length).toBeGreaterThanOrEqual(2);
   });
 
@@ -300,7 +279,7 @@ describe("fights with the player", () => {
     const knockedOff: number[] = [];
     for (const seed of [1, 2, 3, 4, 5, 6]) {
       const race = startedRace(seed);
-      knockedOff.push(...attacksOnThePlayer(race, autopilot(race, { targetSpeed: 40, lane: 1.5 }), 60, []).knockOffs);
+      knockedOff.push(...attacksOnThePlayer(race, autopilot(race, { targetSpeed: 40, lane: 1.5 }), 60).knockOffs);
     }
     expect(knockedOff).toEqual([]);
   });

@@ -10,6 +10,10 @@ A browser motorcycle combat racing game inspired by Road Rash on the SEGA Genesi
 One competition from the start line to the finish line on one track.
 _Avoid_: Match, round, stage, level
 
+**Seed**:
+The number a race is created from, with its difficulty: every random choice the race makes follows from it, from the order of the start grid to the traffic, so the same seed, difficulty and inputs give the same race. The pause and results screens show it, and the page's address can ask for it to race a race again. The track has a seed of its own, fixed in the code, so every race is run on the same road.
+_Avoid_: Race ID, race number, code
+
 **Track**:
 The stretch of road a race is run on.
 _Avoid_: Course, map, route
@@ -30,12 +34,16 @@ _Avoid_: Ranking, leaderboard, scoreboard
 Having finished a race in third position or better.
 _Avoid_: Won, passed
 
+**Personal best**:
+The player's fastest finishing time and best position on a difficulty, each from any race they finished on it, kept in the browser between visits. Each difficulty keeps its own, since times on one don't compare with times on another.
+_Avoid_: Record, high score, PB
+
 **Remark**:
 A one-line comment on how the player's race went, from an opponent or a cop, shown with the results.
 _Avoid_: Quote, quip, taunt, banter
 
 **Difficulty**:
-How hard the opponents make a race: Easy, Normal or Hard, chosen on the title screen. On Easy they ride slower, attack the player less often, give them longer breathers and lose patience sooner, and catch-up holds them nearer the player; on Hard they ride closer to the limit and fight more. On both, a player who hits back still gets their breathers. Normal is tuned as v1.0.0 was. The track, the traffic and the cops are the same on every difficulty, and each keeps its own personal best.
+How hard the opponents make a race: Easy, Normal or Hard, chosen on the title screen. On Easy they ride slower, attack the player less often, give them longer breathers and lose patience sooner, and catch-up holds them nearer the player; on Hard they ride closer to the limit and fight more. On both, a player who hits back still gets their breathers. Normal is tuned as v1.0.0 was. The track, the start grid and the rules for the traffic and the cops are the same on every difficulty, though the cars and cops then react to how the opponents ride; and each difficulty keeps its own personal best.
 _Avoid_: Level, mode, skill
 
 ### Riders
@@ -61,11 +69,11 @@ How an opponent races and fights: a *racer* concentrates on racing and rarely at
 _Avoid_: Personality, style, AI type
 
 **Skill**:
-How close to the limit an opponent rides, from 0 (the least skilled) to 1 (the most). Racers are the most skilled.
+How close to the limit an opponent rides, compared with the rest of the field, from 0 (the least skilled) to 1 (the most); the difficulty then moves the whole field nearer the limit or further from it (see Pace). Racers are the most skilled.
 _Avoid_: Level, difficulty, rating
 
 **Pace**:
-How fast an opponent rides when nothing gets in its way: a share of the fastest it could safely go at each point of the track, higher the more skilled it is. Catch-up and its intent raise or lower it a little.
+How fast an opponent rides when nothing gets in its way: a share of the fastest it could safely go at each point of the track, higher the more skilled it is and the harder the difficulty (0.89 times Normal's on Easy, 1.07 times on Hard). Catch-up and its intent raise or lower it a little.
 _Avoid_: Target speed, cruising speed
 
 **Intent**:
