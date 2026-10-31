@@ -44,14 +44,19 @@ class Digest {
   }
 }
 
+/** How the recorded races' player hits back: whenever a rider is within reach, or only now and then. */
+type HitsBack = "always" | "now and then";
+
 /**
- * The recorded race's player, scripted from the race's own snapshots alone, so
+ * The recorded races' player, scripted from the race's own snapshots alone, so
  * that the same race replays the same input: they ride the middle of the
  * race-direction lanes at up to 44 m/s, slowing for the bends ahead and
  * behind a rider in their way, and, with a rider within reach, punch every
- * two thirds of a second and kick in between.
+ * two thirds of a second and kick in between: always, or now and then, in the
+ * first 10 s of every 30 s only, letting the opponents' hits go unanswered the
+ * rest of the time.
  */
-function recordedRider(race: Race) {
+function recordedRider(race: Race, hitsBack: HitsBack) {
   let steps = 0;
   return (): PlayerInput => {
     steps++;
@@ -72,23 +77,25 @@ function recordedRider(race: Race) {
     }
     const push = -0.3 * me.speed * me.speed * race.track.sampleAt(me.distance).curvature;
     const reach = Math.max(1, Math.min(1.6 * me.speed, 8));
+    const hitting = withinReach && (hitsBack === "always" || steps % (30 * STEPS_PER_SECOND) < 10 * STEPS_PER_SECOND);
     return {
       throttle: me.speed < wanted ? 1 : 0,
       brake: me.speed > wanted + 2 ? 0.6 : 0,
       steer: Math.max(-1, Math.min(1, (2 * (1.5 - me.offset) - push) / reach)),
-      punch: withinReach && steps % 40 === 0,
-      kick: withinReach && steps % 40 === 20,
+      punch: hitting && steps % 40 === 0,
+      kick: hitting && steps % 40 === 20,
     };
   };
 }
 
 /**
- * Races `race` with the recorded rider until their race is over, then the
- * rest of the field to the finish, and returns a digest of everything it
- * handed out every ten seconds of race, and of the results.
+ * Races `race` with the recorded rider, hitting back as `hitsBack` says, until
+ * their race is over, then the rest of the field to the finish, and returns a
+ * digest of everything it handed out every ten seconds of race, and of the
+ * results.
  */
-function digestsOf(race: Race) {
-  const input = recordedRider(race);
+function digestsOf(race: Race, hitsBack: HitsBack) {
+  const input = recordedRider(race, hitsBack);
   const digests: string[] = [];
   let digest = new Digest();
   let steps = 0;
@@ -109,22 +116,37 @@ function digestsOf(race: Race) {
 }
 
 /**
- * Digests of a race recorded with v1.0.0 (seed 1, on a closed road with no
- * cops, so that nothing of the riding fixes since touches it): every ten
- * seconds of race until the player finished, 11th in 3:16.84, then the rest
- * of the field to the finish and the results.
+ * Digests of two races recorded with v1.0.0 (seed 1, on a closed road with no
+ * cops, so that nothing of the riding fixes since touches them): every ten
+ * seconds of race until the player finished, then the rest of the field to
+ * the finish and the results. Hitting back always, the player finished 11th
+ * in 3:16.84; hitting back now and then, they took 13 hits, the opponents'
+ * breathers, patience and attacks on the player deciding what came next, and
+ * finished 13th in 3:16.66.
  */
-const RECORDED_ON_V1 = [
-  "13d27736b9565c", "16bc41d081b3d7", "055fc3a36cc674", "0374600ebe28ea", "082b25d76bb991",
-  "13447577b11809", "17d27997c5c221", "12dd096a574678", "034eaf823f5369", "1f5a246e6da7a3",
-  "1b63fa3d70d453", "133c133a0d705c", "003060df7b57f9", "023120bcb2388f", "0eb557fac3cc0d",
-  "198432ee249331", "05373aee90b5a2", "06ef081e64a184", "0063fe0ba7900e", "1f30a5b66aed89",
-];
+const RECORDED_ON_V1: Record<HitsBack, readonly string[]> = {
+  always: [
+    "13d27736b9565c", "16bc41d081b3d7", "055fc3a36cc674", "0374600ebe28ea", "082b25d76bb991",
+    "13447577b11809", "17d27997c5c221", "12dd096a574678", "034eaf823f5369", "1f5a246e6da7a3",
+    "1b63fa3d70d453", "133c133a0d705c", "003060df7b57f9", "023120bcb2388f", "0eb557fac3cc0d",
+    "198432ee249331", "05373aee90b5a2", "06ef081e64a184", "0063fe0ba7900e", "1f30a5b66aed89",
+  ],
+  "now and then": [
+    "13d27736b9565c", "05c14e8350ee2c", "1bc30c2cf9ed18", "19944937cb9a12", "130d878905a552",
+    "11d5d752ee73f2", "1ca38a44f4afdb", "023eed50826989", "077a309fc978ca", "119df3cbd99563",
+    "177958a06e02a0", "09493d90ec3c2e", "05bfe33cacaa36", "04c1d587a8a571", "008cc367b563cf",
+    "07d8717a64b222", "023501885206d4", "0e2f8602f66b6e", "07a19c6bf0d0eb", "1ea2369ccaae69",
+  ],
+};
 
 describe("a race on Normal", () => {
   it("replays a race recorded with v1.0.0 byte for byte, whether Normal is asked for or left to the default", WHOLE_RACES, () => {
-    expect(digestsOf(setUpRace({ seed: 1, difficulty: "normal" }, { ...CLOSED_ROAD, ...NO_COPS }))).toEqual(RECORDED_ON_V1);
-    expect(digestsOf(setUpRace({ seed: 1 }, { ...CLOSED_ROAD, ...NO_COPS }))).toEqual(RECORDED_ON_V1);
+    expect(digestsOf(setUpRace({ seed: 1, difficulty: "normal" }, { ...CLOSED_ROAD, ...NO_COPS }), "always")).toEqual(RECORDED_ON_V1.always);
+    expect(digestsOf(setUpRace({ seed: 1 }, { ...CLOSED_ROAD, ...NO_COPS }), "always")).toEqual(RECORDED_ON_V1.always);
+  });
+
+  it("replays byte for byte a race recorded with v1.0.0 in which the player hits back only now and then, so that its breathers, patience and attacks come into play", WHOLE_RACES, () => {
+    expect(digestsOf(setUpRace({ seed: 1 }, { ...CLOSED_ROAD, ...NO_COPS }), "now and then")).toEqual(RECORDED_ON_V1["now and then"]);
   });
 
   it("is the race created when no difficulty is asked for, in traffic and with cops", () => {
