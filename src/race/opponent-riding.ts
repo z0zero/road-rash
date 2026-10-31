@@ -347,13 +347,16 @@ export function lineAround(
   const evadingAt = (offset: number) => unsafe.some(({ keepClear: [from, to] }) => offset > from && offset < to);
   /**
    * Whether, crawling, it gets across the path of a car or an obstacle it is coming up to (`room`), and that isn't
-   * coming towards it, on its way to `line`, before it gets there.
+   * coming towards it, on its way to `line`, before it gets there; or is moving across towards it too fast to stop
+   * short of its path, as its steering dies away, and so carries on across rather than stop in it.
    */
-  const getsAcross = ({ body: [from, to], gap, velocity, reachedIn }: Room, line: number) =>
-    me.speed <= CRAWLING &&
-    reachedIn > 0 &&
-    velocity >= 0 &&
-    getsThereFirst(me, line < me.offset ? from : to, line, gap, velocity, evadingAt);
+  const getsAcross = ({ body: [from, to], gap, velocity, reachedIn }: Room, line: number) => {
+    if (me.speed > CRAWLING || reachedIn === 0 || velocity < 0) return false;
+    const [near, far] = line < me.offset ? [to, from] : [from, to];
+    const movingThatWay = Math.sign(line - me.offset) * me.steering;
+    if (movingThatWay > 0 && movingThatWay / TUNING.steeringResponse >= Math.abs(near - me.offset)) return true;
+    return getsThereFirst(me, far, line, gap, velocity, evadingAt);
+  };
   /**
    * Whether its `line` takes it clear past a rider ahead of it (`other`), and, crawling, gets it clear of them before
    * it reaches their back, were they to stand still.
@@ -481,17 +484,18 @@ function heldBackTo(speed: number, clearPast: boolean): number {
  * `current`) end of the blocked stretch that does, within the road's `edge`.
  * An opponent never steers across the path of a car or an obstacle it is
  * close to and not already in the way of, unless, crawling, it gets across
- * that path before it gets there (`getsAcross`): it gets as near the racing
- * line, within the road's edge, as it can on its side of them, and beyond the
- * edge, as on the shoulder, it stays on its side of them rather than cross
- * their path to get within it. In the way of one, it gets out of its path on
- * a side it can get to before it gets there, or else the nearer side. If no
- * end is within reach, it stays where it is, to hold back behind whatever is
- * in its way, or, crawling, it squeezes past it (see `squeezePast`); but
- * in the path of a car that holding back won't get it out of the way of, it
- * squeezes into the nearest gap between the cars and obstacles, clear of the
- * riders, that it can get to, down its middle, if there is one, or else,
- * crawling, it squeezes out of the car's path as past anything else.
+ * that path before it gets there, or is already moving across too fast to
+ * stop short of it (`getsAcross`): it gets as near the racing line, within the
+ * road's edge, as it can on its side of them, and beyond the edge, as on the
+ * shoulder, it stays on its side of them rather than cross their path to get
+ * within it. In the way of one, it gets out of its path on a side it can get
+ * to before it gets there, or else the nearer side. If no end is within
+ * reach, it stays where it is, to hold back behind whatever is in its way,
+ * or, crawling, it squeezes past it (see `squeezePast`); but in the path of a
+ * car that holding back won't get it out of the way of, it squeezes into the
+ * nearest gap between the cars and obstacles, clear of the riders, that it can
+ * get to, down its middle, if there is one, or else, crawling, it squeezes out
+ * of the car's path as past anything else.
  */
 function nearestClearLine(
   racingLine: number,
