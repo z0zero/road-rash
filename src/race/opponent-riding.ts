@@ -1,4 +1,4 @@
-import type { CatchUp } from "./difficulty";
+import type { CatchUp, DifficultyTuning } from "./difficulty";
 import type { Footprint } from "./footprint";
 import { BIKE_LENGTH, BIKE_WIDTH, clamp, maxSidewaysSpeed, type Controls, type Motion } from "./riding";
 import type { Moving, Track } from "./track";
@@ -12,12 +12,16 @@ export interface OpponentRiding {
   readonly lane: number;
 }
 
-/** The least skilled opponent rides at this share of the fastest safe speed, the most skilled at the second. */
+/** On Normal, the least skilled opponent's pace is this share of the fastest safe speed, and the most skilled's the second. */
 const PACE_RANGE = [0.78, 0.93] as const;
 
-/** The share of the fastest safe speed an opponent of a skill (0 to 1) rides at. */
-export function paceFor(skill: number): number {
-  return PACE_RANGE[0] + (PACE_RANGE[1] - PACE_RANGE[0]) * clamp(skill, 0, 1);
+/**
+ * An opponent's pace, the share of the fastest safe speed it rides at, from
+ * its skill (0 to 1) and the difficulty: within `PACE_RANGE` on Normal, and
+ * that times the difficulty's `pace` on the others.
+ */
+export function paceFor(skill: number, { pace }: DifficultyTuning): number {
+  return pace * (PACE_RANGE[0] + (PACE_RANGE[1] - PACE_RANGE[0]) * clamp(skill, 0, 1));
 }
 
 /** How fast (m/s) an opponent's pace takes it where it is now on `track`, with nothing in its way. */

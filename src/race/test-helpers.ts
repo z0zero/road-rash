@@ -14,6 +14,7 @@ import {
   type PlayerInput,
   type Race,
   type RaceEvent,
+  type RaceOptions,
   type RaceSnapshot,
   type RiderId,
   type RiderSnapshot,
@@ -65,9 +66,9 @@ export function stepFor(race: Race, seconds: number, input: PlayerInput = NO_INP
   for (let i = 0; i < steps; i++) race.step(input);
 }
 
-/** A race whose countdown has just run out, set up as `setup` says. */
-export function startedRace(seed = 1, setup: TestSetup = {}) {
-  const race = setUpRace({ seed }, setup);
+/** A race whose countdown has just run out, created with `options` (a seed alone races Normal) and set up as `setup` says. */
+export function startedRace(options: RaceOptions | number = 1, setup: TestSetup = {}) {
+  const race = setUpRace(typeof options === "number" ? { seed: options } : options, setup);
   stepFor(race, 3);
   race.drainEvents();
   return race;
@@ -102,14 +103,18 @@ export function secondsUntil(
 
 /**
  * Scripted input that rides the bike along the track near `lane` (an offset
- * from the centreline) at up to `targetSpeed`, braking for the bends ahead
- * and, like any careful rider, keeping clear of the riders, cops, cars and
- * obstacles on the road: it never steers across anything it is about to
- * reach or is alongside, gets out of the way of what comes at it, and
- * follows a slower rider or car in its path until it has a clear way past.
- * It holds its line against the push of the bends.
+ * from the centreline) at up to `targetSpeed` (m/s, or what it gives for the
+ * race's snapshot each step), braking for the bends ahead and, like any
+ * careful rider, keeping clear of the riders, cops, cars and obstacles on the
+ * road: it never steers across anything it is about to reach or is
+ * alongside, gets out of the way of what comes at it, and follows a slower
+ * rider or car in its path until it has a clear way past. It holds its line
+ * against the push of the bends.
  */
-export function autopilot(race: Race, { targetSpeed = Infinity, lane = 0 } = {}) {
+export function autopilot(
+  race: Race,
+  { targetSpeed = Infinity, lane = 0 }: { targetSpeed?: number | ((snapshot: RaceSnapshot) => number); lane?: number } = {},
+) {
   let lastOffset = player(race).offset;
   return (): PlayerInput => {
     // One snapshot a step: everything below reads it.
@@ -117,7 +122,7 @@ export function autopilot(race: Race, { targetSpeed = Infinity, lane = 0 } = {})
     const me = snapshot.riders[PLAYER];
     const sideways = (me.offset - lastOffset) / STEP_SECONDS;
     lastOffset = me.offset;
-    let wanted = Math.min(targetSpeed, bendSpeed(race, me));
+    let wanted = Math.min(typeof targetSpeed === "number" ? targetSpeed : targetSpeed(snapshot), bendSpeed(race, me));
     // What it must not steer across, what it can follow until it gets past, and what ahead it may have to slow down for.
     const keepOut: KeepOut[] = [];
     const following: Stretch[] = [];
@@ -393,6 +398,34 @@ export function eventsUntil(
   return events;
 }
 
+/** An attack a rider threw at the player, or one that landed on them: who threw it, and the step it came in. */
+export interface AttackOnThePlayer {
+  readonly kind: "thrown" | "landed";
+  readonly attacker: RiderId;
+  /** Counted from the first step ridden, 1. */
+  readonly step: number;
+}
+
+/**
+ * Rides `race` with `input` for `seconds` and lists the attacks riders threw
+ * at the player and landed on them, and the steps the player was knocked off
+ * in, counting steps from 1.
+ */
+export function attacksOnThePlayer(race: Race, input: () => PlayerInput, seconds: number) {
+  const attacks: AttackOnThePlayer[] = [];
+  const knockOffs: number[] = [];
+  for (let step = 1; step <= Math.round(seconds * STEPS_PER_SECOND); step++) {
+    race.step(input());
+    for (const event of race.drainEvents()) {
+      if (event.type === "crash" && event.rider === PLAYER && event.cause === "knocked-off") knockOffs.push(step);
+      if (event.type !== "attack-thrown" && event.type !== "attack-landed") continue;
+      if (event.attacker.kind !== "rider" || event.target?.kind !== "rider" || event.target.id !== PLAYER) continue;
+      attacks.push({ kind: event.type === "attack-thrown" ? "thrown" : "landed", attacker: event.attacker.id, step });
+    }
+  }
+  return { attacks, knockOffs };
+}
+
 /** The opponent of a temperament (any, if not given) who lines up nearest the player. */
 export function nearestOpponent(race: Race, temperament?: Temperament): RiderId {
   return race
@@ -411,13 +444,14 @@ export function alongsideARacer(seed = 1, setup: TestSetup = {}) {
 }
 
 /**
- * A started race in which the player has ridden up alongside the opponent of
- * a temperament who lined up nearest them: that opponent is the nearest rider
- * within reach. The race is on a closed road, so that no car comes between
- * them, and set up as `setup` says besides.
+ * A started race, created with `options` (a seed alone races Normal), in
+ * which the player has ridden up alongside the opponent of a temperament who
+ * lined up nearest them: that opponent is the nearest rider within reach. The
+ * race is on a closed road, so that no car comes between them, and set up as
+ * `setup` says besides.
  */
-export function alongsideAn(temperament: Temperament, seed = 1, setup: TestSetup = {}) {
-  const race = startedRace(seed, { ...CLOSED_ROAD, ...setup });
+export function alongsideAn(temperament: Temperament, options: RaceOptions | number = 1, setup: TestSetup = {}) {
+  const race = startedRace(options, { ...CLOSED_ROAD, ...setup });
   const target = nearestOpponent(race, temperament);
   const input = rideAlongside(race, target);
   const racerNearest = () => {

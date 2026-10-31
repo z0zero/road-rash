@@ -1,8 +1,9 @@
 /**
  * How hard the opponents make a race: Easy for a first race, Normal, tuned as
  * v1.0.0 was, and Hard for players who have qualified on Normal. A
- * difficulty changes only how the opponents ride and fight; the track, the
- * traffic and the cops are the same on every one.
+ * difficulty changes only how the opponents ride and fight: the track, the
+ * start grid and the rules for the traffic and the cops are the same on every
+ * one, though the cars and cops then react to how the opponents ride.
  */
 export type Difficulty = "easy" | "normal" | "hard";
 
@@ -29,7 +30,7 @@ export interface CatchUp {
 
 /** How the opponents ride and fight on a difficulty. */
 export interface DifficultyTuning {
-  /** Every opponent's pace, as a share of its pace on Normal: how close to the limit it rides. */
+  /** Every opponent's pace on this difficulty, as a share of its pace on Normal (see `paceFor`). */
   readonly pace: number;
   /** How often opponents attack the player when they are within reach and free to, as a share of how often on Normal. */
   readonly attacks: number;
@@ -56,7 +57,7 @@ export interface DifficultyTuning {
  * were tuned with the play-tests' bots over 24 seeds: on Easy a novice
  * (riding at 75% of a safe pace) finishes mid-field and is seldom alone, and
  * an average rider (85%) usually qualifies; on Hard an expert qualifies now
- * and then.
+ * and then, and one who hits back does at least as well as one who doesn't.
  */
 export const DIFFICULTY_TUNING: Readonly<Record<Difficulty, DifficultyTuning>> = {
   easy: {

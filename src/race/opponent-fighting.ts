@@ -149,16 +149,16 @@ interface HittingThePlayer {
  * What an opponent whose hit has just landed on the player does about it: it
  * gives them a breather before it attacks them again, unless they are
  * fighting it back on a difficulty that gives no breather then, where a brawl
- * is a brawl; and once as many of its hits as the `difficulty` allows have
- * landed on them unanswered, it loses its patience with them and gives up on
- * them.
+ * is a brawl; and once as many of its hits as the difficulty allows
+ * (`difficultyTuning`) have landed on them unanswered, it loses its patience
+ * with them and gives up on them.
  */
-export function afterHittingThePlayer(opponent: HittingThePlayer, difficulty: DifficultyTuning): void {
+export function afterHittingThePlayer(opponent: HittingThePlayer, difficultyTuning: DifficultyTuning): void {
   const foughtBack = isFightingBack(opponent.stepsSinceThePlayerHitIt);
-  opponent.breatherSteps = foughtBack && !difficulty.breatherWhenFoughtBack ? 0 : stepsIn(difficulty.breatherSeconds);
+  opponent.breatherSteps = foughtBack && !difficultyTuning.breatherWhenFoughtBack ? 0 : stepsIn(difficultyTuning.breatherSeconds);
   if (foughtBack) return;
   opponent.patience.unansweredHits++;
-  if (opponent.patience.unansweredHits < difficulty.unansweredHits) return;
+  if (opponent.patience.unansweredHits < difficultyTuning.unansweredHits) return;
   opponent.patience.unansweredHits = 0;
   opponent.patience.steps = 0;
   opponent.patience.gaveUp = true;
@@ -186,16 +186,17 @@ const KICKS = 0.3;
  * Whether an opponent of a temperament attacks this step, and with what,
  * when the nearest rider within its reach is the player (`atThePlayer`) or
  * another opponent, and whether that rider is winding up a club swing
- * (`intoASwing`). The `difficulty` says how often it attacks the player.
+ * (`intoASwing`). The difficulty (`difficultyTuning`) says how often it
+ * attacks the player.
  */
 export function opponentAttack(
   temperament: Temperament,
   atThePlayer: boolean,
   intoASwing: boolean,
-  difficulty: DifficultyTuning,
+  difficultyTuning: DifficultyTuning,
   random: Random,
 ): AttackKind | null {
-  const rate = ATTACKS_PER_SECOND[temperament] * (atThePlayer ? difficulty.attacks : AT_EACH_OTHER) * (intoASwing ? INTO_A_SWING : 1);
+  const rate = ATTACKS_PER_SECOND[temperament] * (atThePlayer ? difficultyTuning.attacks : AT_EACH_OTHER) * (intoASwing ? INTO_A_SWING : 1);
   if (!random.chance(rate * STEP_SECONDS)) return null;
   return random.chance(KICKS) ? "kick" : "punch";
 }

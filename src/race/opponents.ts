@@ -84,7 +84,7 @@ export function decideOpponents(
   const player = riders[PLAYER];
   // Catch-up keeps the field near the player, so it stops once the player's race is over.
   const catchUp = (rider: Rider) =>
-    player.status === "racing" ? catchUpFor(rider.motion.distance - whereIs(player).distance, race.difficulty.catchUp) : 1;
+    player.status === "racing" ? catchUpFor(rider.motion.distance - whereIs(player).distance, race.difficultyTuning.catchUp) : 1;
   const playerToFight = player.status === "racing" && !player.crash ? player.motion : null;
   for (const rider of riders) {
     rider.stepsSinceThePlayerHitIt++;
@@ -136,10 +136,10 @@ export function opponentsAttack(race: RaceState, riding: readonly Rider[], waiti
     // The player gets a breather after each of its hits (one fighting it back only on some difficulties), and a
     // player who doesn't fight it back is spared by those waiting their turn and those that have given up on them.
     const fightingBack = isFightingBack(opponent.stepsSinceThePlayerHitIt);
-    const breather = opponent.breatherSteps > 0 && (race.difficulty.breatherWhenFoughtBack || !fightingBack);
+    const breather = opponent.breatherSteps > 0 && (race.difficultyTuning.breatherWhenFoughtBack || !fightingBack);
     const spared = breather || (!fightingBack && (waiting.has(opponent) || opponent.patience.gaveUp));
     if (isPlayer(nearest) && spared) continue;
-    const kind = opponentAttack(opponent.temperament, isPlayer(nearest), isMidSwing(nearest.attack), race.difficulty, race.random);
+    const kind = opponentAttack(opponent.temperament, isPlayer(nearest), isMidSwing(nearest.attack), race.difficultyTuning, race.random);
     // A club reaches further than a kick: a club holder swings at a rider its kick can't reach.
     if (kind) throwAttack(race, opponent, kind === "kick" && !withinReach(opponent.motion, nearest.motion, kind) ? "punch" : kind);
   }
