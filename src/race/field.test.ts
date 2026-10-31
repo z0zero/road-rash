@@ -300,7 +300,7 @@ describe("the opponents", () => {
     // while the player stands beside it.
     const { obstacles, startDistance } = setUpRace({ seed: 8 }, CLOSED_ROAD).track;
     const sign = obstacles.find(({ kind, offset, distance }) => kind === "sign" && offset > 6.5 && distance > startDistance + 800);
-    const { race, them } = pinnedBehindASign({ parkedCars: [{ distance: sign?.distance ?? NaN, offset: 7.8 }] });
+    const { race, them } = pinnedBehindASign({ traffic: { cars: [{ distance: sign?.distance ?? NaN, offset: 7.8 }] } });
     stepFor(race, 1, { ...NO_INPUT, brake: 1 });
     // The player rolls on, out of the racer's reach, and stops dead in the outer lane, in the racer's way back onto the road.
     let lastOffset = player(race).offset;
