@@ -181,12 +181,12 @@ test("shows the race's seed on the pause menu: the one the page's address asks f
   await expect(page.getByRole("dialog", { name: "Paused" }).getByTestId("race-seed")).toHaveText(/^Race seed 1234$/i);
 });
 
-/** The difficulty beside Start Race on the title screen: its choices are radios, named after their difficulty. */
+/** The difficulty under Start Race on the title screen: its choices are radios, named after their difficulty. */
 function difficultyChoices(page: Page) {
   return page.getByRole("group", { name: "Difficulty" });
 }
 
-test("chooses the difficulty beside Start Race with the mouse or the arrow keys, remembers it, and shows it on the pause menu", async ({
+test("chooses the difficulty under Start Race with the mouse or the arrow keys, remembers it, and shows it on the pause menu", async ({
   page,
 }) => {
   // A reload, then a race's countdown, a frame at a time: a busy machine takes a while.
@@ -234,7 +234,7 @@ test("moves the difficulty with the arrow keys as the D-pad does, stopping at th
 });
 
 for (const key of ["Enter", "Space"]) {
-  test(`starts the race with ${key} on the difficulty beside Start Race`, async ({ page }) => {
+  test(`starts the race with ${key} on the difficulty under Start Race`, async ({ page }) => {
     await expect(page.getByRole("button", { name: "Start Race" })).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(difficultyChoices(page).getByRole("radio", { name: "Normal" })).toBeFocused();
@@ -680,7 +680,7 @@ test.describe("with a gamepad", () => {
     test.slow();
     await expect(page.getByRole("button", { name: "Start Race" })).toBeFocused();
 
-    // The difficulty beside Start Race comes first.
+    // The difficulty under Start Race comes first.
     await tap(page, GAMEPAD.down, () => expect(difficultyChoices(page).getByRole("radio", { name: "Normal" })).toBeFocused());
     await tap(page, GAMEPAD.down, () => expect(page.getByRole("button", { name: "Controls" })).toBeFocused());
     await gamepad(page).push(0, 1);
@@ -765,7 +765,7 @@ test.describe("with a gamepad", () => {
   test("moves through a menu once for a stick wavering at the edge of a push", async ({ page }) => {
     await expect(page.getByRole("button", { name: "Start Race" })).toBeFocused();
 
-    // Down from Start Race is the difficulty beside it.
+    // Down from Start Race is the difficulty under it.
     const difficulty = difficultyChoices(page).getByRole("radio", { name: "Normal" });
     await gamepad(page).push(0, 0.7);
     await expect(difficulty).toBeFocused();
@@ -784,7 +784,7 @@ test.describe("with a gamepad", () => {
     await expect(page.getByRole("button", { name: "Start Race" })).toBeFocused();
     const normal = difficultyChoices(page).getByRole("radio", { name: "Normal" });
 
-    // Down and right as far: down, onto the difficulty beside Start Race, without moving it along.
+    // Down and right as far: down, onto the difficulty under Start Race, without moving it along.
     await gamepad(page).push(0.72, 0.72);
     await nextFrames(page);
     await expect(normal).toBeFocused();
@@ -799,7 +799,7 @@ test.describe("with a gamepad", () => {
     await expect(normal).toBeChecked();
   });
 
-  test("moves the difficulty beside Start Race with the D-pad's left and right, and A on it starts a race shown at it", async ({
+  test("moves the difficulty under Start Race with the D-pad's left and right, and A on it starts a race shown at it", async ({
     page,
   }) => {
     // Nine presses, each waiting for the frames that read it, then a race's first frames.
