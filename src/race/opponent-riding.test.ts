@@ -108,8 +108,8 @@ describe("getting round a rider", () => {
 
   it("keeps a bike already steering round a rider stopped just in front of it going round them, rather than give up partway", () => {
     // Rolling at walking pace at the shoulder's edge, already moving across to its left as fast as steering takes a bike
-    // at that speed (1.6 m/s for every m/s), with a rider stopped 2.75 m ahead and 0.2 m inside it. From a standstill it
-    // couldn't get round them from there, while its steering built up; moving across already, it gets clear of them.
+    // at that speed (1.6 m/s for every m/s), with a rider stopped 2.75 m ahead and 0.2 m inside it. Not yet steering, it
+    // would run into them while its steering built up; moving across already, it gets clear of them.
     const me: Motion = { ...bike(1000, 8.5, 2), steering: -3.2 };
 
     const { line, holdBehind } = lineAround(me, 1.5, [me, bike(1002.75, 8.3, 0)], [], EDGE, SHOULDER_EDGE);
