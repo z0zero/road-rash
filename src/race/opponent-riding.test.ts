@@ -17,6 +17,18 @@ function saloon(distance: number, offset: number, velocity: number): Footprint {
 const EDGE = 6 - 0.8;
 const SHOULDER_EDGE = 6 + 3 - 0.4;
 
+describe("getting round a rider", () => {
+  it("keeps a crawling bike to its own side of a rider stopped just in front of it, rather than cut across behind them", () => {
+    // Crawling at walking pace, with a rider stopped 2.5 m ahead and half a metre to its right, its racing line beyond them.
+    const me = bike(1000, 1, 2);
+
+    const { line } = lineAround(me, 3.5, [me, bike(1002.5, 1.5, 0)], [], EDGE, SHOULDER_EDGE);
+
+    // It would run into their back before it got clear of them on the right: it goes by on the left, clear of their bike.
+    expect(line).toBeLessThanOrEqual(1.5 - 0.8);
+  });
+});
+
 describe("squeezing past", () => {
   it("never takes a crawling bike across the path of a car close ahead coming towards it", () => {
     // Crawling in the inner race lane, with a rider stopped just in front of it and another beside it on its right,

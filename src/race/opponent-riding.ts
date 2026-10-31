@@ -251,9 +251,7 @@ export function lineAround(
     if (other === me) continue;
     const ahead = other.distance - me.distance;
     const closing = Math.max(0, me.speed - other.speed);
-    // Crawling up to a rider in its path, it is behind them, however close, not alongside them.
-    const inFront = me.speed <= CRAWLING && ahead > 0 && Math.abs(other.offset - me.offset) < BIKE_WIDTH;
-    if (Math.abs(ahead) < ALONGSIDE && !inFront) {
+    if (Math.abs(ahead) < ALONGSIDE) {
       const onTheRight = other.offset > me.offset || (other.offset === me.offset && ahead > 0);
       const beyond = (room: number): Stretch => (onTheRight ? [other.offset - room, Infinity] : [-Infinity, other.offset + room]);
       blocked.push(beyond(PASSING_CLEARANCE));
