@@ -130,6 +130,25 @@ for (const viewport of [
       await expect(page.getByRole("heading", { name: "Rev & Wreck" })).toBeInViewport({ ratio: 1 });
       await expect(page.getByTestId("title-personal-best")).toBeInViewport({ ratio: 1 });
     });
+
+    test("fits the Controls screen in, from its title to Back", async ({ page }) => {
+      await page.getByRole("button", { name: "Controls" }).click();
+
+      const controls = page.getByRole("dialog", { name: "Controls" });
+      await expect(controls.getByRole("heading", { name: "Controls" })).toBeInViewport({ ratio: 1 });
+      await expect(controls.getByRole("button", { name: "Back" })).toBeInViewport({ ratio: 1 });
+    });
+
+    test("fits a race's results in, from the banner to the race's seed", async ({ page }) => {
+      // Half a minute of racing, a frame at a time.
+      test.slow();
+      const results = await wreckedEarly(page);
+      await play(page, 1.6);
+      await expect(results.getByRole("button", { name: "Restart" })).toBeFocused();
+
+      // The panel, frame and all, with the banner at its top and the race's seed at the foot of its buttons.
+      await expect(results.locator(":scope > div")).toBeInViewport({ ratio: 1 });
+    });
   });
 }
 
