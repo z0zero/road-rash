@@ -96,7 +96,9 @@ const WALKING_PACE = 2;
 /**
  * ...and riding no faster than this (m/s), it sees a car or an obstacle
  * ahead of it, in its path, as something to steer round, not as one alongside
- * it, even nose to tail with it.
+ * it, even nose to tail with it; and it goes round a rider just in front of
+ * it, in its path, on whichever side of them has room for its bike (see
+ * `sideToPass`).
  */
 const CRAWLING = 2 * WALKING_PACE;
 /** An opponent shoved sideways by a kick faster than this (m/s) rides the kick out before it steers back to its line. */
