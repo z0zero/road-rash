@@ -1,7 +1,9 @@
 import { KEYS, RIDING_KEYS, type Key } from "@/input/bindings";
+import type { Difficulty } from "@/race";
 import type { PersonalBest } from "@/save-data/save-data";
 import { Button } from "./Button";
-import { formatPosition, formatRaceTime } from "./format";
+import { DifficultyPicker } from "./DifficultyPicker";
+import { difficultyName, formatPosition, formatRaceTime } from "./format";
 import { nameOn, useKeyboardLabels } from "./key-names";
 
 /**
@@ -11,13 +13,19 @@ import { nameOn, useKeyboardLabels } from "./key-names";
 const OVER_THE_SCENE = "rounded-full bg-night/55 px-4 py-1 drop-shadow";
 
 export function TitleScreen({
+  difficulty,
   personalBest,
+  onChooseDifficulty,
   onStart,
   onControls,
   onSettings,
   onCredits,
 }: {
+  /** The difficulty the next race is run at. */
+  difficulty: Difficulty;
+  /** The personal best on that difficulty. */
   personalBest: PersonalBest;
+  onChooseDifficulty: (difficulty: Difficulty) => void;
   onStart: () => void;
   onControls: () => void;
   onSettings: () => void;
@@ -39,6 +47,7 @@ export function TitleScreen({
         <Button autoFocus onClick={onStart}>
           Start Race
         </Button>
+        <DifficultyPicker difficulty={difficulty} onChoose={onChooseDifficulty} />
         <Button onClick={onControls}>Controls</Button>
         <Button onClick={onSettings}>Settings</Button>
         <Button onClick={onCredits}>Credits</Button>
@@ -48,8 +57,8 @@ export function TitleScreen({
         {namesOf(KEYS.kick)} to kick &middot; {namesOf(KEYS.pause)} to pause
       </p>
       {personalBest.time !== null && (
-        <p className="text-sm text-sun drop-shadow">
-          Personal best {formatRaceTime(personalBest.time)}
+        <p data-testid="title-personal-best" className="text-sm text-sun drop-shadow">
+          Personal best on {difficultyName(difficulty)} {formatRaceTime(personalBest.time)}
           {personalBest.position !== null && <> &middot; Best position {formatPosition(personalBest.position)}</>}
         </p>
       )}
