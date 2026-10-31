@@ -36,7 +36,7 @@ export function listenToKeyboard(target: Window, onPause: () => void): Keyboard 
     if (event.target instanceof HTMLInputElement) return;
     // Browser shortcuts stay the browser's: Ctrl+P prints, Cmd+D bookmarks.
     if (event.ctrlKey || event.metaKey || event.altKey) return;
-    if (PAUSE.includes(event.code)) {
+    if (isOneOf(event, PAUSE)) {
       event.preventDefault();
       if (!event.repeat) onPause();
     } else if (PUNCH.includes(event.code) || KICK.includes(event.code)) {
@@ -81,11 +81,19 @@ export function listenToKeyboard(target: Window, onPause: () => void): Keyboard 
 }
 
 /**
- * Whether a key press is a press of Back, in menus: one of its keys in `KEYS`,
- * by its place, or Esc wherever the keyboard's layout has put it, such as on
- * Caps Lock made an extra Esc. A held key's repeats are not presses, so an Esc
- * held from the race doesn't go back from the results once they can be pressed.
+ * Whether a key press is a press of Back, in menus: one of its keys in `KEYS`
+ * (see `isOneOf`). A held key's repeats are not presses, so an Esc held from
+ * the race doesn't go back from the results once they can be pressed.
  */
 export function isBackPress(event: KeyboardEvent): boolean {
-  return !event.repeat && (BACK.includes(event.code) || event.key === "Escape");
+  return !event.repeat && isOneOf(event, BACK);
+}
+
+/**
+ * Whether a key press is of one of the keys with `codes`: by its place, or,
+ * where Esc is one of them, Esc wherever the keyboard's layout has put it,
+ * such as on Caps Lock made an extra Esc.
+ */
+function isOneOf(event: KeyboardEvent, codes: readonly string[]): boolean {
+  return codes.includes(event.code) || (event.key === "Escape" && codes.includes("Escape"));
 }
