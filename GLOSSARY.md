@@ -69,7 +69,7 @@ How an opponent races and fights: a *racer* concentrates on racing and rarely at
 _Avoid_: Personality, style, AI type
 
 **Skill**:
-How close to the limit an opponent rides, compared with the rest of the field, from 0 (the least skilled) to 1 (the most); the difficulty then moves the whole field nearer the limit or further from it (see Pace). Racers are the most skilled.
+How close to the limit an opponent rides, compared with the rest of the field, from 0 (the least skilled) to 1 (the most); the difficulty then moves the whole field nearer the limit or further from it (see Pace). Racers are, on the whole, the most skilled, and bullies the least.
 _Avoid_: Level, difficulty, rating
 
 **Pace**:
