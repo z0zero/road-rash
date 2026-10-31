@@ -5,6 +5,7 @@ import { copsInTheRace, onTheirBikes, type RaceState } from "./race-state";
 import type { Rider } from "./riders";
 import { BIKE_LENGTH, BIKE_WIDTH, clamp, type Motion } from "./riding";
 import { STEP_SECONDS } from "./steps";
+import type { TrackPosition } from "./track";
 import { TUNING } from "./tuning";
 
 /** A bike reaches this many metres ahead of and behind its middle... */
@@ -13,6 +14,18 @@ const BIKE_HALF_LENGTH = BIKE_LENGTH / 2;
 const BIKE_HALF_WIDTH = BIKE_WIDTH / 2;
 /** A rider on foot takes up about this many metres, along the track and across it. */
 const BODY_SIZE = 0.6;
+
+/** Half the size of what touches a car or an obstacle: metres from its middle to its front and back, and to its sides. */
+interface HalfSize {
+  readonly halfLength: number;
+  readonly halfWidth: number;
+}
+
+/** A bike... */
+const A_BIKE: HalfSize = { halfLength: BIKE_HALF_LENGTH, halfWidth: BIKE_HALF_WIDTH };
+/** ...and a rider on foot. */
+const ON_FOOT: HalfSize = { halfLength: BODY_SIZE / 2, halfWidth: BODY_SIZE / 2 };
+
 /** A rider who runs into a car or an obstacle is thrown sideways off it at least this fast (m/s), so they land beside it, not on it. */
 const THROWN_SIDEWAYS = 3;
 /**
@@ -97,7 +110,7 @@ function settleImpacts<T extends { readonly motion: Motion }>(
   const impacts: Impact<T>[] = [];
   for (const rider of riders) {
     for (const footprint of footprints) {
-      const contact = contactWith(rider.motion, footprint);
+      const contact = contactWith(rider.motion, A_BIKE, footprint);
       if (!contact) continue;
       const speedDifference = Math.abs(rider.motion.speed - footprint.velocity);
       if (speedDifference >= TUNING.bumpSpeedLimit && canCrash(rider)) {
@@ -110,9 +123,9 @@ function settleImpacts<T extends { readonly motion: Motion }>(
   return impacts;
 }
 
-/** How a bike overlaps a footprint, or null if it doesn't. */
+/** How a bike, or a rider on foot, overlaps a footprint, or null if they don't. */
 interface Contact {
-  /** Metres from the bike to the footprint along the track, and across it. */
+  /** Metres from them to the footprint along the track, and across it. */
   readonly along: number;
   readonly across: number;
   /** Metres they overlap by along the track, and across it. */
@@ -120,20 +133,34 @@ interface Contact {
   readonly overlapAcross: number;
 }
 
-function contactWith(bike: Motion, footprint: Footprint): Contact | null {
-  const along = footprint.distance - bike.distance;
-  const across = footprint.offset - bike.offset;
-  const overlapAlong = footprint.halfLength + BIKE_HALF_LENGTH - Math.abs(along);
-  const overlapAcross = footprint.halfWidth + BIKE_HALF_WIDTH - Math.abs(across);
+/** How what is at `where`, of half the size `size` (a bike, or a rider on foot), overlaps a footprint; null if it doesn't. */
+function contactWith(where: TrackPosition, size: HalfSize, footprint: Footprint): Contact | null {
+  const along = footprint.distance - where.distance;
+  const across = footprint.offset - where.offset;
+  const overlapAlong = footprint.halfLength + size.halfLength - Math.abs(along);
+  const overlapAcross = footprint.halfWidth + size.halfWidth - Math.abs(across);
   return overlapAlong > 0 && overlapAcross > 0 ? { along, across, overlapAlong, overlapAcross } : null;
 }
 
-function bumpOff(bike: Motion, footprint: Footprint, { along, across, overlapAlong, overlapAcross }: Contact, edge: number) {
-  // Which way the bike is pushed: away from what it touched, to the right when dead behind it; but the other way if a
-  // bike has no room to pass it on that side, between it and the edge.
-  const away = across !== 0 ? -Math.sign(across) : 1;
-  const room = (side: number) => edge - side * footprint.offset - footprint.halfWidth >= BIKE_WIDTH;
-  const side = room(away) || !room(-away) ? away : -away;
+/** Which side of a footprint something at `offset` is on: 1 for its right, as when level with it, and -1 for its left. */
+function sideOf(footprint: Footprint, offset: number): number {
+  return Math.sign(offset - footprint.offset) || 1;
+}
+
+/**
+ * Which side of a footprint something `width` metres wide at `offset` is
+ * pushed off it to: the side it is on, but the other if there is no room for
+ * it on that side, between the footprint and `edge`, and there is on the other.
+ */
+function sideToPass(footprint: Footprint, offset: number, width: number, edge: number): number {
+  const room = (side: number) => edge - side * footprint.offset - footprint.halfWidth >= width;
+  const away = sideOf(footprint, offset);
+  return room(away) || !room(-away) ? away : -away;
+}
+
+function bumpOff(bike: Motion, footprint: Footprint, { along, overlapAlong, overlapAcross }: Contact, edge: number) {
+  // Away from what it touched, unless a bike has no room to pass it on that side.
+  const side = sideToPass(footprint, bike.offset, BIKE_WIDTH, edge);
   if (overlapAcross <= overlapAlong) {
     bike.offset = clamp(footprint.offset + side * (footprint.halfWidth + BIKE_HALF_WIDTH), -edge, edge);
   } else if (along > 0) {
@@ -164,8 +191,7 @@ function throwClearOf(footprint: Footprint, isACar: boolean, bike: Motion, body:
   bike.shove = 0;
   bike.kickShove = 0;
   bike.offset = clamp(bike.offset, -edge, edge);
-  const away = Math.sign(body.offset - footprint.offset) || 1;
-  body.sideways = away * Math.max(Math.abs(body.sideways), THROWN_SIDEWAYS);
+  body.sideways = sideOf(footprint, body.offset) * Math.max(Math.abs(body.sideways), THROWN_SIDEWAYS);
   if (along > 0 && (velocity > 0 || (isACar && velocity === 0))) {
     body.distance = Math.min(body.distance, footprint.distance - footprint.halfLength - BODY_SIZE / 2 - 0.05);
     body.speed = Math.min(body.speed, velocity);
@@ -174,21 +200,13 @@ function throwClearOf(footprint: Footprint, isACar: boolean, bike: Motion, body:
   }
 }
 
-/** Whether a car (by its footprint) and a rider on foot at `body` touch. */
-function touching(car: Footprint, body: Readonly<Body>): boolean {
-  return (
-    Math.abs(car.distance - body.distance) < car.halfLength + BODY_SIZE / 2 &&
-    Math.abs(car.offset - body.offset) < car.halfWidth + BODY_SIZE / 2
-  );
-}
-
 /**
- * How fast (m/s) a car (by its footprint) drives into a rider on foot at
- * `body`: its own speed, less however fast they get away from it its way. A
- * car standing still drives into nobody, and nor does one going slower than
- * them that they run into.
+ * How fast (m/s) a car (by its footprint) closes in on a rider on foot at
+ * `body` along its own way: its own speed, less however fast they get away
+ * from it its way. A car standing still closes in on nobody, and nor does one
+ * going slower than them that they run into.
  */
-function drivingInto(car: Footprint, body: Readonly<Body>): number {
+function closingSpeed(car: Footprint, body: Readonly<Body>): number {
   return Math.abs(car.velocity) - Math.max(0, Math.sign(car.velocity) * body.speed);
 }
 
@@ -199,21 +217,17 @@ function inFrontOf(car: Footprint, body: Readonly<Body>): boolean {
 
 /**
  * Pushes a rider on foot at `body` clear of a car (by its footprint) that
- * isn't driving into them: out the shorter way, off its side, or off its end,
- * where they step round it at a run, to the side of it they are on, or to the
- * other if there is no room on theirs before `edge`.
+ * isn't driving into them, which they touch as `contact` says: out the
+ * shorter way, off its side, or off its end, where they step round it at a
+ * run, to the side of it they are on, or to the other if there is no room on
+ * theirs before `edge`.
  */
-function pushClearOf(car: Footprint, body: Body, edge: number) {
-  const along = body.distance - car.distance;
-  const across = body.offset - car.offset;
-  const [reachAlong, reachAcross] = [car.halfLength + BODY_SIZE / 2, car.halfWidth + BODY_SIZE / 2];
-  const away = Math.sign(across) || 1;
-  const room = (side: number) => edge - side * car.offset - reachAcross >= BODY_SIZE / 2;
-  const side = room(away) || !room(-away) ? away : -away;
-  if (reachAcross - Math.abs(across) <= reachAlong - Math.abs(along)) {
-    body.offset = clamp(car.offset + side * reachAcross, -edge, edge);
+function pushClearOf(car: Footprint, body: Body, { overlapAlong, overlapAcross }: Contact, edge: number) {
+  const side = sideToPass(car, body.offset, BODY_SIZE, edge);
+  if (overlapAcross <= overlapAlong) {
+    body.offset = clamp(car.offset + side * (car.halfWidth + ON_FOOT.halfWidth), -edge, edge);
   } else {
-    body.distance = car.distance + (Math.sign(along) || 1) * reachAlong;
+    body.distance = car.distance + (Math.sign(body.distance - car.distance) || 1) * (car.halfLength + ON_FOOT.halfLength);
     body.offset = clamp(body.offset + side * TUNING.runSpeed * STEP_SECONDS, -edge, edge);
   }
 }
@@ -225,8 +239,7 @@ function pushClearOf(car: Footprint, body: Body, edge: number) {
  */
 function knockDownBy(car: Footprint, crash: Crash): number {
   const impactSpeed = Math.abs(car.velocity - crash.body.speed);
-  const away = Math.sign(crash.body.offset - car.offset) || 1;
-  knockDown(crash, car.velocity, away * THROWN_SIDEWAYS);
+  knockDown(crash, car.velocity, sideOf(car, crash.body.offset) * THROWN_SIDEWAYS);
   return impactSpeed;
 }
 
@@ -303,12 +316,13 @@ export function knockDownRidersOnFoot(race: RaceState, cars: readonly Footprint[
     if (rider.status !== "racing" || rider.crash?.phase !== "on-foot") continue;
     const { crash } = rider;
     for (const car of cars) {
-      if (!touching(car, crash.body)) continue;
-      if (inFrontOf(car, crash.body) && drivingInto(car, crash.body) > DRIVING_INTO) {
+      const contact = contactWith(crash.body, ON_FOOT, car);
+      if (!contact) continue;
+      if (inFrontOf(car, crash.body) && closingSpeed(car, crash.body) > DRIVING_INTO) {
         race.events.push({ type: "knocked-down", rider: rider.id, impactSpeed: knockDownBy(car, crash) });
         break;
       }
-      pushClearOf(car, crash.body, race.edge);
+      pushClearOf(car, crash.body, contact, race.edge);
     }
   }
 }
