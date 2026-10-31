@@ -11,7 +11,7 @@ let errors: string[] = [];
  * as on CI, can take a third of a second to draw a frame.
  */
 const PAGE_OPENS = new Date("2026-06-01T18:00:00Z");
-/** Where the clock stops when a test starts a race: any time after the page has loaded. */
+/** Where the clock stops when a test starts a race: any time after the title screen is up. */
 const RACE_STARTS = new Date("2026-06-01T19:00:00Z");
 /**
  * How far each frame of play moves the clock on, in milliseconds: few frames,
@@ -39,9 +39,19 @@ test("shows the title screen with a Start Race button", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
 });
 
+/**
+ * Stops the page's clock at `at`, once the title screen is up. The game comes
+ * up after the page has loaded, on the page's timers, so a clock stopped any
+ * sooner, as on a slow machine, holds the title screen back for good.
+ */
+async function stopTheClockOnTheTitle(page: Page, at = RACE_STARTS) {
+  await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible({ timeout: 15_000 });
+  await page.clock.pauseAt(at);
+}
+
 /** Stops the page's clock and starts a race, which then moves only as the test plays it on. */
 async function startRace(page: Page) {
-  await page.clock.pauseAt(RACE_STARTS);
+  await stopTheClockOnTheTitle(page);
   await page.getByRole("button", { name: "Start Race" }).click();
 }
 
@@ -479,7 +489,7 @@ test("stops prompting the player to hit back as soon as they attack, and for goo
   // The same race again after a reload: the same hit lands, and this time nothing prompts the player.
   await page.clock.resume();
   await page.reload();
-  await page.clock.pauseAt(new Date(RACE_STARTS.getTime() + 60 * 60 * 1000));
+  await stopTheClockOnTheTitle(page, new Date(RACE_STARTS.getTime() + 60 * 60 * 1000));
   await page.getByRole("button", { name: "Start Race" }).click();
   await play(page, 3.6);
   await page.keyboard.down("w");
@@ -1173,7 +1183,7 @@ test.describe("sound", () => {
     await page.addInitScript(activatedOnlyByKeysAndClicks);
     await page.addInitScript(soundStartsOnlyInAKeyPressOrClick);
     await page.reload();
-    await page.clock.pauseAt(RACE_STARTS);
+    await stopTheClockOnTheTitle(page);
 
     // The click gives the page the player's activation for a few seconds, but the browser starts no sound for the
     // gamepad's A that then starts the race from the difficulty.
