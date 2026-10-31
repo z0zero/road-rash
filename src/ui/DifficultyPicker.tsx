@@ -2,6 +2,7 @@ import { useId } from "react";
 import { moveForArrowKey } from "@/input/menus";
 import { DIFFICULTIES, type Difficulty } from "@/race";
 import { difficultyName } from "./format";
+import { MENU_CHOICE_LIT, MENU_CONTROL } from "./panel";
 
 /**
  * The difficulty the player's races are run at, as three choices in a row,
@@ -22,7 +23,7 @@ export function DifficultyPicker({
 }) {
   const group = useId();
   return (
-    <fieldset className="flex min-w-56 gap-1 rounded-md border-2 border-sun/70 bg-dusk/80 p-1 shadow-lg">
+    <fieldset className={`flex gap-1 p-1 ${MENU_CONTROL}`}>
       <legend className="sr-only">Difficulty</legend>
       {DIFFICULTIES.map((choice) => (
         <label key={choice} className="flex-1">
@@ -41,7 +42,10 @@ export function DifficultyPicker({
             }}
             className="peer sr-only"
           />
-          <span className="block cursor-pointer rounded px-3 py-1 text-center font-display text-lg uppercase tracking-wider text-sand/75 transition hover:text-sand peer-checked:bg-sunset peer-checked:text-night peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-sun">
+          {/* The chosen one dark, its name in the sun's colour, underlined; lit only while the row has the focus. */}
+          <span
+            className={`block cursor-pointer rounded px-3 py-1 text-center font-display text-lg uppercase tracking-wider text-sand/75 decoration-2 underline-offset-4 transition hover:text-sand peer-checked:bg-night/80 peer-checked:text-sun peer-checked:underline ${MENU_CHOICE_LIT}`}
+          >
             {difficultyName(choice)}
           </span>
         </label>
