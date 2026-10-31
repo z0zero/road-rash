@@ -35,7 +35,7 @@ A one-line comment on how the player's race went, from an opponent or a cop, sho
 _Avoid_: Quote, quip, taunt, banter
 
 **Difficulty**:
-How hard the opponents make a race: Easy, Normal or Hard, chosen on the title screen. On Easy they ride slower, attack the player less often, give them longer breathers and lose patience sooner, and catch-up holds them nearer the player; on Hard they ride closer to the limit and fight more. On both, a player who hits back still gets their breathers. Normal is tuned as v1.0.0 was. The track, the traffic and the cops are the same on every difficulty, and each keeps its own personal best.
+How hard the opponents make a race: Easy, Normal or Hard, chosen on the title screen. On Easy they ride slower, attack the player less often, give them longer breathers and lose patience sooner, and catch-up holds them nearer the player; on Hard they ride closer to the limit and fight more. On both, a player who hits back still gets their breathers. Normal is tuned as v1.0.0 was. The track, the start grid and the rules for the traffic and the cops are the same on every difficulty, though the cars and cops then react to how the opponents ride; and each difficulty keeps its own personal best.
 _Avoid_: Level, mode, skill
 
 ### Riders

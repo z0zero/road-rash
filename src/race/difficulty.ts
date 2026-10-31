@@ -1,8 +1,9 @@
 /**
  * How hard the opponents make a race: Easy for a first race, Normal, tuned as
  * v1.0.0 was, and Hard for players who have qualified on Normal. A
- * difficulty changes only how the opponents ride and fight; the track, the
- * traffic and the cops are the same on every one.
+ * difficulty changes only how the opponents ride and fight: the track, the
+ * start grid and the rules for the traffic and the cops are the same on every
+ * one, though the cars and cops then react to how the opponents ride.
  */
 export type Difficulty = "easy" | "normal" | "hard";
 
