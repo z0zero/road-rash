@@ -97,8 +97,9 @@ const WALKING_PACE = 2;
  * ...and riding no faster than this (m/s), it sees a car or an obstacle
  * ahead of it, in its path, as something to steer round, not as one alongside
  * it, even nose to tail with it; and it goes round a rider just in front of
- * it, in its path, on whichever side of them has room for its bike (see
- * `sideToPass`).
+ * it, in its path, on whichever side of them has room for its bike, if it can
+ * get clear of them there before it reaches them, and otherwise waits behind
+ * them (see `sideToPass`).
  */
 const CRAWLING = 2 * WALKING_PACE;
 /** An opponent shoved sideways by a kick faster than this (m/s) rides the kick out before it steers back to its line. */
@@ -230,9 +231,10 @@ interface Room {
  * up to, block the lines close to theirs, and a rider or car alongside blocks
  * everything beyond them, so an opponent never steers across one; though,
  * crawling up to a rider just in front of it with no room for its bike on its
- * side of them, it goes round them on their other side (see `sideToPass`). A car
- * changing lanes blocks the lines from where it is to the lane it is moving
- * over to, and an opponent looks further ahead for the cars coming towards it.
+ * side of them, it goes round them on their other side if it can get clear of
+ * them there before it reaches them (see `sideToPass`). A car changing lanes
+ * blocks the lines from where it is to the lane it is moving over to, and an
+ * opponent looks further ahead for the cars coming towards it.
  * When a rider it is about to reach is in the way, it holds back to their
  * speed; a slower car or an obstacle in the way, it slows for in time to ride
  * no faster than it when it gets there; but if its line takes it clear past
@@ -331,14 +333,34 @@ export function lineAround(
  * as in a bump the one in front gives way to the right. But crawling up to a
  * rider just in front of it, within a bike's width of its line, it goes by
  * them on their other side if there is no room for its bike on its own,
- * between them and `squeezeEdge`, and there is on the other: it rolls round
- * them rather than wait behind them for as long as they stand there.
+ * between them and `squeezeEdge`, and there is on the other, and it can get
+ * clear of them on that side before it reaches them (`clearInTime`): it rolls
+ * round them rather than wait behind them for as long as they stand there.
+ * Too close to them to get round, it keeps to its side and waits.
  */
 function sideToPass(me: Readonly<Motion>, other: Readonly<Motion>, ahead: number, squeezeEdge: number): number {
   const away = Math.sign(me.offset - other.offset) || (ahead > 0 ? -1 : 1);
   const inItsPath = me.speed <= CRAWLING && ahead > 0 && Math.abs(other.offset - me.offset) < BIKE_WIDTH;
   const room = (side: number) => squeezeEdge - side * other.offset > BIKE_WIDTH;
-  return !inItsPath || room(away) || !room(-away) ? away : -away;
+  return !inItsPath || room(away) || !room(-away) || !clearInTime(me, other, ahead, -away) ? away : -away;
+}
+
+/**
+ * Whether a bike at `me`, going by a rider (`other`) `ahead` metres in front
+ * of it on their side `side` (1 for their right, -1 for their left), gets
+ * clear of their bike before it reaches their back, were they to stand still.
+ * It rolls on at walking pace, or at its own speed if faster, and steering
+ * takes it across as fast as it does at that speed, up to `LINE_CHANGE_SPEED`,
+ * less the way it loses while its steering builds up from how fast it already
+ * moves that way: so a bike that has set off round them keeps going round
+ * them.
+ */
+function clearInTime(me: Readonly<Motion>, other: Readonly<Motion>, ahead: number, side: number): boolean {
+  const rolling = Math.max(me.speed, WALKING_PACE);
+  const sideways = Math.min(maxSidewaysSpeed(rolling), LINE_CHANGE_SPEED);
+  const across = side * (other.offset - me.offset) + BIKE_WIDTH;
+  const buildingUp = Math.max(0, sideways - side * me.steering) / TUNING.steeringResponse;
+  return ((ahead - BIKE_LENGTH) / rolling) * sideways >= across + buildingUp;
 }
 
 /**
