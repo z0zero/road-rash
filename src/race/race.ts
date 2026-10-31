@@ -59,8 +59,8 @@ export interface RaceOptions {
 }
 
 /**
- * How the Race module's own tests may set a race up besides its seed, to try
- * one rule at a time. The game never does, and `@/race` doesn't export it:
+ * How the Race module's own tests may set a race up besides its options, to
+ * try one rule at a time. The game never does, and `@/race` doesn't export it:
  * every race in the game runs in traffic, with cops, on perfect bikes. Tests
  * reach it through `setUpRace` in their helpers.
  */
@@ -180,12 +180,12 @@ export function createRace(options: RaceOptions): Race {
 export function setUpRace({ seed, difficulty = DEFAULT_DIFFICULTY }: RaceOptions, setup: TestSetup): Race {
   const random = createRandom(seed);
   const track = getCoastalTrack();
-  const tuning = DIFFICULTY_TUNING[difficulty];
-  const riders = lineUpRiders(track, random, tuning, setup.playerCondition);
+  const difficultyTuning = DIFFICULTY_TUNING[difficulty];
+  const riders = lineUpRiders(track, random, difficultyTuning, setup.playerCondition);
   const traffic = trafficFor(setup, track, seed, riders);
   const race: RaceState = {
     seed,
-    difficulty: tuning,
+    difficultyTuning,
     random,
     track,
     edge: track.roadHalfWidth + track.shoulderWidth,

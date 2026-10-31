@@ -20,7 +20,7 @@ export interface RaceState {
   /** Seeds every random choice the race makes. */
   readonly seed: number;
   /** How the opponents ride and fight on the race's difficulty. */
-  readonly difficulty: DifficultyTuning;
+  readonly difficultyTuning: DifficultyTuning;
   /** The riders' random choices; the traffic and the remark draw from generators of their own. */
   readonly random: Random;
   readonly track: Track;
