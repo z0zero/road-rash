@@ -215,6 +215,8 @@ function createTerrain(track: Track): Terrain {
    * There each point's height is evened out with those of the same point of
    * the sections around, as much as they stand closer to it than the spacing;
    * where they stand a full spacing apart, as on a straight, nothing changes.
+   * A side cut short stacks its points from the cut outwards on one spot, and
+   * they keep one height, the first one's.
    */
   function evenOut() {
     // Where the same point of every section stands, and its height evened out.
@@ -230,6 +232,11 @@ function createTerrain(track: Track): Terrain {
           pz[i] = zs[i] + side * rightZ[i] * l;
         }
         for (let i = 0; i < count; i++) {
+          if (lateral[s][i * POINTS + k] === lateral[s][i * POINTS + k - 1]) {
+            // Stacked on the point before it: one spot, one height.
+            evened[i] = height[s][i * POINTS + k - 1];
+            continue;
+          }
           let total = height[s][i * POINTS + k];
           let weights = 1;
           for (let j = Math.max(0, i - EVENING_OUT_SECTIONS); j <= Math.min(count - 1, i + EVENING_OUT_SECTIONS); j++) {
