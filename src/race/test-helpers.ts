@@ -102,14 +102,18 @@ export function secondsUntil(
 
 /**
  * Scripted input that rides the bike along the track near `lane` (an offset
- * from the centreline) at up to `targetSpeed`, braking for the bends ahead
- * and, like any careful rider, keeping clear of the riders, cops, cars and
- * obstacles on the road: it never steers across anything it is about to
- * reach or is alongside, gets out of the way of what comes at it, and
- * follows a slower rider or car in its path until it has a clear way past.
- * It holds its line against the push of the bends.
+ * from the centreline) at up to `targetSpeed` (m/s, or what it gives for the
+ * race's snapshot each step), braking for the bends ahead and, like any
+ * careful rider, keeping clear of the riders, cops, cars and obstacles on the
+ * road: it never steers across anything it is about to reach or is
+ * alongside, gets out of the way of what comes at it, and follows a slower
+ * rider or car in its path until it has a clear way past. It holds its line
+ * against the push of the bends.
  */
-export function autopilot(race: Race, { targetSpeed = Infinity, lane = 0 } = {}) {
+export function autopilot(
+  race: Race,
+  { targetSpeed = Infinity, lane = 0 }: { targetSpeed?: number | ((snapshot: RaceSnapshot) => number); lane?: number } = {},
+) {
   let lastOffset = player(race).offset;
   return (): PlayerInput => {
     // One snapshot a step: everything below reads it.
@@ -117,7 +121,7 @@ export function autopilot(race: Race, { targetSpeed = Infinity, lane = 0 } = {})
     const me = snapshot.riders[PLAYER];
     const sideways = (me.offset - lastOffset) / STEP_SECONDS;
     lastOffset = me.offset;
-    let wanted = Math.min(targetSpeed, bendSpeed(race, me));
+    let wanted = Math.min(typeof targetSpeed === "number" ? targetSpeed : targetSpeed(snapshot), bendSpeed(race, me));
     // What it must not steer across, what it can follow until it gets past, and what ahead it may have to slow down for.
     const keepOut: KeepOut[] = [];
     const following: Stretch[] = [];
