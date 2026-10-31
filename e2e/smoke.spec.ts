@@ -181,6 +181,8 @@ for (const viewport of [
   { width: 1024, height: 576 },
   // As a 1366x768 laptop's maximized browser leaves.
   { width: 1366, height: 657 },
+  // The shortest window with the screens' full spacing.
+  { width: 1280, height: 768 },
 ]) {
   test.describe(`in a window ${viewport.width}x${viewport.height}`, () => {
     test.use({ viewport });
