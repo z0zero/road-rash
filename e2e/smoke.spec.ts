@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 /** Console errors and uncaught exceptions seen by the current test. */
 let errors: string[] = [];
@@ -158,6 +158,40 @@ for (const viewport of [
 
       // The panel, frame and all, with the banner at its top and the race's seed at the foot of its buttons.
       await expect(results.locator(":scope > div")).toBeInViewport({ ratio: 1 });
+    });
+  });
+}
+
+/**
+ * The size of a screen's overlay (`clientWidth`, `clientHeight`) and of all it
+ * holds (`scrollWidth`, `scrollHeight`), which is larger where the screen
+ * doesn't fit in the window and the overlay scrolls.
+ */
+function scrollSizes(screen: Locator) {
+  return screen.evaluate(({ scrollWidth, scrollHeight, clientWidth, clientHeight }) => ({
+    scrollWidth,
+    scrollHeight,
+    clientWidth,
+    clientHeight,
+  }));
+}
+
+for (const viewport of [
+  { width: 1280, height: 577 },
+  { width: 1024, height: 576 },
+  // Tall enough for the screens' full spacing, but not for Controls' with it.
+  { width: 1280, height: 700 },
+]) {
+  test.describe(`in a window ${viewport.width}x${viewport.height}`, () => {
+    test.use({ viewport });
+
+    test("fits the Controls screen in without scrolling it", async ({ page }) => {
+      await page.getByRole("button", { name: "Controls" }).click();
+
+      const controls = page.getByRole("dialog", { name: "Controls" });
+      await expect(controls.getByRole("button", { name: "Back" })).toBeFocused();
+      const { scrollHeight, clientHeight } = await scrollSizes(controls);
+      expect(scrollHeight).toBeLessThanOrEqual(clientHeight);
     });
   });
 }
