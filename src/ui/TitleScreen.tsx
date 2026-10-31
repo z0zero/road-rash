@@ -40,10 +40,11 @@ export function TitleScreen({
     return keys.together ?? each.map((key) => nameOn(labels, key)).join("/");
   }).join(" or ");
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 bg-gradient-to-b from-night/75 via-dusk/35 to-transparent px-6 text-center">
+    // Tighter in a short window, so that it fits from the title to the personal best; scrolling only past that.
+    <div className="absolute inset-0 flex flex-col items-center justify-center-safe gap-6 overflow-y-auto bg-gradient-to-b from-night/75 via-dusk/35 to-transparent px-6 py-4 text-center short:gap-4">
       <GameTitle />
       <p className={`text-lg text-sand ${OVER_THE_SCENE}`}>Race the coastal cliff road at sunset. Don&apos;t wreck it.</p>
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 short:gap-2">
         <Button autoFocus onClick={onStart}>
           Start Race
         </Button>
@@ -68,7 +69,7 @@ export function TitleScreen({
 
 export function GameTitle() {
   return (
-    <h1 className="font-display text-6xl uppercase italic tracking-wide text-sun drop-shadow-[0_4px_0_rgba(27,16,38,0.9)] sm:text-8xl">
+    <h1 className="font-display text-6xl uppercase italic tracking-wide text-sun drop-shadow-[0_4px_0_rgba(27,16,38,0.9)] sm:text-8xl sm:short:text-7xl">
       Rev &amp; Wreck
     </h1>
   );
