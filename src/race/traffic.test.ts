@@ -553,7 +553,7 @@ function thrownPastAParkedCar() {
   const { track } = setUpRace({ seed: 1 }, CLOSED_ROAD);
   const sign = track.obstacles.find((obstacle) => obstacle.kind === "sign" && obstacle.distance > track.startDistance + 100);
   if (!sign) throw new Error("no sign near the start");
-  const race = leftOnTheirOwn(1, { ...NO_COPS, parkedCars: [{ distance: sign.distance + 5, offset: track.roadHalfWidth + 1.5 }] });
+  const race = leftOnTheirOwn(1, { ...NO_COPS, traffic: { cars: [{ distance: sign.distance + 5, offset: track.roadHalfWidth + 1.5 }] } });
   eventsUntil(race, rideInto(race, sign, 15), playerCrashed, 60);
   const [car] = race.snapshot().traffic;
   return { race, car };
