@@ -1,5 +1,5 @@
 import { useId } from "react";
-import { moveForArrowKey, type Press } from "@/input/menus";
+import type { Press } from "@/input/menus";
 import { DIFFICULTIES, type Difficulty } from "@/race";
 import { difficultyName } from "./format";
 import { MENU_CHOICE_LIT, MENU_CONTROL } from "./panel";
@@ -33,9 +33,9 @@ export function DifficultyPicker({
             value={choice}
             checked={choice === difficulty}
             onChange={() => onChoose(choice)}
+            // The arrow keys move the choice along the row, and up and down off it, as on every menu (`listenToKeyboard`).
             onKeyDown={(event) => {
-              if (moveForArrowKey(document, event.key)) event.preventDefault();
-              else if (event.key === "Enter" || event.key === " ") {
+              if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
                 onStart(event);
               }

@@ -244,6 +244,51 @@ test("moves the difficulty with the arrow keys as the D-pad does, stopping at th
   await expect(choice("Easy")).toBeFocused();
 });
 
+test("moves through the menus with the arrow keys as the D-pad does, both ways past the difficulty, and still rides with them", async ({
+  page,
+}) => {
+  // A dozen key presses, then a race's countdown and a few seconds of it, a frame at a time.
+  test.slow();
+  const button = (name: string) => page.getByRole("button", { name, exact: true });
+  const normal = difficultyChoices(page).getByRole("radio", { name: "Normal" });
+  await expect(button("Start Race")).toBeFocused();
+
+  // Down and up move through the title's menu, the difficulty one stop in it, without changing it.
+  for (const [key, focused] of [
+    ["ArrowDown", normal],
+    ["ArrowDown", button("Controls")],
+    ["ArrowDown", button("Settings")],
+    ["ArrowUp", button("Controls")],
+    ["ArrowUp", normal],
+    ["ArrowUp", button("Start Race")],
+  ] as const) {
+    await page.keyboard.press(key);
+    await expect(focused).toBeFocused();
+  }
+  await expect(normal).toBeChecked();
+
+  // On Settings, down from Back comes round to the first slider; left turns it, and down moves on to the next.
+  await button("Settings").click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  const [master, music] = ["Master volume", "Music volume"].map((name) => settings.getByRole("slider", { name }));
+  await page.keyboard.press("ArrowDown");
+  await expect(master).toBeFocused();
+  await page.keyboard.press("ArrowLeft");
+  await expect(master).toHaveValue("95");
+  await page.keyboard.press("ArrowDown");
+  await expect(music).toBeFocused();
+  await expect(master).toHaveValue("95");
+  await expect(music).toHaveValue("70");
+  await page.keyboard.press("Escape");
+
+  // In a race, they ride.
+  await startRacing(page);
+  await page.keyboard.down("ArrowUp");
+  await play(page, 3);
+  await page.keyboard.up("ArrowUp");
+  expect(await hudSpeedKmh(page)).toBeGreaterThan(40);
+});
+
 for (const key of ["Enter", "Space"]) {
   test(`starts the race with ${key} on the difficulty under Start Race`, async ({ page }) => {
     await expect(page.getByRole("button", { name: "Start Race" })).toBeFocused();

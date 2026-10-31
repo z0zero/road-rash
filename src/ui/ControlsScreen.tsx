@@ -51,7 +51,8 @@ export function ControlsScreen({ onBack }: { onBack: () => void }) {
       <div className="flex flex-col gap-1 text-center text-sm text-sand/80">
         <p>Gamepad buttons are named as on an Xbox controller: A is the bottom one, B the right one and X the left one.</p>
         <p>
-          In menus, {sayOr(GAMEPAD_MENUS.move)} moves between buttons and {sayOr(GAMEPAD_MENUS.press)} presses them.
+          In menus, the arrow keys, {sayOr(GAMEPAD_MENUS.move)} move between buttons, and {sayOr(GAMEPAD_MENUS.press)}{" "}
+          presses them.
         </p>
         <p>After a crash, steer to run back to your bike, and brake to stand still.</p>
         {labels === null && <p>The letter keys are where they are on a US keyboard, whatever yours are labelled.</p>}
