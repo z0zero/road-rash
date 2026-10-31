@@ -213,43 +213,20 @@ function steeringFor(briskly: boolean) {
   return briskly ? { response: EVASIVE_RESPONSE, most: EVASIVE_SPEED } : { response: LINE_RESPONSE, most: LINE_CHANGE_SPEED };
 }
 
-/**
- * How a bike handles, as `lineAround` judges whether it gets somewhere in
- * time: whether it steers for its line briskly whatever it does; how quickly
- * its steering takes hold (1/s); and how quickly it settles on the speed it
- * wants, speeding up and slowing down (1/s, for every m/s it is off).
- */
-interface Handling {
-  readonly briskly: boolean;
-  readonly takesHold: number;
-  readonly speedsUp: number;
-  readonly slowsDown: number;
-}
-
-/**
- * An opponent steers briskly only to get out of the way of a car or an
- * obstacle, its steering builds up as any rider's does, and it opens the
- * throttle and brakes as `opponentControls` does.
- */
-const OPPONENTS_HANDLING: Handling = {
-  briskly: false,
-  takesHold: TUNING.steeringResponse,
-  speedsUp: THROTTLE_PER_SPEED * TUNING.launchAcceleration,
-  slowsDown: BRAKE_PER_SPEED * TUNING.braking,
-};
-
 /** A bike judging whether it gets somewhere in time follows itself at most this many seconds ahead. */
 const THINKING_AHEAD = 4;
 
 /**
  * Whether a bike at `me` gets to `to`, on its way to `line` beyond it, before
  * it has gone `room` metres nearer something ahead of it going along the
- * track at `velocity` m/s (0 if it stands still), rolling on at walking pace,
- * settling on it from its own speed, and steering for its line as `how` says:
- * at an easy pace, or briskly while it is out of the way of a car or an
+ * track at `velocity` m/s (0 if it stands still). It rolls on at walking pace,
+ * settling on it from its own speed as an opponent does, opening the throttle
+ * or braking (`opponentControls`), and steers for its line as an opponent
+ * does: at an easy pace, or briskly while it is out of the way of a car or an
  * obstacle (`evadingAt`), as fast across as steering moves a bike at its
- * speed, and only as fast as its steering takes hold. Followed a step at a
- * time, as it would ride.
+ * speed, and only as fast as its steering builds up. Followed a step at a
+ * time, as it would ride. A cop judges itself the same way, though its
+ * steering takes hold at once.
  */
 function getsThereFirst(
   me: Readonly<Motion>,
@@ -257,7 +234,6 @@ function getsThereFirst(
   line: number,
   room: number,
   velocity: number,
-  how: Handling,
   evadingAt: (offset: number) => boolean,
 ): boolean {
   const way = Math.sign(line - me.offset);
@@ -266,10 +242,11 @@ function getsThereFirst(
   let { offset, speed, steering } = me;
   let gone = 0;
   for (let step = 0; step < THINKING_AHEAD / STEP_SECONDS; step++) {
-    speed += (WALKING_PACE - speed) * (speed < WALKING_PACE ? how.speedsUp : how.slowsDown) * STEP_SECONDS;
-    const { response, most } = steeringFor(how.briskly || evadingAt(offset));
+    const settling = speed < WALKING_PACE ? THROTTLE_PER_SPEED * TUNING.launchAcceleration : BRAKE_PER_SPEED * TUNING.braking;
+    speed += (WALKING_PACE - speed) * settling * STEP_SECONDS;
+    const { response, most } = steeringFor(evadingAt(offset));
     const reach = Math.min(most, maxSidewaysSpeed(Math.abs(speed)));
-    steering += (clamp(response * (line - offset), -reach, reach) - steering) * Math.min(1, how.takesHold * STEP_SECONDS);
+    steering += (clamp(response * (line - offset), -reach, reach) - steering) * Math.min(1, TUNING.steeringResponse * STEP_SECONDS);
     offset += steering * STEP_SECONDS;
     gone += (speed - velocity) * STEP_SECONDS;
     if (gone >= room) return false;
@@ -376,7 +353,7 @@ export function lineAround(
     me.speed <= CRAWLING &&
     reachedIn > 0 &&
     velocity >= 0 &&
-    getsThereFirst(me, line < me.offset ? from : to, line, gap, velocity, OPPONENTS_HANDLING, evadingAt);
+    getsThereFirst(me, line < me.offset ? from : to, line, gap, velocity, evadingAt);
   /**
    * Whether its `line` takes it clear past a rider ahead of it (`other`), and, crawling, gets it clear of them before
    * it reaches their back, were they to stand still.
@@ -386,7 +363,7 @@ export function lineAround(
     const room = other.distance - me.distance - BIKE_LENGTH;
     return (
       side * (line - other.offset) >= BIKE_WIDTH &&
-      (me.speed > CRAWLING || getsThereFirst(me, other.offset + side * BIKE_WIDTH, line, room, 0, OPPONENTS_HANDLING, evadingAt))
+      (me.speed > CRAWLING || getsThereFirst(me, other.offset + side * BIKE_WIDTH, line, room, 0, evadingAt))
     );
   };
 
