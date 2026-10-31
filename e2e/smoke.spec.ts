@@ -1116,6 +1116,32 @@ test.describe("sound", () => {
       await expect(page.getByTestId("countdown")).toBeVisible();
       await expect(page.getByTestId("sound-locked")).toBeHidden();
     });
+
+    test(`keeps saying that a key press or click turns the sound on after Esc or Shift, which can't${browser}`, async ({
+      page,
+    }) => {
+      await page.addInitScript(plugInAGamepad);
+      await page.addInitScript(activation);
+      await page.addInitScript(lockSoundUntilAKeyOrClick);
+      await page.reload();
+      await startRaceWithTheGamepad(page);
+      const notice = page.getByTestId("sound-locked");
+      await play(page, 1.2);
+      await expect(notice).toBeVisible();
+
+      // Esc pauses the race and resumes it, and Shift does nothing, but neither gives the page the player's activation.
+      for (const key of ["Escape", "Escape", "Shift"]) {
+        await page.keyboard.press(key);
+        await play(page, 0.2);
+      }
+      await play(page, 1.2);
+
+      await expect(notice).toBeVisible();
+      expect(await audioStates(page)).toEqual(["suspended"]);
+      await page.keyboard.press("w");
+      await expect.poll(() => audioStates(page)).toEqual(["running"]);
+      await expect(notice).toBeHidden();
+    });
   }
 
   test("stops saying that a key press or click turns the sound on once one hasn't", async ({ page }) => {
@@ -1190,13 +1216,16 @@ test.describe("sound", () => {
 
 /**
  * Runs in the page before its scripts: a browser in which only a key press or click gives the page the player's
- * activation, for the few seconds after it, as in Safari, where a gamepad's press doesn't. (Playwright's own calls
- * into the page give it too, which a gamepad's press never would.)
+ * activation, for the few seconds after it, as in Safari, where a gamepad's press doesn't; and, as the HTML standard
+ * and Chromium have it, not Esc, nor a modifier key pressed alone. (Playwright's own calls into the page give it too,
+ * which a gamepad's press never would.)
  */
 function activatedOnlyByKeysAndClicks() {
+  const activates = (event: Event) =>
+    event.isTrusted && !(event instanceof KeyboardEvent && ["Escape", "Shift", "Control", "Alt", "Meta"].includes(event.key));
   let last = -Infinity;
   for (const gesture of ["keydown", "mousedown"]) {
-    window.addEventListener(gesture, (event) => event.isTrusted && (last = performance.now()), { capture: true });
+    window.addEventListener(gesture, (event) => activates(event) && (last = performance.now()), { capture: true });
   }
   Object.defineProperty(Navigator.prototype, "userActivation", {
     configurable: true,
@@ -1214,12 +1243,15 @@ function withoutUserActivation() {
 
 /**
  * Runs in the page before its scripts: a browser that keeps sound locked until the page's first key press or click,
- * as Safari does: until then, an audio context made or resumed stays suspended. A gamepad's press is not one.
+ * as Firefox before 155 does: until then, an audio context made or resumed stays suspended. A gamepad's press is not
+ * one, nor, as for the player's activation (see `activatedOnlyByKeysAndClicks`), is Esc or a modifier key alone.
  */
 function lockSoundUntilAKeyOrClick() {
+  const activates = (event: Event) =>
+    event.isTrusted && !(event instanceof KeyboardEvent && ["Escape", "Shift", "Control", "Alt", "Meta"].includes(event.key));
   let unlocked = false;
   for (const gesture of ["keydown", "mousedown"]) {
-    window.addEventListener(gesture, (event) => (unlocked ||= event.isTrusted), { capture: true });
+    window.addEventListener(gesture, (event) => (unlocked ||= activates(event)), { capture: true });
   }
   const Original = window.AudioContext;
   window.AudioContext = class extends Original {
