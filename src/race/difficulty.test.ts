@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createRace, isPlayer, NO_INPUT, PLAYER, type Difficulty, type PlayerInput, type Race, type RaceResults, type RiderId } from ".";
 import {
+  alongsideAn,
   attacksOnThePlayer,
   autopilot,
   CLOSED_ROAD,
@@ -9,11 +10,10 @@ import {
   nearestWithinReach,
   NO_COPS,
   player,
-  rideAlongside,
   rideInto,
   secondsUntil,
   setUpRace,
-  stepFor,
+  startedRace,
   STEPS_PER_SECOND,
   WHOLE_RACES,
 } from "./test-helpers";
@@ -170,8 +170,7 @@ describe("a race on Normal", () => {
  * the player's race is over, so from then on the opponents ride at their pace.
  */
 function wreckedAtTheStart(difficulty: Difficulty, seed = 1) {
-  const race = setUpRace({ seed, difficulty }, { ...CLOSED_ROAD, ...NO_COPS, playerCondition: 1 });
-  stepFor(race, 3);
+  const race = startedRace({ seed, difficulty }, { ...CLOSED_ROAD, ...NO_COPS, playerCondition: 1 });
   const start = player(race).distance;
   const first = race.track.obstacles
     .filter((obstacle) => obstacle.distance > start + 50)
@@ -202,25 +201,6 @@ describe("the opponents' pace", () => {
   });
 });
 
-/**
- * A started race on `difficulty`, on a closed road with no cops, in which the
- * player has ridden up alongside the brawler who lined up nearest them, so
- * that it is the nearest rider within reach, and the scripted input that
- * holds them there.
- */
-function alongsideABrawler(difficulty: Difficulty, seed = 1) {
-  const race = setUpRace({ seed, difficulty }, { ...CLOSED_ROAD, ...NO_COPS });
-  stepFor(race, 3);
-  const target = nearestOpponent(race, "brawler");
-  const input = rideAlongside(race, target);
-  secondsUntil(race, input, () => {
-    const { riders } = race.snapshot();
-    return nearestWithinReach(riders, riders[PLAYER]) === target;
-  }, 60);
-  race.drainEvents();
-  return { race, target, input };
-}
-
 /** Races in which the player gets alongside the brawler who lines up nearest them within a minute. */
 const ALONGSIDE_A_BRAWLER = [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24];
 
@@ -235,7 +215,7 @@ const ALONGSIDE_A_BRAWLER = [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
 function waitsAfterItsHits(difficulty: Difficulty, seeds: readonly number[], fightingBack: boolean) {
   const waits: number[] = [];
   for (const seed of seeds) {
-    const { race, target, input } = alongsideABrawler(difficulty, seed);
+    const { race, target, input } = alongsideAn("brawler", { seed, difficulty }, NO_COPS);
     if (fightingBack) {
       const punching = () => ({ ...input(), punch: true });
       eventsUntil(race, punching, (event) => event.type === "attack-landed" && isPlayer(event.attacker) && event.target.id === target, 10);
@@ -294,7 +274,7 @@ describe("patience", () => {
       // Its runs of hits on the player: hits less than 10 s apart, as giving up keeps it from them for 10 s at least.
       const runs: number[] = [];
       for (const seed of ALONGSIDE_A_BRAWLER.slice(0, 6)) {
-        const { race, target, input } = alongsideABrawler(difficulty, seed);
+        const { race, target, input } = alongsideAn("brawler", { seed, difficulty }, NO_COPS);
         let lastHit = -Infinity;
         for (const { kind, attacker, step } of attacksOnThePlayer(race, input, 60).attacks) {
           if (attacker !== target || kind !== "landed") continue;
@@ -330,7 +310,7 @@ function attacksOnAPlayerFightingBack(difficulty: Difficulty, seeds: readonly nu
   let steps = 0;
   let attacks = 0;
   for (const seed of seeds) {
-    const { race, target, input } = alongsideABrawler(difficulty, seed);
+    const { race, target, input } = alongsideAn("brawler", { seed, difficulty }, NO_COPS);
     let sinceItsHit = Infinity;
     let sinceThePlayersHit = Infinity;
     for (let step = 0; step < 30 * STEPS_PER_SECOND; step++) {
@@ -407,8 +387,7 @@ function passing(race: Race, target: RiderId, steps: number, step: () => void) {
  */
 function sharesOfItsPace(difficulty: Difficulty, aheads: readonly number[], seed = 1) {
   const followed = aheads.map((ahead) => {
-    const race = setUpRace({ seed, difficulty }, { ...CLOSED_ROAD, ...NO_COPS });
-    stepFor(race, 3);
+    const race = startedRace({ seed, difficulty }, { ...CLOSED_ROAD, ...NO_COPS });
     const target = nearestOpponent(race, "racer");
     const start = player(race).distance;
     // The player follows it at its speed, closing in or dropping back at up to 6 m/s.

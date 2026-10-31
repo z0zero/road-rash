@@ -14,6 +14,7 @@ import {
   type PlayerInput,
   type Race,
   type RaceEvent,
+  type RaceOptions,
   type RaceSnapshot,
   type RiderId,
   type RiderSnapshot,
@@ -65,9 +66,9 @@ export function stepFor(race: Race, seconds: number, input: PlayerInput = NO_INP
   for (let i = 0; i < steps; i++) race.step(input);
 }
 
-/** A race whose countdown has just run out, set up as `setup` says. */
-export function startedRace(seed = 1, setup: TestSetup = {}) {
-  const race = setUpRace({ seed }, setup);
+/** A race whose countdown has just run out, created with `options` (a seed alone races Normal) and set up as `setup` says. */
+export function startedRace(options: RaceOptions | number = 1, setup: TestSetup = {}) {
+  const race = setUpRace(typeof options === "number" ? { seed: options } : options, setup);
   stepFor(race, 3);
   race.drainEvents();
   return race;
@@ -443,13 +444,14 @@ export function alongsideARacer(seed = 1, setup: TestSetup = {}) {
 }
 
 /**
- * A started race in which the player has ridden up alongside the opponent of
- * a temperament who lined up nearest them: that opponent is the nearest rider
- * within reach. The race is on a closed road, so that no car comes between
- * them, and set up as `setup` says besides.
+ * A started race, created with `options` (a seed alone races Normal), in
+ * which the player has ridden up alongside the opponent of a temperament who
+ * lined up nearest them: that opponent is the nearest rider within reach. The
+ * race is on a closed road, so that no car comes between them, and set up as
+ * `setup` says besides.
  */
-export function alongsideAn(temperament: Temperament, seed = 1, setup: TestSetup = {}) {
-  const race = startedRace(seed, { ...CLOSED_ROAD, ...setup });
+export function alongsideAn(temperament: Temperament, options: RaceOptions | number = 1, setup: TestSetup = {}) {
+  const race = startedRace(options, { ...CLOSED_ROAD, ...setup });
   const target = nearestOpponent(race, temperament);
   const input = rideAlongside(race, target);
   const racerNearest = () => {
