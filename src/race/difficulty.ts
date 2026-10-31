@@ -38,7 +38,7 @@ export interface DifficultyTuning {
   readonly breatherSeconds: number;
   /**
    * Whether an opponent gives its breather to a player who is fighting it
-   * back too, so that hitting back never brings its attacks on faster; if
+   * back too, so that hitting back never cuts its wait short; if
    * not, a brawl is a brawl, and it attacks a player fighting it back
    * whenever it is free to.
    */
