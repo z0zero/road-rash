@@ -11,7 +11,7 @@ One competition from the start line to the finish line on one track.
 _Avoid_: Match, round, stage, level
 
 **Seed**:
-The number a race is created from, with its difficulty: every random choice the race makes follows from it, from the order of the start grid to the traffic, so the same seed, difficulty and inputs give the same race. The pause and results screens show it, and the page's address can ask for it to race a race again. The track has a seed of its own, fixed in the code, so every race is run on the same road.
+The number a race is created from, with its difficulty: every random choice the race makes follows from it, from the order of the start grid to the traffic, so the same seed, difficulty and inputs give the same race. The pause and results screens show it beside the difficulty, and a page address that asks for both replays the race: races it again from the same start. The track has a seed of its own, fixed in the code, so every race is run on the same road.
 _Avoid_: Race ID, race number, code
 
 **Track**:
