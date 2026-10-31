@@ -65,15 +65,16 @@ export function ResultsScreen({
     if (ready && !buttons.current?.contains(document.activeElement)) restart.current?.focus(SHOW_FOCUS);
   }, [ready]);
   return (
-    // Centred by its margins, as a screen over the game is (see `Dialog`); in a short window, the spacing is tighter,
-    // so that Restart and Back to title are in view even after a first finish with a new best.
+    // Centred by its margins, and no wider than the window leaves room for, as a screen over the game is (see `Dialog`).
+    // In a short window, the spacing is tighter, so that Restart and Back to title are in view even after a first
+    // finish with a new best.
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="results-title"
       className="absolute inset-0 flex flex-col overflow-y-auto bg-night/55 p-4 backdrop-blur-[2px]"
     >
-      <div className={`m-auto flex w-[min(52rem,94vw)] flex-col gap-6 px-8 py-7 short:py-4 md:flex-row md:gap-10 ${PANEL}`}>
+      <div className={`m-auto flex w-[min(52rem,94vw)] max-w-full flex-col gap-6 px-8 py-7 short:py-4 md:flex-row md:gap-10 ${PANEL}`}>
         <div className="flex flex-col items-center gap-4 short:gap-2 md:w-72 md:shrink-0">
           <h2 id="results-title" className={`text-6xl short:text-5xl ${PANEL_TITLE}`}>
             {BANNERS[results.outcome]}

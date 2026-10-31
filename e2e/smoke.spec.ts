@@ -196,6 +196,30 @@ for (const viewport of [
   });
 }
 
+test.describe("in a window 480x800, as a browser snapped to a third of a wide screen leaves", () => {
+  test.use({ viewport: { width: 480, height: 800 } });
+
+  test("fits the Controls screen's width in, without scrolling it sideways", async ({ page }) => {
+    await page.getByRole("button", { name: "Controls" }).click();
+
+    const controls = page.getByRole("dialog", { name: "Controls" });
+    await expect(controls.getByRole("button", { name: "Back" })).toBeFocused();
+    const { scrollWidth, clientWidth } = await scrollSizes(controls);
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+  });
+
+  test("fits a race's results' width in, without scrolling them sideways", async ({ page }) => {
+    // Half a minute of racing, a frame at a time.
+    test.slow();
+    const results = await wreckedEarly(page);
+    await play(page, 1.6);
+    await expect(results.getByRole("button", { name: "Restart" })).toBeFocused();
+
+    const { scrollWidth, clientWidth } = await scrollSizes(results);
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+  });
+});
+
 test("pauses on Esc, offering resume, restart and quit to title", async ({ page }) => {
   await startRacing(page);
 
