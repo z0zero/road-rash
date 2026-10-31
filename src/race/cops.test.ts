@@ -681,6 +681,37 @@ describe("a cop following the player", () => {
     expect(Math.abs(cop().distance - player(race).distance)).toBeLessThan(2);
     expect(Math.abs(cop().offset - player(race).offset)).toBeGreaterThan(0.8);
   });
+
+  it("comes round a player who stops dead just in front of it on the shoulder, on the road's side, rather than wait behind them", () => {
+    // The player rides past the first cop, waiting on the shoulder, 1.2 m inside it and so slowly that it joins the
+    // race right behind them...
+    const { race, cop } = nearingTheWaitingCop(100);
+    const waiting = cop();
+    let lastOffset = player(race).offset;
+    const riding = (lane: number, speed: number): PlayerInput => {
+      const sideways = (player(race).offset - lastOffset) * STEPS_PER_SECOND;
+      lastOffset = player(race).offset;
+      return steerOnto(player(race), lane, speed, sideways);
+    };
+    secondsUntil(race, () => riding(waiting.offset - 1.2, 3), () => player(race).distance >= waiting.distance - 5, 30);
+    secondsUntil(race, () => riding(waiting.offset - 1.2, 1.5), () => player(race).distance >= cop().distance + 2.1, 30);
+    expect(cop().status).toBe("riding");
+    expect(cop().offset).toBeCloseTo(waiting.offset, 1);
+    // ...then pulls in on the shoulder just in front of it, aiming beyond its line, and stops dead a little inside it,
+    // where no bike fits between them and the shoulder's edge.
+    secondsUntil(race, () => riding(waiting.offset + 0.3, 1.5), () => player(race).offset >= waiting.offset - 0.3, 10);
+    const standing = (): PlayerInput => ({ ...riding(waiting.offset + 0.3, 0), throttle: 0, brake: 1 });
+    secondsUntil(race, standing, () => player(race).speed === 0, 5);
+    const stoppedAt = player(race);
+    expect(stoppedAt.offset).toBeLessThan(waiting.offset);
+
+    eventsDuring(race, 5, standing);
+
+    // Level with them and beside them, on their side nearer the road, without having pushed them anywhere.
+    expect(Math.abs(cop().distance - player(race).distance)).toBeLessThan(1);
+    expect(player(race).offset - cop().offset).toBeGreaterThan(0.8);
+    expect(apart(player(race), stoppedAt)).toBeLessThan(0.1);
+  });
 });
 
 describe("a cop holding back", () => {

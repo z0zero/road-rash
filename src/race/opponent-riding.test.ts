@@ -27,6 +27,39 @@ describe("getting round a rider", () => {
     // It would run into their back before it got clear of them on the right: it goes by on the left, clear of their bike.
     expect(line).toBeLessThanOrEqual(1.5 - 0.8);
   });
+
+  it("takes a bike stopped at the shoulder's edge round a rider stopped just in front of it on the road's side, rather than wait behind them", () => {
+    // Stopped 0.1 m inside the furthest out an opponent squeezes, with a rider stopped 2.5 m ahead and 0.2 m inside it:
+    // no bike fits between them and the shoulder's edge.
+    const me = bike(1000, 8.5, 0);
+
+    const { line, holdBehind } = lineAround(me, 1.5, [me, bike(1002.5, 8.3, 0)], [], EDGE, SHOULDER_EDGE);
+
+    // It goes by on their left, clear of their bike, and rolls on, since a bike can't move sideways while it stands still.
+    expect(line).toBeLessThanOrEqual(8.3 - 0.8);
+    expect(holdBehind).toBeGreaterThan(0);
+  });
+
+  it("takes a cop on patrol crawling at the road's edge round a player stopped just in front of it, rather than wait behind them", () => {
+    // A cop on patrol squeezes past only on the road. The player stands 2.5 m ahead of it and 0.2 m inside it.
+    const me = bike(1000, 5.2, 1);
+
+    const { line, holdBehind } = lineAround(me, 1.5, [me, bike(1002.5, 5, 0)], [], EDGE, EDGE);
+
+    expect(line).toBeLessThanOrEqual(5 - 0.8);
+    expect(holdBehind).toBeGreaterThan(0);
+  });
+
+  it("takes a bike stopped against the left edge round a rider stopped just in front of it against the same edge", () => {
+    // A bike that slides, or is kicked, off the road stops against the shoulder's outer edge, 9 m left of the centreline.
+    const me = bike(1000, -9, 0);
+
+    const { line, holdBehind } = lineAround(me, 1.5, [me, bike(1002.5, -9, 0)], [], EDGE, SHOULDER_EDGE);
+
+    // It goes by on their right, the only side with room for its bike.
+    expect(line).toBeGreaterThanOrEqual(-9 + 0.8);
+    expect(holdBehind).toBeGreaterThan(0);
+  });
 });
 
 describe("squeezing past", () => {
