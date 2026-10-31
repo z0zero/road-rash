@@ -226,7 +226,9 @@ interface Room {
  * racing line if it is clear, otherwise the clear line nearest to where the
  * opponent is now. Riders it is catching, and cars and obstacles it is coming
  * up to, block the lines close to theirs, and a rider or car alongside blocks
- * everything beyond them, so an opponent never steers across one. A car
+ * everything beyond them, so an opponent never steers across one; though,
+ * crawling up to a rider just in front of it with no room for its bike on its
+ * side of them, it goes round them on their other side (see `sideToPass`). A car
  * changing lanes blocks the lines from where it is to the lane it is moving
  * over to, and an opponent looks further ahead for the cars coming towards it.
  * When a rider it is about to reach is in the way, it holds back to their
@@ -256,8 +258,8 @@ export function lineAround(
     const ahead = other.distance - me.distance;
     const closing = Math.max(0, me.speed - other.speed);
     if (Math.abs(ahead) < ALONGSIDE) {
-      const onTheRight = other.offset > me.offset || (other.offset === me.offset && ahead > 0);
-      const beyond = (room: number): Stretch => (onTheRight ? [other.offset - room, Infinity] : [-Infinity, other.offset + room]);
+      const side = sideToPass(me, other, ahead, squeezeEdge);
+      const beyond = (room: number): Stretch => (side < 0 ? [other.offset - room, Infinity] : [-Infinity, other.offset + room]);
       blocked.push(beyond(PASSING_CLEARANCE));
       ridersBikes.push(beyond(BIKE_WIDTH));
     } else if (ahead > 0 && ahead < ALONGSIDE + 2 + closing * PASSING_LOOK_AHEAD) {
@@ -317,6 +319,24 @@ export function lineAround(
   }
   const evading = unsafe.some(({ keepClear: [from, to] }) => me.offset > from && me.offset < to);
   return { line, holdBehind, evading };
+}
+
+/**
+ * Which side of another rider (`other`) a bike at `me` goes by them on, with
+ * them alongside it, `ahead` metres in front of it (behind it, if negative):
+ * 1 for their right, -1 for their left. The side of them it is on; nose to
+ * tail with them, their left if they are in front and their right if behind,
+ * as in a bump the one in front gives way to the right. But crawling up to a
+ * rider just in front of it, within a bike's width of its line, it goes by
+ * them on their other side if there is no room for its bike on its own,
+ * between them and `squeezeEdge`, and there is on the other: it rolls round
+ * them rather than wait behind them for as long as they stand there.
+ */
+function sideToPass(me: Readonly<Motion>, other: Readonly<Motion>, ahead: number, squeezeEdge: number): number {
+  const away = Math.sign(me.offset - other.offset) || (ahead > 0 ? -1 : 1);
+  const inItsPath = me.speed <= CRAWLING && ahead > 0 && Math.abs(other.offset - me.offset) < BIKE_WIDTH;
+  const room = (side: number) => squeezeEdge - side * other.offset > BIKE_WIDTH;
+  return !inItsPath || room(away) || !room(-away) ? away : -away;
 }
 
 /**
