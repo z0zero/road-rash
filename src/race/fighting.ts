@@ -171,7 +171,7 @@ function land(race: RaceState, attacker: Fighter, target: Fighter, { kind, throw
     if (isPlayer(attacker)) {
       target.stepsSinceThePlayerHitIt = 0;
       target.patience.unansweredHits = 0;
-    } else if (isPlayer(target)) afterHittingThePlayer(attacker, race.difficulty);
+    } else if (isPlayer(target)) afterHittingThePlayer(attacker, race.difficultyTuning);
   }
   takeTheClub(race, attacker, target, thrownMidSwingAt);
   const { stamina, shove } = TUNING.attacks[kind];
