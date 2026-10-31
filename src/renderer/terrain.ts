@@ -1,7 +1,8 @@
-import { BufferGeometry, Color, Float32BufferAttribute } from "three";
+import { type BufferGeometry, Color } from "three";
 import { clamp, smoothstep } from "@/math";
 import { createGroundGrid, type Side, type Track, type WorldPoint } from "@/race";
 import { groundDirection, seaward } from "./geography";
+import { geometryFrom } from "./low-poly";
 import { hash, smoothNoise } from "./noise";
 
 /**
@@ -128,6 +129,13 @@ function createTerrain(track: Track): Terrain {
     return clamp((dx * rightZ[i] - dz * rightX[i]) / ((after - before) * SPACING), 0, 1);
   }
 
+  /** Where point `k` of one side's cross-section at section `i` stands, at its height. */
+  function point(s: number, i: number, k: number): WorldPoint {
+    const side = s === 0 ? -1 : 1;
+    const l = lateral[s][i * POINTS + k];
+    return { x: xs[i] + side * rightX[i] * l, y: height[s][i * POINTS + k], z: zs[i] + side * rightZ[i] * l };
+  }
+
   /** The ground's height `l` metres out on one side of section `i`, along its cross-section. */
   function heightAcross(s: number, i: number, l: number) {
     const base = i * POINTS;
@@ -219,31 +227,25 @@ function createTerrain(track: Track): Terrain {
    * they keep one height, the first one's.
    */
   function evenOut() {
-    // Where the same point of every section stands, and its height evened out.
-    const px = new Float64Array(count);
-    const pz = new Float64Array(count);
+    // The same point of every section, at its height before evening out, and that height evened out.
+    const points: WorldPoint[] = new Array(count);
     const evened = new Float64Array(count);
     for (let s = 0; s < 2; s++) {
-      const side = s === 0 ? -1 : 1;
       for (let k = 2; k < POINTS - 1; k++) {
-        for (let i = 0; i < count; i++) {
-          const l = lateral[s][i * POINTS + k];
-          px[i] = xs[i] + side * rightX[i] * l;
-          pz[i] = zs[i] + side * rightZ[i] * l;
-        }
+        for (let i = 0; i < count; i++) points[i] = point(s, i, k);
         for (let i = 0; i < count; i++) {
           if (lateral[s][i * POINTS + k] === lateral[s][i * POINTS + k - 1]) {
             // Stacked on the point before it: one spot, one height.
             evened[i] = height[s][i * POINTS + k - 1];
             continue;
           }
-          let total = height[s][i * POINTS + k];
+          let total = points[i].y;
           let weights = 1;
           for (let j = Math.max(0, i - EVENING_OUT_SECTIONS); j <= Math.min(count - 1, i + EVENING_OUT_SECTIONS); j++) {
-            const apart = Math.sqrt((px[j] - px[i]) ** 2 + (pz[j] - pz[i]) ** 2);
-            if (j === i || apart >= SPACING) continue;
-            const weight = (1 - apart / SPACING) ** 2;
-            total += weight * height[s][j * POINTS + k];
+            const spread = spreadBetween(points[i], points[j]);
+            if (j === i || spread === 1) continue;
+            const weight = (1 - spread) ** 2;
+            total += weight * points[j].y;
             weights += weight;
           }
           evened[i] = total / weights;
@@ -270,11 +272,6 @@ function createTerrain(track: Track): Terrain {
       const first = Math.max(0, Math.floor(fromDistance / SPACING));
       const last = Math.min(count - 1, Math.ceil(toDistance / SPACING));
       const faces: Faces = { positions: [], colors: [], normals: [] };
-      const point = (s: number, i: number, k: number): WorldPoint => {
-        const side = s === 0 ? -1 : 1;
-        const l = lateral[s][i * POINTS + k];
-        return { x: xs[i] + side * rightX[i] * l, y: height[s][i * POINTS + k], z: zs[i] + side * rightZ[i] * l };
-      };
       for (let i = first; i < last; i++) {
         for (let s = 0; s < 2; s++) {
           for (let k = 0; k < POINTS - 1; k++) {
@@ -284,16 +281,13 @@ function createTerrain(track: Track): Terrain {
             const farOut = point(s, i + 1, k + 1);
             // Counter-clockwise seen from above: left to right across the race direction, near before far.
             const quad: Quad = s === 1 ? [nearIn, nearOut, farOut, farIn] : [nearOut, nearIn, farIn, farOut];
-            // How far apart its ends are along the road, at the narrower one, as a share of the sections' spacing.
-            const spread = Math.min(1, apartOnTheGround(nearIn, farIn) / SPACING, apartOnTheGround(nearOut, farOut) / SPACING);
+            // How far apart its ends are along the road, at the narrower one.
+            const spread = Math.min(spreadBetween(nearIn, farIn), spreadBetween(nearOut, farOut));
             pushQuad(faces, quad, (i * POINTS + k) * 2 + s, k === POINTS - 2, spread);
           }
         }
       }
-      const geometry = new BufferGeometry();
-      geometry.setAttribute("position", new Float32BufferAttribute(faces.positions, 3));
-      geometry.setAttribute("color", new Float32BufferAttribute(faces.colors, 3));
-      geometry.setAttribute("normal", new Float32BufferAttribute(faces.normals, 3));
+      const geometry = geometryFrom(faces.positions, faces.colors, faces.normals);
       geometry.computeBoundingSphere();
       return geometry;
     },
@@ -309,9 +303,17 @@ interface Faces {
   readonly normals: number[];
 }
 
-/** How far apart two points are on the ground, in metres. */
-function apartOnTheGround(a: WorldPoint, b: WorldPoint): number {
-  return Math.hypot(a.x - b.x, a.z - b.z);
+/**
+ * How far apart two points of the land stand on the ground, as a share of the
+ * sections' spacing, up to a whole spacing. For the same point of two
+ * neighbouring sections, that is 1 on a straight and less inside a bend,
+ * where the sections close in on its centre: what `spreadAt` foresees from the
+ * centreline before the land is built.
+ */
+function spreadBetween(a: WorldPoint, b: WorldPoint): number {
+  const dx = a.x - b.x;
+  const dz = a.z - b.z;
+  return Math.min(1, Math.sqrt(dx * dx + dz * dz) / SPACING);
 }
 
 /** Metres of coast per step when tracing the coastline. */
@@ -475,7 +477,7 @@ const scratch = new Color();
 /**
  * Adds a quad as two flat-shaded triangles, each coloured by its slope and
  * height: rock, scrub, grass or the shore, a little lighter or darker. A quad
- * whose `spread` (see `buildGeometry`) is less than 1, inside a bend, is a
+ * whose `spread` (see `spreadBetween`) is less than 1, inside a bend, is a
  * wedge, and twisted as a rule: its triangles, which would be shaded and
  * coloured each its own way, take on the quad's own slope and height, and
  * keep less of their lighter or darker touch, the narrower it is the more, so
