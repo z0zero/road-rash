@@ -242,7 +242,10 @@ interface Room {
  * it squeezes past through the nearest gap its bike fits through, out to
  * `squeezeEdge`: an opponent out onto the shoulder. Cops find their way
  * around the same way, out to the edges they give: a cop on patrol or
- * fighting back squeezes past only on the road.
+ * fighting back squeezes past only on the road. A cop that won't take the
+ * line found yet, so as not to pull across the path of a rider or a car
+ * coming up behind it, gives the line it does take (`keepTo`), and holds back
+ * as that line needs.
  */
 export function lineAround(
   me: Readonly<Motion>,
@@ -251,6 +254,7 @@ export function lineAround(
   carsAndObstacles: readonly Footprint[],
   edge: number,
   squeezeEdge: number,
+  keepTo: (line: number) => number = (line) => line,
 ) {
   const blocked: Stretch[] = [];
   /** What the riders' bikes take up, as a bike squeezing past them sees them: a bike's width either side of their middles. */
@@ -299,7 +303,7 @@ export function lineAround(
   }
   // Crawling, it can squeeze through a gap where it would otherwise stay put.
   const squeeze = me.speed <= CRAWLING ? { bodies: [...ridersBikes, ...unsafe.map(({ body }) => body)], edge: squeezeEdge } : null;
-  const line = nearestClearLine(racingLine, me.offset, blocked, unsafe, edge, squeeze);
+  const line = keepTo(nearestClearLine(racingLine, me.offset, blocked, unsafe, edge, squeeze));
   // It holds back to the speed of a rider in its way, unless its line takes it clear past them.
   let holdBehind = Infinity;
   for (const other of inTheWay) {

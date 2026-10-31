@@ -119,6 +119,21 @@ describe("getting round a rider", () => {
   });
 });
 
+describe("keeping to a line", () => {
+  it("holds a bike back as for the line it keeps to, rather than roll on as for the line it would take", () => {
+    // A cop on patrol stopped where it waited on the shoulder, 7.5 m out, with the player stopped 2.95 m ahead and
+    // 0.15 m inside it: room to get round them on their left, nearer the road. But it keeps to the line it is on, as a
+    // cop does while someone comes up behind it in the offsets it would cross.
+    const me = bike(1000, 7.5, 0);
+
+    const { line, holdBehind } = lineAround(me, 1.5, [me, bike(1002.95, 7.35, 0)], [], EDGE, EDGE, () => me.offset);
+
+    // On that line it would run into their back: it waits behind them.
+    expect(line).toBe(7.5);
+    expect(holdBehind).toBeLessThanOrEqual(0);
+  });
+});
+
 describe("squeezing past", () => {
   it("never takes a crawling bike across the path of a car close ahead coming towards it", () => {
     // Crawling in the inner race lane, with a rider stopped just in front of it and another beside it on its right,

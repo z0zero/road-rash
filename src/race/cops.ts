@@ -146,9 +146,10 @@ function patrolIntent(
   const behind = player.distance - me.distance;
   const gap = following ? FOLLOW_SECONDS * Math.max(0, player.speed) : HOLD_BACK_GAP;
   const speed = Math.min(safe, player.speed + Math.max(-FOLLOW_MOST_EASING, FOLLOW_GAIN * (behind - gap)));
-  // It squeezes past only on the road.
-  const { line, holdBehind, evading } = lineAround(me, PATROL_LINE, field, carsAndObstacles, edge, edge);
-  return { speed: clamp(Math.min(speed, holdBehind), 0, TUNING.cops.topSpeed), line: lookingBehind(me, line, field, carsAndObstacles), hurrying: evading };
+  // It squeezes past only on the road, and never pulls across the path of a rider or a car coming up behind it.
+  const keepTo = (line: number) => lookingBehind(me, line, field, carsAndObstacles);
+  const { line, holdBehind, evading } = lineAround(me, PATROL_LINE, field, carsAndObstacles, edge, edge, keepTo);
+  return { speed: clamp(Math.min(speed, holdBehind), 0, TUNING.cops.topSpeed), line, hurrying: evading };
 }
 
 /** A cop moving across the road looks this many seconds behind it... */
@@ -280,12 +281,14 @@ function pullingOverIntent(
   const side = me.offset >= 0 ? 1 : -1;
   const shoulder = side * (track.roadHalfWidth + BIKE_WIDTH);
   const onTheShoulder = Math.abs(me.offset) >= track.roadHalfWidth + BIKE_WIDTH / 2;
-  // It squeezes past out onto the shoulder if need be, as far as the line it pulls over to.
-  const { line, holdBehind } = lineAround(me, shoulder, field, carsAndObstacles, Math.abs(shoulder), Math.abs(shoulder));
+  // It squeezes past out onto the shoulder if need be, as far as the line it pulls over to, and never pulls across the
+  // path of a rider or a car coming up behind it.
+  const keepTo = (line: number) => lookingBehind(me, line, field, carsAndObstacles);
+  const { line, holdBehind } = lineAround(me, shoulder, field, carsAndObstacles, Math.abs(shoulder), Math.abs(shoulder), keepTo);
   const followed = comingUpBehind(me, me.offset - BIKE_HALF_WIDTH, me.offset + BIKE_HALF_WIDTH, field, carsAndObstacles);
   return {
     speed: onTheShoulder ? 0 : Math.min(CREEP, holdBehind),
-    line: lookingBehind(me, line, field, carsAndObstacles),
+    line,
     hurrying: true,
     braking: followed ? BRAKING_WITH_SOMEONE_BEHIND : undefined,
   };
