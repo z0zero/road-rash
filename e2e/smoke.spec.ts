@@ -797,6 +797,22 @@ test.describe("with a gamepad", () => {
     await nextFrames(page);
     await expect(normal).toBeFocused();
     await expect(normal).toBeChecked();
+    await page.evaluate((buttons) => buttons.forEach((button) => window.fakeGamepad?.release(button)), [GAMEPAD.down, GAMEPAD.right]);
+    await nextFrames(page);
+
+    // The D-pad's down switch closing a frame before its right one, as they can: still down alone.
+    await tap(page, GAMEPAD.up, () => expect(page.getByRole("button", { name: "Start Race" })).toBeFocused());
+    await page.evaluate(
+      async ([down, right]) => {
+        window.fakeGamepad?.press(down);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        window.fakeGamepad?.press(right);
+      },
+      [GAMEPAD.down, GAMEPAD.right],
+    );
+    await nextFrames(page);
+    await expect(normal).toBeFocused();
+    await expect(normal).toBeChecked();
   });
 
   test("moves the difficulty under Start Race with the D-pad's left and right, and A on it starts a race shown at it", async ({
