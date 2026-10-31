@@ -1,6 +1,7 @@
 import type { CatchUp, DifficultyTuning } from "./difficulty";
 import type { Footprint } from "./footprint";
 import { BIKE_LENGTH, BIKE_WIDTH, clamp, maxSidewaysSpeed, type Controls, type Motion } from "./riding";
+import { STEP_SECONDS } from "./steps";
 import type { Moving, Track } from "./track";
 import { TUNING } from "./tuning";
 
@@ -97,10 +98,12 @@ const WALKING_PACE = 2;
  * ...and riding no faster than this (m/s), it sees a car or an obstacle
  * ahead of it, in its path, as something to steer round, not as one alongside
  * it, even nose to tail with it, and judges how soon it gets to one as if it
- * rolled on at walking pace at least, as it will; and it goes round a rider
- * just in front of it, in its path, on its side of them if there is room there
- * for its bike, or else on their other side if it can get clear of them there
- * before it reaches them, and otherwise waits behind them (see `sideToPass`).
+ * rolled on at walking pace at least, as it will, cutting across the path of
+ * one close ahead only if it gets across before it gets there; and it goes
+ * round a rider just in front of it, in its path, on its side of them if there
+ * is room there for its bike, or else on their other side if it can get clear
+ * of them there before it reaches them, and otherwise waits behind them (see
+ * `sideToPass`).
  */
 const CRAWLING = 2 * WALKING_PACE;
 /** An opponent shoved sideways by a kick faster than this (m/s) rides the kick out before it steers back to its line. */
@@ -201,8 +204,74 @@ export function levelWith(
  * the way of a car or an obstacle, or in a hurry.
  */
 export function sidewaysTowards(line: number, offset: number, briskly: boolean): number {
-  const [response, most] = briskly ? [EVASIVE_RESPONSE, EVASIVE_SPEED] : [LINE_RESPONSE, LINE_CHANGE_SPEED];
+  const { response, most } = steeringFor(briskly);
   return clamp(response * (line - offset), -most, most);
+}
+
+/** How quickly an opponent or a cop steers for its line (1/s), at an easy pace or briskly, and how fast sideways at most (m/s). */
+function steeringFor(briskly: boolean) {
+  return briskly ? { response: EVASIVE_RESPONSE, most: EVASIVE_SPEED } : { response: LINE_RESPONSE, most: LINE_CHANGE_SPEED };
+}
+
+/**
+ * How a bike handles, as `lineAround` judges whether it gets somewhere in
+ * time: whether it steers for its line briskly whatever it does; how quickly
+ * its steering takes hold (1/s); and how quickly it settles on the speed it
+ * wants, speeding up and slowing down (1/s, for every m/s it is off).
+ */
+interface Handling {
+  readonly briskly: boolean;
+  readonly takesHold: number;
+  readonly speedsUp: number;
+  readonly slowsDown: number;
+}
+
+/** An opponent steers briskly only to get out of the way, its steering builds up as any rider's does, and it opens the throttle and brakes as `opponentControls` does. */
+const OPPONENTS_HANDLING: Handling = {
+  briskly: false,
+  takesHold: TUNING.steeringResponse,
+  speedsUp: THROTTLE_PER_SPEED * TUNING.launchAcceleration,
+  slowsDown: BRAKE_PER_SPEED * TUNING.braking,
+};
+
+/** A bike judging whether it gets somewhere in time follows itself at most this many seconds ahead. */
+const THINKING_AHEAD = 4;
+
+/**
+ * Whether a bike at `me` gets to `to`, on its way to `line` beyond it, before
+ * it has gone `room` metres nearer something ahead of it going along the
+ * track at `velocity` m/s (0 if it stands still), rolling on at walking pace,
+ * settling on it from its own speed, and steering for its line as `how` says:
+ * at an easy pace, or briskly while it is out of the way of a car or an
+ * obstacle (`evadingAt`), as fast across as steering moves a bike at its
+ * speed, and only as fast as its steering takes hold. Followed a step at a
+ * time, as it would ride.
+ */
+function getsThereFirst(
+  me: Readonly<Motion>,
+  to: number,
+  line: number,
+  room: number,
+  velocity: number,
+  how: Handling,
+  evadingAt: (offset: number) => boolean,
+): boolean {
+  const way = Math.sign(line - me.offset);
+  if (way * (to - me.offset) <= 0) return true;
+  if (way * (line - to) <= 0) return false;
+  let { offset, speed, steering } = me;
+  let gone = 0;
+  for (let step = 0; step < THINKING_AHEAD / STEP_SECONDS; step++) {
+    speed += (WALKING_PACE - speed) * (speed < WALKING_PACE ? how.speedsUp : how.slowsDown) * STEP_SECONDS;
+    const { response, most } = steeringFor(how.briskly || evadingAt(offset));
+    const reach = Math.min(most, maxSidewaysSpeed(speed));
+    steering += (clamp(response * (line - offset), -reach, reach) - steering) * Math.min(1, how.takesHold * STEP_SECONDS);
+    offset += steering * STEP_SECONDS;
+    gone += (speed - velocity) * STEP_SECONDS;
+    if (gone >= room) return false;
+    if (way * (to - offset) <= 0) return true;
+  }
+  return false;
 }
 
 /** A stretch of offsets, from left to right. */
@@ -221,6 +290,9 @@ interface Room {
   readonly body: Stretch;
   /** Seconds until the opponent gets to it: 0 alongside it, Infinity if it isn't catching it. */
   readonly reachedIn: number;
+  /** How far it is ahead of the opponent, from the opponent's front to its back (metres), and how fast it goes along the track (m/s). */
+  readonly gap: number;
+  readonly velocity: number;
   readonly close: boolean;
   readonly dodgeSideways: boolean;
 }
@@ -233,7 +305,9 @@ interface Room {
  * everything beyond them, so an opponent never steers across one; though,
  * crawling up to a rider just in front of it with no room for its bike on its
  * side of them, it goes round them on their other side if it can get clear of
- * them there before it reaches them (see `sideToPass`). A car changing lanes
+ * them there before it reaches them (see `sideToPass`), and crawling up to a
+ * car or an obstacle close ahead, it cuts across its path only if it gets
+ * across before it gets there (see `nearestClearLine`). A car changing lanes
  * blocks the lines from where it is to the lane it is moving over to, and an
  * opponent looks further ahead for the cars coming towards it.
  * When a rider it is about to reach is in the way, it holds back to their
@@ -303,12 +377,23 @@ export function lineAround(
     const reachedIn = alongside ? 0 : closing > 0 ? Math.max(0, ahead - reach) / closing : Infinity;
     const close = ahead - reach < 2 + closingRolling * CROSSING_TIME;
     const dodgeSideways = close && (alongside || thing.velocity < 0);
-    unsafe.push({ keepClear, body: around(thing.halfWidth + BIKE_HALF_WIDTH), reachedIn, close, dodgeSideways });
+    unsafe.push({ keepClear, body: around(thing.halfWidth + BIKE_HALF_WIDTH), reachedIn, gap: ahead - reach, velocity: thing.velocity, close, dodgeSideways });
     if (thing.velocity < 0 && me.offset > keepClear[0] && me.offset < keepClear[1]) headOn = true;
   }
+  /** Whether it is out of the way of a car or an obstacle at `offset`, steering briskly. */
+  const evadingAt = (offset: number) => unsafe.some(({ keepClear: [from, to] }) => offset > from && offset < to);
+  /**
+   * Whether, crawling, it gets across the path of a car or an obstacle it is coming up to (`room`), and that isn't
+   * coming towards it, on its way to `line`, before it gets there.
+   */
+  const getsAcross = ({ body: [from, to], gap, velocity, reachedIn }: Room, line: number) =>
+    me.speed <= CRAWLING &&
+    reachedIn > 0 &&
+    velocity >= 0 &&
+    getsThereFirst(me, line < me.offset ? from : to, line, gap, velocity, OPPONENTS_HANDLING, evadingAt);
   // Crawling, it can squeeze through a gap where it would otherwise stay put.
   const squeeze = me.speed <= CRAWLING ? { bodies: [...ridersBikes, ...unsafe.map(({ body }) => body)], edge: squeezeEdge } : null;
-  const line = keepTo(nearestClearLine(racingLine, me.offset, blocked, unsafe, edge, squeeze));
+  const line = keepTo(nearestClearLine(racingLine, me.offset, blocked, unsafe, edge, squeeze, getsAcross));
   // It holds back to the speed of a rider in its way, unless its line takes it clear past them.
   let holdBehind = Infinity;
   for (const other of inTheWay) {
@@ -330,8 +415,7 @@ export function lineAround(
       holdBehind = Math.min(holdBehind, heldBackTo(slowEnough, clearPast));
     }
   }
-  const evading = unsafe.some(({ keepClear: [from, to] }) => me.offset > from && me.offset < to);
-  return { line, holdBehind, evading };
+  return { line, holdBehind, evading: evadingAt(me.offset) };
 }
 
 /**
@@ -387,10 +471,11 @@ function heldBackTo(speed: number, clearPast: boolean): number {
  * `blocked`, cars' and obstacles' `unsafe`), otherwise the nearer (to
  * `current`) end of the blocked stretch that does, within the road's `edge`.
  * An opponent never steers across the path of a car or an obstacle it is
- * close to and not already in the way of: it gets as near the racing line,
- * within the road's edge, as it can on its side of them, and beyond the edge,
- * as on the shoulder, it stays on its side of them rather than cross their
- * path to get within it. In the way of one, it gets out of its path on
+ * close to and not already in the way of, unless, crawling, it gets across
+ * that path before it gets there (`getsAcross`): it gets as near the racing
+ * line, within the road's edge, as it can on its side of them, and beyond the
+ * edge, as on the shoulder, it stays on its side of them rather than cross
+ * their path to get within it. In the way of one, it gets out of its path on
  * a side it can get to before it gets there, or else the nearer side. If no
  * end is within reach, it stays where it is, to hold back behind whatever is
  * in its way, or, crawling, it squeezes past it (see `squeezePast`); but
@@ -406,11 +491,12 @@ function nearestClearLine(
   unsafe: readonly Room[],
   edge: number,
   squeeze: Squeeze | null,
+  getsAcross: (room: Room, line: number) => boolean,
 ) {
   if (blocked.length === 0 && unsafe.length === 0) return clamp(racingLine, -edge, edge);
   const inside = (at: number, [from, to]: Stretch) => at > from && at < to;
   const close = unsafe.filter((room) => room.close);
-  // The lines it can get to without cutting across the path of a car or an obstacle close ahead.
+  // The lines it can get to without cutting across the path of a car or an obstacle close ahead...
   let [lowest, highest] = [-Infinity, Infinity];
   for (const room of close) {
     const [from, to] = room.body;
@@ -422,7 +508,17 @@ function nearestClearLine(
       if (!ways.right) highest = Math.min(highest, from);
     }
   }
-  const reachable = (line: number) => line >= Math.max(lowest, -edge) && line <= Math.min(highest, edge);
+  // ...or, crawling, cutting across the path of one that it gets across before it gets there.
+  const reachable = (line: number) =>
+    line >= -edge &&
+    line <= edge &&
+    close.every((room) => {
+      const [from, to] = room.body;
+      if (to <= current) return line >= to || getsAcross(room, line);
+      if (from >= current) return line <= from || getsAcross(room, line);
+      const ways = waysOut(room, current);
+      return (ways.left || line >= to) && (ways.right || line <= from);
+    });
   const inThePath = close.some(({ body }) => inside(current, body));
   const stretches = merge([...blocked, ...unsafe.map(({ keepClear }) => keepClear)]);
   const covering = stretches.find((stretch) => inside(racingLine, stretch));
