@@ -99,11 +99,12 @@ const WALKING_PACE = 2;
  * ahead of it, in its path, as something to steer round, not as one alongside
  * it, even nose to tail with it, and judges how soon it gets to one as if it
  * rolled on at walking pace at least, as it will, cutting across the path of
- * one close ahead only if it gets across before it gets there; and it goes
- * round a rider just in front of it, in its path, on its side of them if there
- * is room there for its bike, or else on their other side, but only if the
- * line it takes gets it clear of them before it reaches them, and otherwise
- * waits behind them (see `lineAround`).
+ * one close ahead, never one coming towards it, only if it gets across before
+ * it gets there or is already moving across too fast to stop short of it;
+ * and it goes round a rider just in front of it, in its path, on its side of
+ * them if there is room there for its bike, or else on their other side, but
+ * only if the line it takes gets it clear of them before it reaches them, and
+ * otherwise waits behind them (see `lineAround`).
  */
 const CRAWLING = 2 * WALKING_PACE;
 /** An opponent shoved sideways by a kick faster than this (m/s) rides the kick out before it steers back to its line. */
