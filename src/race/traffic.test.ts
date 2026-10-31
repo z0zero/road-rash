@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { createRace, NO_INPUT, PLAYER, STEP_SECONDS, type CarSnapshot, type PlayerInput, type Race, type RaceEvent } from ".";
+import {
+  createRace,
+  NO_INPUT,
+  PLAYER,
+  STEP_SECONDS,
+  type CarSnapshot,
+  type PlayerInput,
+  type Race,
+  type RaceEvent,
+  type Track,
+  type TrackPosition,
+} from ".";
 import {
   autopilot,
   carsAndObstacles,
@@ -543,6 +554,29 @@ function standingInTheOncomingLane(seeds = [1, 4, 2, 3]) {
 }
 
 /**
+ * Input for the player on foot: runs towards where `where` says, as nearly as
+ * they can, since they can turn their run no more than 60° either way from
+ * heading straight for their bike.
+ */
+function runTowards(race: Race, where: () => TrackPosition) {
+  return (): PlayerInput => {
+    const me = player(race);
+    const { distance, offset } = where();
+    const toTheBike = Math.atan2(me.bike.offset - me.offset, me.bike.distance - me.distance);
+    const turn = Math.atan2(offset - me.offset, distance - me.distance) - toTheBike;
+    // Steering turns the run by up to 60°, more to the right the more it steers to the right when the bike is ahead.
+    return { ...NO_INPUT, steer: Math.max(-1, Math.min(1, Math.atan2(Math.sin(turn), Math.cos(turn)) / (Math.PI / 3))) };
+  };
+}
+
+/** The first roadside sign at least 100 m ahead of the player's start line. */
+function firstSign(track: Track) {
+  const sign = track.obstacles.find((obstacle) => obstacle.kind === "sign" && obstacle.distance > track.startDistance + 100);
+  if (!sign) throw new Error("no sign near the start");
+  return sign;
+}
+
+/**
  * A started race with no cops, on a road closed to every car but one pulled
  * over onto the shoulder 5 m past the first roadside sign at least 100 m
  * ahead of the player's start line, in which the field has ridden off and the
@@ -551,12 +585,57 @@ function standingInTheOncomingLane(seeds = [1, 4, 2, 3]) {
  */
 function thrownPastAParkedCar() {
   const { track } = setUpRace({ seed: 1 }, CLOSED_ROAD);
-  const sign = track.obstacles.find((obstacle) => obstacle.kind === "sign" && obstacle.distance > track.startDistance + 100);
-  if (!sign) throw new Error("no sign near the start");
-  const race = leftOnTheirOwn(1, { ...NO_COPS, parkedCars: [{ distance: sign.distance + 5, offset: track.roadHalfWidth + 1.5 }] });
+  const sign = firstSign(track);
+  const race = leftOnTheirOwn(1, { ...NO_COPS, traffic: { cars: [{ distance: sign.distance + 5, offset: track.roadHalfWidth + 1.5 }] } });
   eventsUntil(race, rideInto(race, sign, 15), playerCrashed, 60);
   const [car] = race.snapshot().traffic;
   return { race, car };
+}
+
+/**
+ * A started race with no cops, on a road closed to every car but one coming
+ * down the shoulder towards the riders at `speed` m/s, in which the field has
+ * ridden off and the player has ridden into the first roadside sign at least
+ * 100 m ahead of their start line at about 15 m/s and been thrown on past it,
+ * into the car's path: they are on their feet, their bike behind them by the
+ * sign, and the car is still on its way, some seconds off. Returns the car, as
+ * it is now.
+ */
+function thrownIntoTheWayOfACar(speed: number) {
+  const { track } = setUpRace({ seed: 1 }, CLOSED_ROAD);
+  const sign = firstSign(track);
+  const coming = { distance: sign.distance + 20 + 75 * speed, offset: track.roadHalfWidth + 1.5, speed, oncoming: true };
+  const race = leftOnTheirOwn(1, { ...NO_COPS, traffic: { cars: [coming] } });
+  eventsUntil(race, rideInto(race, sign, 15), playerCrashed, 60);
+  secondsUntil(race, { ...NO_INPUT, brake: 1 }, () => player(race).crash === "on-foot", 3);
+  const car = () => race.snapshot().traffic[0];
+  expect(car().distance - car().length / 2 - player(race).distance).toBeGreaterThan(20);
+  expect(Math.abs(car().offset - player(race).offset)).toBeLessThan(car().width / 2);
+  return { race, car };
+}
+
+/**
+ * Steps with `input` for `seconds`, the player on foot near the car `car`
+ * gives, and returns when they touched it and were inside it, and when they
+ * were knocked down.
+ */
+function onFootBeside(race: Race, car: () => CarSnapshot, input: () => PlayerInput, seconds: number) {
+  const touching: number[] = [];
+  const inside: number[] = [];
+  const knockedDown: number[] = [];
+  for (let step = 0; step < seconds * STEPS_PER_SECOND; step++) {
+    race.step(input());
+    const me = player(race);
+    const them = car();
+    const { clock } = race.snapshot();
+    if (race.drainEvents().some((event) => event.type === "knocked-down")) knockedDown.push(clock);
+    // A rider on foot takes up about 0.6 m either way.
+    const along = Math.abs(them.distance - me.distance) - them.length / 2 - 0.3;
+    const across = Math.abs(them.offset - me.offset) - them.width / 2 - 0.3;
+    if (along < 0.05 && across < 0.05) touching.push(clock);
+    if (along < -0.02 && across < -0.02) inside.push(clock);
+  }
+  return { touching, inside, knockedDown };
 }
 
 describe("a rider on foot", () => {
@@ -594,6 +673,63 @@ describe("a rider on foot", () => {
     // Round it and back on their bike about as soon as with nothing in the way: 9 m or so at a run.
     expect(race.snapshot().clock - onTheirFeet).toBeLessThan(2.5);
     expect(race.snapshot().traffic).toEqual([car]);
+  });
+
+  it("is pushed clear of a car that has gone half past them when they run into its side, never knocked down by it", () => {
+    const { race, car } = thrownIntoTheWayOfACar(12);
+    // They step aside, out of its path, and wait there until its middle has gone past them (it comes down the road).
+    const aside = standIn(race, () => car().offset - car().width / 2 - 0.5);
+    secondsUntil(race, aside, () => car().distance < player(race).distance, 30);
+
+    // Then they run across into its side, behind its middle, until it has gone by.
+    const intoItsSide = runTowards(race, () => ({ distance: player(race).distance, offset: car().offset }));
+    const { touching, inside, knockedDown } = onFootBeside(race, car, intoItsSide, 1);
+
+    expect(touching.length).toBeGreaterThan(0);
+    expect(knockedDown).toEqual([]);
+    expect(inside).toEqual([]);
+    expect(player(race).crash).toBe("on-foot");
+  });
+
+  it("is pushed clear of a car going slower than them that they run after, never knocked down by it", () => {
+    const { race, car } = thrownIntoTheWayOfACar(3);
+    // They step aside, out of its path, and wait there until it has gone by them (it comes down the road)...
+    const aside = standIn(race, () => car().offset - car().width / 2 - 0.5);
+    secondsUntil(race, aside, () => car().distance + car().length / 2 < player(race).distance, 60);
+
+    // ...then run after it, at its back, faster than it.
+    const afterIt = runTowards(race, () => ({ distance: car().distance + car().length / 2, offset: car().offset }));
+    const { touching, inside, knockedDown } = onFootBeside(race, car, afterIt, 1.5);
+
+    expect(touching.length).toBeGreaterThan(0);
+    expect(knockedDown).toEqual([]);
+    expect(inside).toEqual([]);
+  });
+
+  it("is pushed clear of a car going slower than them that they brush, running away from it, never knocked down by it", () => {
+    const { race, car } = thrownIntoTheWayOfACar(3);
+    // They step aside, out of its path, and wait there until its front, but not its middle, has gone by them...
+    const aside = standIn(race, () => car().offset - car().width / 2 - 0.5);
+    secondsUntil(race, aside, () => car().distance - car().length / 2 < player(race).distance - 0.5, 60);
+    expect(car().distance).toBeGreaterThan(player(race).distance);
+
+    // ...then run on down the road, faster than it, cutting in front of it.
+    const awayFromIt = runTowards(race, () => ({ distance: car().distance - car().length / 2 - 20, offset: car().offset }));
+    const { touching, inside, knockedDown } = onFootBeside(race, car, awayFromIt, 1.5);
+
+    expect(touching.length).toBeGreaterThan(0);
+    expect(knockedDown).toEqual([]);
+    expect(inside).toEqual([]);
+  });
+
+  it("is knocked down by a car that drives into them, however slowly: one at 3 m/s, standing in front of it", () => {
+    const { race } = thrownIntoTheWayOfACar(3);
+
+    const events = eventsUntil(race, { ...NO_INPUT, brake: 1 }, (event) => event.type === "knocked-down", 60);
+
+    expect(events.filter((event) => event.type === "knocked-down")).toEqual([
+      { type: "knocked-down", rider: PLAYER, impactSpeed: expect.closeTo(3, 1) },
+    ]);
   });
 
   it("is knocked down by a car that runs into them: they tumble again, at no cost to their bike", () => {
