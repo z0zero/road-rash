@@ -104,7 +104,7 @@ export default function Game() {
       <Scene session={session} reduceMotion={reduceMotion} />
       {state.screen === "title" && (
         <TitleScreen
-          difficulty={state.difficulty}
+          difficulty={state.raceOptions.difficulty}
           personalBest={state.personalBest}
           onChooseDifficulty={session.chooseDifficulty}
           onStart={startRace}
@@ -128,8 +128,7 @@ export default function Game() {
       )}
       {state.screen === "paused" && (
         <PauseMenu
-          seed={state.seed}
-          difficulty={state.difficulty}
+          raceOptions={state.raceOptions}
           onResume={session.resume}
           onRestart={restart}
           onQuit={session.quitToTitle}
@@ -141,8 +140,7 @@ export default function Game() {
           personalBest={state.personalBest}
           newBestTime={state.newBestTime}
           newBestPosition={state.newBestPosition}
-          seed={state.seed}
-          difficulty={state.difficulty}
+          raceOptions={state.raceOptions}
           onRestart={restart}
           onTitle={session.quitToTitle}
         />
