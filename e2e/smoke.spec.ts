@@ -114,6 +114,25 @@ test("raises the HUD's speed while the throttle is held", async ({ page }) => {
   expect(await hudSpeedKmh(page)).toBeGreaterThan(40);
 });
 
+for (const viewport of [
+  { width: 1280, height: 577 },
+  { width: 1024, height: 576 },
+]) {
+  test.describe(`in a window ${viewport.width}x${viewport.height}, as a laptop's browser at 150% scaling leaves`, () => {
+    test.use({ viewport });
+
+    test("fits the title screen in, from the game's title to the personal best", async ({ page }) => {
+      await page.evaluate(() =>
+        localStorage.setItem("rev-and-wreck:v2", JSON.stringify({ personalBests: { normal: { time: 185.25, position: 4 } } })),
+      );
+      await page.reload();
+
+      await expect(page.getByRole("heading", { name: "Rev & Wreck" })).toBeInViewport({ ratio: 1 });
+      await expect(page.getByTestId("title-personal-best")).toBeInViewport({ ratio: 1 });
+    });
+  });
+}
+
 test("pauses on Esc, offering resume, restart and quit to title", async ({ page }) => {
   await startRacing(page);
 
