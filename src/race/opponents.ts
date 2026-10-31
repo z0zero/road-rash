@@ -122,9 +122,10 @@ export function decideOpponents(
 /**
  * Brawlers, bullies and racers among the riders on their bikes (`riding`)
  * attack the nearest rider within their reach now and then, the player far
- * more often than each other; never a cop. A player who doesn't fight an
- * opponent back gets a breather after each of its hits, and is spared by
- * those `waiting` their turn and those that have given up on them.
+ * more often than each other; never a cop. The player gets a breather after
+ * each of an opponent's hits, unless they fight it back on a difficulty that
+ * gives none then, and a player who doesn't fight an opponent back is spared
+ * by those `waiting` their turn and those that have given up on them.
  */
 export function opponentsAttack(race: RaceState, riding: readonly Rider[], waiting: ReadonlySet<Rider>): void {
   for (const opponent of riding) {
@@ -132,10 +133,12 @@ export function opponentsAttack(race: RaceState, riding: readonly Rider[], waiti
     const nearest = nearestWithinReach(opponent.motion, targetsFor(race, opponent), punchOf(opponent));
     // Opponents leave the cops alone.
     if (nearest?.kind !== "rider") continue;
-    // A player who doesn't fight an opponent back gets a breather after each of its hits, and is spared by those
-    // waiting their turn and those that have given up on them.
-    const spared = opponent.breatherSteps > 0 || waiting.has(opponent) || opponent.patience.gaveUp;
-    if (isPlayer(nearest) && spared && !isFightingBack(opponent.stepsSinceThePlayerHitIt)) continue;
+    // The player gets a breather after each of its hits (one fighting it back only on some difficulties), and a
+    // player who doesn't fight it back is spared by those waiting their turn and those that have given up on them.
+    const fightingBack = isFightingBack(opponent.stepsSinceThePlayerHitIt);
+    const breather = opponent.breatherSteps > 0 && (race.difficulty.breatherWhenFoughtBack || !fightingBack);
+    const spared = breather || (!fightingBack && (waiting.has(opponent) || opponent.patience.gaveUp));
+    if (isPlayer(nearest) && spared) continue;
     const kind = opponentAttack(opponent.temperament, isPlayer(nearest), isMidSwing(nearest.attack), race.difficulty, race.random);
     // A club reaches further than a kick: a club holder swings at a rider its kick can't reach.
     if (kind) throwAttack(race, opponent, kind === "kick" && !withinReach(opponent.motion, nearest.motion, kind) ? "punch" : kind);
