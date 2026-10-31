@@ -18,7 +18,7 @@ export function PauseMenu({
   onQuit: () => void;
 }) {
   return (
-    <Dialog title="Paused" panelClassName="gap-4 px-10 [&>h2]:mb-2">
+    <Dialog title="Paused" escGoesBack={false} panelClassName="gap-4 px-10 [&>h2]:mb-2">
       <Button data-back autoFocus onClick={onResume}>
         Resume
       </Button>

@@ -6,7 +6,7 @@ import { Dialog } from "./Dialog";
 /** Who made what, and the game's independence from Road Rash, reached from the title screen. Esc goes back. */
 export function CreditsScreen({ onBack }: { onBack: () => void }) {
   return (
-    <Dialog title="Credits" onBack={onBack} panelClassName="w-[min(36rem,92vw)] gap-6 px-10 text-center">
+    <Dialog title="Credits" panelClassName="w-[min(36rem,92vw)] gap-6 px-10 text-center">
       <dl className="flex flex-col gap-4">
         <div>
           <dt className="font-display text-xl uppercase tracking-wider text-sunset">Music</dt>
