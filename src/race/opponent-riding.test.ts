@@ -142,6 +142,22 @@ describe("an obstacle close ahead", () => {
 
     expect(line).toBeGreaterThanOrEqual(7 + 0.8 + 0.4);
   });
+
+  it("gives a crawling bike behind a rider stopped on the shoulder the same line whether it rolls on at walking pace or has all but stopped, with a cop's bike standing just beyond them", () => {
+    // Crawling on the shoulder 7.9 m out, 2.9 m behind a rider stopped there, with a cop's bike standing 2 m beyond them
+    // and 1.1 m nearer the road (a bike's length and width).
+    const copsBike: Footprint = { distance: 1004.9, offset: 6.8, movingTo: 6.8, velocity: 0, halfLength: 1, halfWidth: 0.4 };
+    const rolling = bike(1000, 7.9, 2);
+    const stopping = bike(1000, 7.9, 0.3);
+
+    const atWalkingPace = lineAround(rolling, 4.5, [rolling, bike(1002.9, 7.9, 0)], [copsBike], EDGE, SHOULDER_EDGE);
+    const allButStopped = lineAround(stopping, 4.5, [stopping, bike(1002.9, 7.9, 0)], [copsBike], EDGE, SHOULDER_EDGE);
+
+    // Slowing down never changes its mind, so it never stops and starts behind them: it either rolls on round them or
+    // waits behind them.
+    expect(allButStopped.line).toBeCloseTo(atWalkingPace.line, 6);
+    expect(allButStopped.holdBehind > 0).toBe(atWalkingPace.holdBehind > 0);
+  });
 });
 
 describe("keeping to a line", () => {
