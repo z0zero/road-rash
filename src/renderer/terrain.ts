@@ -271,7 +271,8 @@ function createTerrain(track: Track): Terrain {
     buildGeometry(fromDistance, toDistance) {
       const first = Math.max(0, Math.floor(fromDistance / SPACING));
       const last = Math.min(count - 1, Math.ceil(toDistance / SPACING));
-      const faces: Faces = { positions: [], colors: [], normals: [] };
+      // At most two triangles for each quad: nine quads a side, two sides, between each two sections.
+      const faces = new Faces((last - first) * 2 * (POINTS - 1) * 2);
       for (let i = first; i < last; i++) {
         for (let s = 0; s < 2; s++) {
           for (let k = 0; k < POINTS - 1; k++) {
@@ -279,28 +280,74 @@ function createTerrain(track: Track): Terrain {
             const nearOut = point(s, i, k + 1);
             const farIn = point(s, i + 1, k);
             const farOut = point(s, i + 1, k + 1);
-            // Counter-clockwise seen from above: left to right across the race direction, near before far.
-            const quad: Quad = s === 1 ? [nearIn, nearOut, farOut, farIn] : [nearOut, nearIn, farIn, farOut];
             // How far apart its ends are along the road, at the narrower one.
             const spread = Math.min(spreadBetween(nearIn, farIn), spreadBetween(nearOut, farOut));
-            pushQuad(faces, quad, (i * POINTS + k) * 2 + s, k === POINTS - 2, spread);
+            const seed = (i * POINTS + k) * 2 + s;
+            const skirt = k === POINTS - 2;
+            // Counter-clockwise seen from above: left to right across the race direction, near before far.
+            if (s === 1) pushQuad(faces, nearIn, nearOut, farOut, farIn, seed, skirt, spread);
+            else pushQuad(faces, nearOut, nearIn, farIn, farOut, seed, skirt, spread);
           }
         }
       }
-      const geometry = geometryFrom(faces.positions, faces.colors, faces.normals);
+      const geometry = faces.geometry();
       geometry.computeBoundingSphere();
       return geometry;
     },
   };
 }
 
-type Quad = [WorldPoint, WorldPoint, WorldPoint, WorldPoint];
+/** A direction in the world, as a unit vector. */
+interface Direction {
+  x: number;
+  y: number;
+  z: number;
+}
 
-/** The land's faces as they are built: every triangle's corners, with its colour and normal at each. */
-interface Faces {
-  readonly positions: number[];
-  readonly colors: number[];
-  readonly normals: number[];
+/**
+ * The land's faces as they are built: every triangle's corners, with its
+ * colour and normal at each, written straight into the arrays the geometry is
+ * made from.
+ */
+class Faces {
+  private readonly positions: Float32Array;
+  private readonly colors: Float32Array;
+  private readonly normals: Float32Array;
+  private length = 0;
+
+  /** Room for up to `triangles` triangles. */
+  constructor(triangles: number) {
+    this.positions = new Float32Array(triangles * 9);
+    this.colors = new Float32Array(triangles * 9);
+    this.normals = new Float32Array(triangles * 9);
+  }
+
+  /** Adds a triangle in one colour, facing one way. */
+  add(p: WorldPoint, q: WorldPoint, r: WorldPoint, color: Color, normal: Direction) {
+    this.addCorner(p, color, normal);
+    this.addCorner(q, color, normal);
+    this.addCorner(r, color, normal);
+  }
+
+  /** The triangles added, as a geometry. */
+  geometry(): BufferGeometry {
+    const added = (values: Float32Array) => values.subarray(0, this.length);
+    return geometryFrom(added(this.positions), added(this.colors), added(this.normals));
+  }
+
+  private addCorner(point: WorldPoint, color: Color, normal: Direction) {
+    const at = this.length;
+    this.positions[at] = point.x;
+    this.positions[at + 1] = point.y;
+    this.positions[at + 2] = point.z;
+    this.colors[at] = color.r;
+    this.colors[at + 1] = color.g;
+    this.colors[at + 2] = color.b;
+    this.normals[at] = normal.x;
+    this.normals[at + 1] = normal.y;
+    this.normals[at + 2] = normal.z;
+    this.length = at + 3;
+  }
 }
 
 /**
@@ -474,34 +521,50 @@ const GRASS = [new Color("#8c8a48"), new Color("#76803f"), new Color("#9c8f50")]
 const SAND = new Color("#cdb088");
 const scratch = new Color();
 
+/** Scratch space for `pushQuad`'s normals, so that building the land allocates nothing for each quad. */
+const quadNormal: Direction = { x: 0, y: 1, z: 0 };
+const normal: Direction = { x: 0, y: 1, z: 0 };
+
 /**
- * Adds a quad as two flat-shaded triangles, each coloured by its slope and
- * height: rock, scrub, grass or the shore, a little lighter or darker. A quad
- * whose `spread` (see `spreadBetween`) is less than 1, inside a bend, is a
- * wedge, and twisted as a rule: its triangles, which would be shaded and
- * coloured each its own way, take on the quad's own slope and height, and
- * keep less of their lighter or darker touch, the narrower it is the more, so
- * that the wedges of a bend read as one hillside rather than as a fan of
- * stripes.
+ * Adds a quad, its corners `a` to `d` counter-clockwise seen from above, as
+ * two flat-shaded triangles, each coloured by its slope and height: rock,
+ * scrub, grass or the shore, a little lighter or darker. A quad whose `spread`
+ * (see `spreadBetween`) is less than 1, inside a bend, is a wedge, and
+ * twisted as a rule: its triangles, which would be shaded and coloured each
+ * its own way, take on the quad's own slope and height, and keep less of
+ * their lighter or darker touch, the narrower it is the more, so that the
+ * wedges of a bend read as one hillside rather than as a fan of stripes.
  */
-function pushQuad(faces: Faces, [a, b, c, d]: Quad, seed: number, skirt: boolean, spread: number) {
-  const triangles: [WorldPoint, WorldPoint, WorldPoint][] = [
-    [a, b, c],
-    [a, c, d],
-  ];
+function pushQuad(
+  faces: Faces,
+  a: WorldPoint,
+  b: WorldPoint,
+  c: WorldPoint,
+  d: WorldPoint,
+  seed: number,
+  skirt: boolean,
+  spread: number,
+) {
   // The quad's own normal, across its diagonals, and the height of its middle.
-  const across = { x: c.x - a.x, y: c.y - a.y, z: c.z - a.z };
-  const over = { x: d.x - b.x, y: d.y - b.y, z: d.z - b.z };
-  const quadNormal = unit(across.y * over.z - across.z * over.y, across.z * over.x - across.x * over.z, across.x * over.y - across.y * over.x);
+  const acrossX = c.x - a.x;
+  const acrossY = c.y - a.y;
+  const acrossZ = c.z - a.z;
+  const overX = d.x - b.x;
+  const overY = d.y - b.y;
+  const overZ = d.z - b.z;
+  setUnit(quadNormal, acrossY * overZ - acrossZ * overY, acrossZ * overX - acrossX * overZ, acrossX * overY - acrossY * overX);
   const quadMiddle = (a.y + b.y + c.y + d.y) / 4;
-  triangles.forEach(([p, q, r], index) => {
+  // Its triangles: a, b and c, then a, c and d.
+  for (let index = 0; index < 2; index++) {
+    const q = index === 0 ? b : c;
+    const r = index === 0 ? c : d;
     // How much the triangle faces up: the y part of its unit normal.
-    const ux = q.x - p.x;
-    const uy = q.y - p.y;
-    const uz = q.z - p.z;
-    const vx = r.x - p.x;
-    const vy = r.y - p.y;
-    const vz = r.z - p.z;
+    const ux = q.x - a.x;
+    const uy = q.y - a.y;
+    const uz = q.z - a.z;
+    const vx = r.x - a.x;
+    const vy = r.y - a.y;
+    const vz = r.z - a.z;
     const nx = uy * vz - uz * vy;
     const ny = uz * vx - ux * vz;
     const nz = ux * vy - uy * vx;
@@ -509,16 +572,17 @@ function pushQuad(faces: Faces, [a, b, c, d]: Quad, seed: number, skirt: boolean
     // nothing: they would have no normal to light them by, and the odd pixel of one would come out
     // not a number.
     const twiceArea = Math.hypot(nx, ny, nz);
-    if (twiceArea < 1e-6) return;
-    const normal = unit(
+    if (twiceArea < 1e-6) continue;
+    setUnit(
+      normal,
       (nx / twiceArea) * spread + quadNormal.x * (1 - spread),
       (ny / twiceArea) * spread + quadNormal.y * (1 - spread),
       (nz / twiceArea) * spread + quadNormal.z * (1 - spread),
     );
     const up = normal.y;
-    const middle = ((p.y + q.y + r.y) / 3) * spread + quadMiddle * (1 - spread);
+    const middle = ((a.y + q.y + r.y) / 3) * spread + quadMiddle * (1 - spread);
     // Patches a few tens of metres across, so neighbouring faces mostly share a colour.
-    const patch = smoothNoise((p.x + p.z * 0.7) / 23, 30);
+    const patch = smoothNoise((a.x + a.z * 0.7) / 23, 30);
     if (skirt) scratch.copy(DARK_ROCK);
     else if (middle < 1.2) scratch.copy(up > 0.8 ? SAND : DARK_ROCK);
     else if (up < 0.6) {
@@ -528,16 +592,20 @@ function pushQuad(faces: Faces, [a, b, c, d]: Quad, seed: number, skirt: boolean
     } else if (up < 0.85) scratch.copy(SCRUB[patch < 0.5 ? 0 : 1]);
     else scratch.copy(GRASS[Math.min(GRASS.length - 1, Math.floor(patch * GRASS.length))]);
     scratch.multiplyScalar(0.99 + 0.12 * (hash(seed * 2 + index) - 0.5) * spread);
-    for (const point of [p, q, r]) {
-      faces.positions.push(point.x, point.y, point.z);
-      faces.colors.push(scratch.r, scratch.g, scratch.b);
-      faces.normals.push(normal.x, normal.y, normal.z);
-    }
-  });
+    faces.add(a, q, r, scratch, normal);
+  }
 }
 
-/** The unit vector along (x, y, z); straight up for none. */
-function unit(x: number, y: number, z: number): { x: number; y: number; z: number } {
+/** Sets `vector` to the unit vector along (x, y, z); straight up for none. */
+function setUnit(vector: Direction, x: number, y: number, z: number) {
   const length = Math.hypot(x, y, z);
-  return length < 1e-9 ? { x: 0, y: 1, z: 0 } : { x: x / length, y: y / length, z: z / length };
+  if (length < 1e-9) {
+    vector.x = 0;
+    vector.y = 1;
+    vector.z = 0;
+  } else {
+    vector.x = x / length;
+    vector.y = y / length;
+    vector.z = z / length;
+  }
 }
