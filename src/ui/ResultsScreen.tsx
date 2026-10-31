@@ -65,34 +65,41 @@ export function ResultsScreen({
     if (ready && !buttons.current?.contains(document.activeElement)) restart.current?.focus(SHOW_FOCUS);
   }, [ready]);
   return (
+    // Centred by its margins, as a screen over the game is (see `Dialog`); in a short window, the spacing is tighter,
+    // so that Restart and Back to title are in view even after a first finish with a new best.
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="results-title"
-      className="absolute inset-0 flex items-center justify-center overflow-y-auto bg-night/55 p-4 backdrop-blur-[2px]"
+      className="absolute inset-0 flex flex-col overflow-y-auto bg-night/55 p-4 backdrop-blur-[2px]"
     >
-      <div className={`flex w-[min(52rem,94vw)] flex-col gap-6 px-8 py-7 md:flex-row md:gap-10 ${PANEL}`}>
-        <div className="flex flex-col items-center gap-4 md:w-72 md:shrink-0">
-          <h2 id="results-title" className={`text-6xl ${PANEL_TITLE}`}>
+      <div className={`m-auto flex w-[min(52rem,94vw)] flex-col gap-6 px-8 py-7 short:py-4 md:flex-row md:gap-10 ${PANEL}`}>
+        <div className="flex flex-col items-center gap-4 short:gap-2 md:w-72 md:shrink-0">
+          <h2 id="results-title" className={`text-6xl short:text-5xl ${PANEL_TITLE}`}>
             {BANNERS[results.outcome]}
           </h2>
           <p
             data-testid="qualified"
-            className={`font-display text-3xl uppercase italic ${results.qualified ? "text-sunset" : "text-sand/70"}`}
+            className={`font-display text-3xl short:text-2xl uppercase italic ${results.qualified ? "text-sunset" : "text-sand/70"}`}
           >
             {results.qualified ? "Qualified!" : "Not qualified"}
           </p>
           {!results.qualified && results.outcome === "finished" && (
-            <p className="-mt-3 text-sm text-sand/70">Finish {formatPosition(QUALIFYING_POSITION)} or better to qualify.</p>
+            <p className="-mt-3 text-sm text-sand/70 short:-mt-1.5">
+              Finish {formatPosition(QUALIFYING_POSITION)} or better to qualify.
+            </p>
           )}
           {results.remark ? (
             <SaidAfterTheRace remark={results.remark} />
           ) : (
-            <p data-testid="racing-on" className="w-full border-l-4 border-sand/30 py-0.5 pl-4 text-left text-lg italic text-sand/70">
+            <p
+              data-testid="racing-on"
+              className="w-full border-l-4 border-sand/30 py-0.5 pl-4 text-left text-lg italic text-sand/70 short:text-base"
+            >
               The rest of the field is racing to the finish&hellip;
             </p>
           )}
-          <dl className="grid w-full grid-cols-2 gap-x-6 gap-y-2 text-lg">
+          <dl className="grid w-full grid-cols-2 gap-x-6 gap-y-2 text-lg short:gap-y-0.5 short:text-base">
             <dt className="text-sand/80">Position</dt>
             <dd data-testid="results-position" className="text-right font-semibold tabular-nums text-sand">
               {results.position === null ? "–" : `${formatPosition(results.position)} of ${results.standings.length}`}
@@ -111,13 +118,15 @@ export function ResultsScreen({
             </dd>
           </dl>
           {newBests && (
-            <p className="text-center font-display text-2xl uppercase italic text-sunset">New best {newBests}!</p>
+            <p className="text-center font-display text-2xl uppercase italic text-sunset short:text-xl">New best {newBests}!</p>
           )}
-          <div ref={buttons} inert={!ready} className="flex flex-col gap-3">
-            <Button ref={restart} onClick={onRestart}>
+          <div ref={buttons} inert={!ready} className="flex flex-col gap-3 short:gap-2">
+            <Button ref={restart} onClick={onRestart} className="short:py-2">
               Restart
             </Button>
-            <Button data-back onClick={onTitle}>Back to title</Button>
+            <Button data-back onClick={onTitle} className="short:py-2">
+              Back to title
+            </Button>
           </div>
           <RaceReplay raceOptions={raceOptions} />
         </div>
@@ -134,7 +143,7 @@ export function ResultsScreen({
 function SaidAfterTheRace({ remark }: { remark: Remark }) {
   return (
     <figure data-testid="remark" className="w-full border-l-4 border-sunset/80 py-0.5 pl-4 text-left">
-      <blockquote className="text-lg italic leading-snug text-sand">&ldquo;{remark.line}&rdquo;</blockquote>
+      <blockquote className="text-lg italic leading-snug text-sand short:text-base">&ldquo;{remark.line}&rdquo;</blockquote>
       <figcaption className="mt-1.5 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-sunset">
         {remark.by.kind === "rider" ? (
           <span

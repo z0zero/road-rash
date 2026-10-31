@@ -17,21 +17,23 @@ export function Dialog({
   title: string;
   /** Whether Esc presses the way back: not on the pause menu, where Esc is a pause key, which resumes the race itself. */
   escGoesBack?: boolean;
-  /** The panel's width, spacing and alignment. */
+  /** The panel's width, spacing and alignment, tighter in a short window. */
   panelClassName: string;
   children: ReactNode;
 }) {
   const titleId = useId();
   useBackKey(escGoesBack);
   return (
+    // The panel is centred by its margins, which give way where the window is too short for it: then it starts at the
+    // top and scrolls, rather than overflowing both ways, its title out of reach.
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
-      className="absolute inset-0 flex items-center justify-center overflow-y-auto bg-night/60 p-4 backdrop-blur-sm"
+      className="absolute inset-0 flex flex-col overflow-y-auto bg-night/60 p-4 backdrop-blur-sm"
     >
-      <div className={`flex flex-col items-center py-8 ${PANEL} ${panelClassName}`}>
-        <h2 id={titleId} className={`text-5xl ${PANEL_TITLE}`}>
+      <div className={`m-auto flex flex-col items-center py-8 short:py-5 ${PANEL} ${panelClassName}`}>
+        <h2 id={titleId} className={`text-5xl short:text-4xl ${PANEL_TITLE}`}>
           {title}
         </h2>
         {children}
