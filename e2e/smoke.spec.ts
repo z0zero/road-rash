@@ -153,7 +153,7 @@ test("pauses on Esc, offering resume, restart and quit to title", async ({ page 
   await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
 });
 
-test("shows the race's seed on the pause menu, and races the seed the page's address asks for", async ({ page }) => {
+test("shows the race's seed on the pause menu: the one the page's address asks for", async ({ page }) => {
   await page.goto("/?seed=1234");
   await startRacing(page);
 
@@ -167,7 +167,9 @@ function difficultyChoices(page: Page) {
   return page.getByRole("group", { name: "Difficulty" });
 }
 
-test("chooses the difficulty beside Start Race with the mouse or the arrow keys, remembers it, and races it", async ({ page }) => {
+test("chooses the difficulty beside Start Race with the mouse or the arrow keys, remembers it, and shows it on the pause menu", async ({
+  page,
+}) => {
   const difficulty = difficultyChoices(page);
   await expect(difficulty.getByRole("radio", { name: "Normal" })).toBeChecked();
 
@@ -222,22 +224,34 @@ for (const key of ["Enter", "Space"]) {
   });
 }
 
-test("races the seed and difficulty the page's address asks for, without changing the difficulty the player chose", async ({
+test("shows the seed and difficulty the page's address asks for on the pause menu, without changing the difficulty the player chose", async ({
   page,
 }) => {
+  await difficultyChoices(page).getByText("Hard").click();
   await page.goto("/?seed=1234&difficulty=easy");
   await expect(difficultyChoices(page).getByRole("radio", { name: "Easy" })).toBeChecked();
   await startRacing(page);
+  // The player's first attack saves their settings again.
+  await page.keyboard.press("j");
+  await play(page, 0.4);
+  expect(await hasAttacked(page)).toBe(true);
 
   await page.keyboard.press("Escape");
 
   const paused = page.getByRole("dialog", { name: "Paused" });
   await expect(paused.getByTestId("race-difficulty")).toHaveText(/^Easy$/i);
   await expect(paused.getByTestId("race-seed")).toHaveText(/^Race seed 1234$/i);
+  await expect(paused.getByTitle(/^Add \?seed=1234&difficulty=easy to the page's address/)).toBeVisible();
   await page.clock.resume();
   await page.goto("/");
-  await expect(difficultyChoices(page).getByRole("radio", { name: "Normal" })).toBeChecked();
+  await expect(difficultyChoices(page).getByRole("radio", { name: "Hard" })).toBeChecked();
+  expect(await savedDifficulty(page)).toBe("hard");
 });
+
+/** The difficulty the save data holds as the player's choice. */
+function savedDifficulty(page: Page) {
+  return page.evaluate(() => JSON.parse(localStorage.getItem("rev-and-wreck:v2") ?? "{}").settings?.difficulty);
+}
 
 test("races Normal for an address with a seed alone, as v1.0.0's were, whatever difficulty the player chose", async ({
   page,
@@ -764,7 +778,9 @@ test.describe("with a gamepad", () => {
     await expect(normal).toBeChecked();
   });
 
-  test("moves the difficulty beside Start Race with the D-pad's left and right, and races it", async ({ page }) => {
+  test("moves the difficulty beside Start Race with the D-pad's left and right, and A on it starts a race shown at it", async ({
+    page,
+  }) => {
     // Nine presses, each waiting for the frames that read it, then a race's first frames.
     test.slow();
     await expect(page.getByRole("button", { name: "Start Race" })).toBeFocused();
