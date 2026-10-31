@@ -170,6 +170,8 @@ function difficultyChoices(page: Page) {
 test("chooses the difficulty beside Start Race with the mouse or the arrow keys, remembers it, and shows it on the pause menu", async ({
   page,
 }) => {
+  // A reload, then a race's countdown, a frame at a time: a busy machine takes a while.
+  test.slow();
   const difficulty = difficultyChoices(page);
   await expect(difficulty.getByRole("radio", { name: "Normal" })).toBeChecked();
 
