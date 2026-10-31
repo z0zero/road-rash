@@ -73,7 +73,7 @@ What an opponent is riding for at the moment: just racing, riding up alongside a
 _Avoid_: AI state, mode, goal
 
 **Patience**:
-How long a brawler or bully keeps riding alongside a player who rides well below its own pace, or who doesn't hit back. It wears thin while the player rides slowly beside it and builds back up while they keep up, and it runs out at once when three of its hits in a row (two on Easy, six on Hard) have landed on a player who isn't fighting it back. Once it runs out, the opponent gives up on the player and just races, attacking them only if they hit it, until its patience is whole again.
+How long a brawler or bully keeps riding alongside a player who rides well below its own pace, or who doesn't hit back. It wears thin while the player rides slowly beside it and builds back up while they keep up, and it runs out at once when three of its hits in a row (two on Easy, four on Hard) have landed on a player who isn't fighting it back. Once it runs out, the opponent gives up on the player and just races, attacking them only if they hit it, until its patience is whole again.
 _Avoid_: Tolerance, temper
 
 **Bike**:
