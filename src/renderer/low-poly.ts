@@ -85,7 +85,7 @@ export class LowPoly {
  * colour (three numbers each), and its normal where they are given, else
  * worked out: flat-shaded, as no two triangles share a corner.
  */
-export function geometryFrom(positions: readonly number[], colors: readonly number[], normals?: readonly number[]): BufferGeometry {
+export function geometryFrom(positions: ArrayLike<number>, colors: ArrayLike<number>, normals?: ArrayLike<number>): BufferGeometry {
   const geometry = new BufferGeometry();
   geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
   geometry.setAttribute("color", new Float32BufferAttribute(colors, 3));
