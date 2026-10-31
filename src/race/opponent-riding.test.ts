@@ -158,6 +158,19 @@ describe("an obstacle close ahead", () => {
     expect(allButStopped.line).toBeCloseTo(atWalkingPace.line, 6);
     expect(allButStopped.holdBehind > 0).toBe(atWalkingPace.holdBehind > 0);
   });
+
+  it("takes a crawling bike round a rider stopped on the shoulder and across the path of a rock just beyond them, when it gets across in time", () => {
+    // Rolling at walking pace 8.3 m out, 3 m behind a rider stopped there, with a rock (0.5 m across its base each way)
+    // 2 m beyond them, 6.9 m out: 3.5 m to go before it gets to the rock, and 2.3 m to get across its path.
+    const me = bike(1000, 8.3, 2);
+    const smallRock: Footprint = { distance: 1005, offset: 6.9, movingTo: 6.9, velocity: 0, halfLength: 0.5, halfWidth: 0.5 };
+
+    const { line, holdBehind } = lineAround(me, 4.5, [me, bike(1003, 8.3, 0)], [smallRock], EDGE, SHOULDER_EDGE);
+
+    // Out of the rock's path, which reaches 6.9 - 0.5 - 0.4 m, and rolling on, rather than wait behind them.
+    expect(line).toBeLessThanOrEqual(6);
+    expect(holdBehind).toBeGreaterThan(0);
+  });
 });
 
 describe("keeping to a line", () => {
