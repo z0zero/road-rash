@@ -372,6 +372,16 @@ test("shows the difficulty beside the seed on the results, with the personal bes
   await expect(page.getByTestId("title-personal-best")).toHaveText(/^Personal best on Hard 3:10\.75 · Best position 6th$/);
 });
 
+/**
+ * Waits for the page's next animation frames, by when the game has read the
+ * gamepad again, and React has drawn what the last frame changed: the game
+ * reads the gamepad once a frame, so a button let go of and pressed again
+ * between two frames would look held all along.
+ */
+function nextFrames(page: Page) {
+  return page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
 /** Buttons of the standard gamepad mapping, named as on an Xbox controller. */
 const GAMEPAD = { a: 0, b: 1, x: 2, leftTrigger: 6, rightTrigger: 7, start: 9, up: 12, down: 13, left: 14, right: 15 };
 
@@ -502,15 +512,6 @@ test.describe("with a gamepad", () => {
     expect(await hudSpeedKmh(page)).toBeGreaterThan(coastingKmh + 10);
     await page.keyboard.up("w");
   });
-
-  /**
-   * Waits for the page's next animation frames, by when the game has read the
-   * gamepad again: it reads it once a frame, so a button let go of and pressed
-   * again between two frames would look held all along.
-   */
-  function nextFrames(page: Page) {
-    return page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  }
 
   /** Presses a gamepad button, waits for what it does, then lets go, and waits for the game to have seen it let go. */
   async function tap(page: Page, button: number, then: () => Promise<void>) {
@@ -916,21 +917,31 @@ test.describe("sound", () => {
 
     await expect.poll(() => audioStates(page)).toEqual(["running"]);
     await expect.poll(() => loudness(page), { timeout: 10_000 }).toBeGreaterThan(0.01);
+    // Nothing says the sound is locked, past the moment a locked one would be told of. (Jumping there, rather than
+    // running every frame on the way, is quicker where frames are slow to draw.)
+    await page.clock.fastForward(1_200);
+    await nextFrames(page);
+    await expect(page.getByTestId("sound-locked")).toBeHidden();
   });
+
+  /** Presses A on Start Race, which has the focus: a race started without a key press or click. The clock stops from then on. */
+  async function startRaceWithTheGamepad(page: Page) {
+    await expect(page.getByRole("button", { name: "Start Race" })).toBeFocused();
+    await page.clock.pauseAt(RACE_STARTS);
+    await gamepad(page).press(GAMEPAD.a);
+    await play(page, 0.2);
+    await gamepad(page).release(GAMEPAD.a);
+  }
 
   test("says that a key press or click turns the sound on, where the browser keeps it locked after a gamepad starts the race", async ({
     page,
   }) => {
     await page.addInitScript(plugInAGamepad);
+    await page.addInitScript(activatedOnlyByKeysAndClicks);
     await page.addInitScript(lockSoundUntilAKeyOrClick);
     await page.reload();
-    await expect(page.getByRole("button", { name: "Start Race" })).toBeFocused();
 
-    // A on Start Race, which has the focus.
-    await page.clock.pauseAt(RACE_STARTS);
-    await gamepad(page).press(GAMEPAD.a);
-    await play(page, 0.2);
-    await gamepad(page).release(GAMEPAD.a);
+    await startRaceWithTheGamepad(page);
     const notice = page.getByTestId("sound-locked");
     await play(page, 1.2);
     await expect(notice).toBeVisible();
@@ -943,7 +954,77 @@ test.describe("sound", () => {
     await expect(notice).toBeHidden();
     await expect.poll(() => loudness(page), { timeout: 10_000 }).toBeGreaterThan(0.01);
   });
+
+  test("says nothing of a locked sound after a race started by a click, even where the browser never plays it", async ({
+    page,
+  }) => {
+    await page.addInitScript(neverPlayAudio);
+    await page.reload();
+
+    await page.getByRole("button", { name: "Start Race" }).click();
+    await page.clock.fastForward(1_200);
+    await nextFrames(page);
+
+    expect(await audioStates(page)).toEqual(["suspended"]);
+    await expect(page.getByTestId("countdown")).toBeVisible();
+    await expect(page.getByTestId("sound-locked")).toBeHidden();
+  });
+
+  test("stops saying that a key press or click turns the sound on once one hasn't", async ({ page }) => {
+    await page.addInitScript(plugInAGamepad);
+    await page.addInitScript(activatedOnlyByKeysAndClicks);
+    await page.addInitScript(neverPlayAudio);
+    await page.reload();
+    await startRaceWithTheGamepad(page);
+    const notice = page.getByTestId("sound-locked");
+    await play(page, 1.2);
+    await expect(notice).toBeVisible();
+
+    await page.keyboard.press("w");
+    await play(page, 1.2);
+
+    expect(await audioStates(page)).toEqual(["suspended"]);
+    await expect(notice).toBeHidden();
+    await play(page, 2);
+    await expect(notice).toBeHidden();
+  });
+
+  for (const [silenced, volumes] of [
+    ["the master volume", { masterVolume: 0 }],
+    ["the music and the effects", { musicVolume: 0, effectsVolume: 0 }],
+  ] as const) {
+    test(`says nothing of a locked sound to a player who has turned ${silenced} all the way down`, async ({ page }) => {
+      await page.evaluate((settings) => localStorage.setItem("rev-and-wreck:v2", JSON.stringify({ settings })), volumes);
+      await page.addInitScript(plugInAGamepad);
+      await page.addInitScript(activatedOnlyByKeysAndClicks);
+      await page.addInitScript(lockSoundUntilAKeyOrClick);
+      await page.reload();
+
+      await startRaceWithTheGamepad(page);
+      await play(page, 1.2);
+
+      expect(await audioStates(page)).toEqual(["suspended"]);
+      await expect(page.getByTestId("countdown")).toBeVisible();
+      await expect(page.getByTestId("sound-locked")).toBeHidden();
+    });
+  }
 });
+
+/**
+ * Runs in the page before its scripts: a browser in which only a key press or click gives the page the player's
+ * activation, for the few seconds after it, as in Safari, where a gamepad's press doesn't. (Playwright's own calls
+ * into the page give it too, which a gamepad's press never would.)
+ */
+function activatedOnlyByKeysAndClicks() {
+  let last = -Infinity;
+  for (const gesture of ["keydown", "mousedown"]) {
+    window.addEventListener(gesture, (event) => event.isTrusted && (last = performance.now()), { capture: true });
+  }
+  Object.defineProperty(Navigator.prototype, "userActivation", {
+    configurable: true,
+    get: () => ({ isActive: performance.now() - last < 5_000, hasBeenActive: last > -Infinity }),
+  });
+}
 
 /**
  * Runs in the page before its scripts: a browser that keeps sound locked until the page's first key press or click,

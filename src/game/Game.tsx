@@ -13,7 +13,6 @@ import { Hud } from "@/ui/Hud";
 import { PauseMenu } from "@/ui/PauseMenu";
 import { ResultsScreen } from "@/ui/ResultsScreen";
 import { SettingsScreen } from "@/ui/SettingsScreen";
-import { SoundLockedNotice } from "@/ui/SoundLockedNotice";
 import { TitleScreen } from "@/ui/TitleScreen";
 import { GameSession } from "./session";
 
@@ -124,9 +123,8 @@ export default function Game() {
       {state.screen === "controls" && <ControlsScreen onBack={session.backToTitle} />}
       {state.screen === "credits" && <CreditsScreen onBack={session.backToTitle} />}
       {(state.screen === "racing" || state.screen === "paused") && (
-        <Hud session={session} reduceMotion={reduceMotion} inputDevice={inputDevice} />
+        <Hud session={session} reduceMotion={reduceMotion} inputDevice={inputDevice} soundLocked={soundLocked} />
       )}
-      {soundLocked && (state.screen === "racing" || state.screen === "paused") && <SoundLockedNotice />}
       {state.screen === "paused" && (
         <PauseMenu
           seed={state.seed}
