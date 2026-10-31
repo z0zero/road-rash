@@ -119,6 +119,8 @@ function createTerrain(track: Track): Terrain {
    * How far apart the points `l` metres out on one side of section `i` and of its neighbours are,
    * along the road, as a share of the sections' spacing: 1 on a straight and on the outside of a
    * bend, less on the inside, where the sections close in on the bend's centre, and 0 there and beyond.
+   * Worked out from the centreline alone, it foresees, while the land is built, what `spreadBetween`
+   * measures between the points of the land once built.
    */
   function spreadAt(i: number, side: Side, l: number) {
     const before = Math.max(0, i - 1);
