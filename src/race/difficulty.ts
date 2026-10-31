@@ -24,7 +24,7 @@ export interface CatchUp {
 
 /** How the opponents ride and fight on a difficulty. */
 export interface DifficultyTuning {
-  /** Every opponent's pace, as a share of its pace on Normal: how close to the limit it rides. */
+  /** Every opponent's pace on this difficulty, as a share of its pace on Normal (see `paceFor`). */
   readonly pace: number;
   /** How often opponents attack the player when they are within reach and free to, as a share of how often on Normal. */
   readonly attacks: number;

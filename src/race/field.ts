@@ -61,7 +61,7 @@ export function lineUpRiders(
   ];
   lineUpOpponents(track, OPPONENTS.length, random).forEach(({ distance, offset }, index) => {
     const { name, temperament, skill } = OPPONENTS[index];
-    const riding = { pace: paceFor(skill) * difficultyTuning.pace, lane: offset };
+    const riding = { pace: paceFor(skill, difficultyTuning), lane: offset };
     riders.push(lineUp({ id: PLAYER + 1 + index, name, temperament, riding }, distance, offset));
   });
   return riders;
