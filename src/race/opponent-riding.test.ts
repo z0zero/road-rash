@@ -106,6 +106,31 @@ describe("getting round a rider", () => {
     expect(line).toBeGreaterThan(8.3);
   });
 
+  it("holds a bike stopped at the shoulder's edge back behind a rider stopped just in front of it, rather than make for a narrow gap beside them", () => {
+    // Stopped 8.5 m out, 2.95 m behind a rider stopped 8.3 m out, with another stopped level with them 6.4 m out: their
+    // bikes leave a gap 0.3 m wider than a bike between them, whose middle is only 0.15 m past clear of the first rider.
+    // Steering more and more gently as it nears its line there, it would run into the first rider's back before it got
+    // clear of them.
+    const me = bike(1000, 8.5, 0);
+
+    const { line, holdBehind } = lineAround(me, 4.5, [me, bike(1002.95, 8.3, 0), bike(1002.95, 6.4, 0)], [], EDGE, SHOULDER_EDGE);
+
+    // It waits behind them, on its side of them.
+    expect(holdBehind).toBeLessThanOrEqual(0);
+    expect(line).toBeGreaterThan(8.3 - 0.8);
+  });
+
+  it("holds a bike crawling up behind a rider stopped just in front of it back, though it is a hair's breadth on their side nearer the road", () => {
+    // Slowing through 2.5 m/s, 2.62 m behind a rider stopped 7.9 m out, and 2 mm nearer the road than them, as a bike
+    // held back on their other side drifts: their side nearer the road is its own, with room for its bike, but it would
+    // run into their back before it got a bike's width across.
+    const me = bike(1000, 7.898, 2.5);
+
+    const { holdBehind } = lineAround(me, 4.5, [me, bike(1002.62, 7.9, 0)], [], EDGE, SHOULDER_EDGE);
+
+    expect(holdBehind).toBeLessThanOrEqual(0);
+  });
+
   it("keeps a bike already steering round a rider stopped just in front of it going round them, rather than give up partway", () => {
     // Rolling at walking pace at the shoulder's edge, already moving across to its left as fast as steering takes a bike
     // at that speed (1.6 m/s for every m/s), with a rider stopped 2.75 m ahead and 0.2 m inside it. Not yet steering, it
