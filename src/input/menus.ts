@@ -46,6 +46,14 @@ export function moveThroughMenu(document: Document, direction: Direction) {
 }
 
 /**
+ * A press of a button or a choice on the game's screens, which says whether
+ * the player made it (`isTrusted`): a key press or click of theirs, or one the
+ * game made for a gamepad's A (`pressInMenu`), which browsers start no sound
+ * for.
+ */
+export type Press = Pick<Event, "isTrusted">;
+
+/**
  * Presses what is in focus, if anything, as Enter would: a button, or a
  * choice, which does what Enter does on it (on the difficulty, starting the
  * race). During a race nothing is in focus, so nothing happens.

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { Press } from "@/input/menus";
 import {
   PLAYER,
   QUALIFYING_POSITION,
@@ -48,7 +49,7 @@ export function ResultsScreen({
   newBestPosition: boolean;
   /** The race's seed and difficulty, shown for a bug report. */
   raceOptions: Required<RaceOptions>;
-  onRestart: () => void;
+  onRestart: (press: Press) => void;
   onTitle: () => void;
 }) {
   const newBests = [newBestTime && "time", newBestPosition && "position"].filter(Boolean).join(" and ");
