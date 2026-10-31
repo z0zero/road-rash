@@ -183,6 +183,25 @@ test("races the seed and difficulty the page's address asks for, without changin
   await expect(difficultyChoices(page).getByRole("radio", { name: "Normal" })).toBeChecked();
 });
 
+test("races Normal for an address with a seed alone, as v1.0.0's were, whatever difficulty the player chose", async ({
+  page,
+}) => {
+  await difficultyChoices(page).getByText("Hard").click();
+  await expect(difficultyChoices(page).getByRole("radio", { name: "Hard" })).toBeChecked();
+
+  await page.goto("/?seed=1234");
+  await expect(difficultyChoices(page).getByRole("radio", { name: "Normal" })).toBeChecked();
+  // An address without a seed keeps the player's choice.
+  await page.goto("/");
+  await expect(difficultyChoices(page).getByRole("radio", { name: "Hard" })).toBeChecked();
+});
+
+test("reads the difficulty in the page's address whatever its case, and with spaces around it", async ({ page }) => {
+  await page.goto("/?seed=1234&difficulty=%20Hard%20");
+
+  await expect(difficultyChoices(page).getByRole("radio", { name: "Hard" })).toBeChecked();
+});
+
 test("pauses by itself when the browser tab is hidden", async ({ page }) => {
   await startRacing(page);
 

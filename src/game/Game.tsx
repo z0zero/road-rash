@@ -4,7 +4,7 @@ import { advance } from "@react-three/fiber";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { startGameAudio, type GameAudio } from "@/audio/game-audio";
 import { listenToPlayer, type PlayerControls } from "@/input/player-controls";
-import { DIFFICULTIES, NO_INPUT, type Difficulty } from "@/race";
+import { NO_INPUT } from "@/race";
 import { Scene } from "@/renderer/Scene";
 import { isMotionReduced, type SaveStorage } from "@/save-data/save-data";
 import { ControlsScreen } from "@/ui/ControlsScreen";
@@ -14,22 +14,23 @@ import { PauseMenu } from "@/ui/PauseMenu";
 import { ResultsScreen } from "@/ui/ResultsScreen";
 import { SettingsScreen } from "@/ui/SettingsScreen";
 import { TitleScreen } from "@/ui/TitleScreen";
+import { askedInAddress } from "./race-address";
 import { GameSession } from "./session";
 
 /** The whole game: the 3D scene with the screens and HUD over it. Runs in the browser only. */
 export default function Game() {
   const controls = useRef<PlayerControls | null>(null);
   const audio = useRef<GameAudio | null>(null);
-  const [session] = useState(
-    () =>
-      new GameSession({
-        readInput: () => controls.current?.read() ?? NO_INPUT,
-        storage: browserStorage(),
-        newSeed: () => seedInAddress() ?? Math.floor(Math.random() * 2 ** 32),
-        askedDifficulty: difficultyInAddress(),
-        now: () => performance.now(),
-      }),
-  );
+  const [session] = useState(() => {
+    const asked = askedInAddress(window.location.search);
+    return new GameSession({
+      readInput: () => controls.current?.read() ?? NO_INPUT,
+      storage: browserStorage(),
+      newSeed: () => asked.seed ?? Math.floor(Math.random() * 2 ** 32),
+      askedDifficulty: asked.difficulty,
+      now: () => performance.now(),
+    });
+  });
   const state = useSyncExternalStore(session.subscribe, session.getState, session.getState);
   const systemReducesMotion = useSyncExternalStore(
     subscribeToReducedMotion,
@@ -161,28 +162,6 @@ function subscribeToReducedMotion(onChange: () => void) {
 /** Whether the operating system asks for reduced motion. */
 function systemPrefersReducedMotion() {
   return window.matchMedia(REDUCED_MOTION).matches;
-}
-
-/**
- * The seed the page's address asks every race to use, as in `?seed=1234`, so
- * that a race from a bug report can be played again; null when it asks for
- * none, or for something that isn't a seed (a whole number below 2^32).
- */
-function seedInAddress(): number | null {
-  const asked = new URLSearchParams(window.location.search).get("seed");
-  if (asked === null || !/^\d{1,10}$/.test(asked)) return null;
-  const seed = Number(asked);
-  return seed < 2 ** 32 ? seed : null;
-}
-
-/**
- * The difficulty the page's address asks races to be run at, as in
- * `?seed=1234&difficulty=hard`, so that a race can be played again as it
- * was; null when it asks for none, or for one there isn't.
- */
-function difficultyInAddress(): Difficulty | null {
-  const asked = new URLSearchParams(window.location.search).get("difficulty");
-  return DIFFICULTIES.find((difficulty) => difficulty === asked) ?? null;
 }
 
 /** localStorage, or undefined where the browser refuses it (private modes, blocked storage). */

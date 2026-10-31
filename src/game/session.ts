@@ -68,7 +68,7 @@ export interface SessionOptions {
   /**
    * The difficulty the page's address asks for, which races are run at
    * instead of the one the player last chose, until they choose another on
-   * the title screen; null when it asks for none.
+   * the title screen; null when it asks for none (see `askedInAddress`).
    */
   askedDifficulty: Difficulty | null;
   /** The time now, in milliseconds, from any fixed point: it times how long a frame spends on the fast-forward. */

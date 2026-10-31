@@ -22,7 +22,7 @@ A browser motorcycle combat racing game inspired by Road Rash on the SEGA Genesi
 - Every hit costs stamina. A rider with no stamina left is knocked off their bike by the next hit.
 - Crashes cost your bike condition. If it runs out, you are wrecked.
 - After a crash, run back to your bike. A cop who reaches you before you remount busts you.
-- `?seed=` and `&difficulty=` in the address replay a race, as in `?seed=1234&difficulty=hard`, and the results and pause screens show the race's difficulty and seed.
+- `?seed=` and `&difficulty=` in the address replay a race, as in `?seed=1234&difficulty=hard`, and the results and pause screens show the race's difficulty and seed. A seed alone races Normal, as v1.0.0's addresses did.
 
 ## Development
 
