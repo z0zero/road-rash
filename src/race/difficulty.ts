@@ -57,7 +57,7 @@ export interface DifficultyTuning {
  * were tuned with the play-tests' bots over 24 seeds: on Easy a novice
  * (riding at 75% of a safe pace) finishes mid-field and is seldom alone, and
  * an average rider (85%) usually qualifies; on Hard an expert qualifies now
- * and then.
+ * and then, and one who hits back does at least as well as one who doesn't.
  */
 export const DIFFICULTY_TUNING: Readonly<Record<Difficulty, DifficultyTuning>> = {
   easy: {
