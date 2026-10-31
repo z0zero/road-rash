@@ -49,6 +49,13 @@
   }
 }
 
+/*
+ * A window too short for the screens' full spacing: a laptop at 150% scaling
+ * leaves about 580 px of browser window below the tabs, address bar and
+ * bookmarks.
+ */
+@custom-variant short (@media (max-height: 640px));
+
 html,
 body {
   margin: 0;

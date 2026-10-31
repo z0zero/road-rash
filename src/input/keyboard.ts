@@ -9,6 +9,7 @@ const RIGHT = codesOf(KEYS.steer.map((pair) => pair.right));
 const PUNCH = codesOf(KEYS.punch);
 const KICK = codesOf(KEYS.kick);
 const PAUSE = codesOf(KEYS.pause);
+const BACK = codesOf(KEYS.back);
 const RIDING = new Set([...THROTTLE, ...BRAKE, ...LEFT, ...RIGHT]);
 
 export interface Keyboard {
@@ -77,4 +78,14 @@ export function listenToKeyboard(target: Window, onPause: () => void): Keyboard 
       target.removeEventListener("blur", releaseAll);
     },
   };
+}
+
+/**
+ * Whether a key press is a press of Back, in menus: one of its keys in `KEYS`,
+ * by its place, or Esc wherever the keyboard's layout has put it, such as on
+ * Caps Lock made an extra Esc. A held key's repeats are not presses, so an Esc
+ * held from the race doesn't go back from the results once they can be pressed.
+ */
+export function isBackPress(event: KeyboardEvent): boolean {
+  return !event.repeat && (BACK.includes(event.code) || event.key === "Escape");
 }

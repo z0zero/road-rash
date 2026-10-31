@@ -4,7 +4,7 @@ import { advance } from "@react-three/fiber";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { startGameAudio, type GameAudio } from "@/audio/game-audio";
 import { listenToPlayer, type PlayerControls } from "@/input/player-controls";
-import { DIFFICULTIES, NO_INPUT, type Difficulty } from "@/race";
+import { NO_INPUT } from "@/race";
 import { Scene } from "@/renderer/Scene";
 import { isMotionReduced, type SaveStorage } from "@/save-data/save-data";
 import { ControlsScreen } from "@/ui/ControlsScreen";
@@ -13,24 +13,24 @@ import { Hud } from "@/ui/Hud";
 import { PauseMenu } from "@/ui/PauseMenu";
 import { ResultsScreen } from "@/ui/ResultsScreen";
 import { SettingsScreen } from "@/ui/SettingsScreen";
-import { SoundLockedNotice } from "@/ui/SoundLockedNotice";
 import { TitleScreen } from "@/ui/TitleScreen";
+import { askedInAddress } from "./race-address";
 import { GameSession } from "./session";
 
 /** The whole game: the 3D scene with the screens and HUD over it. Runs in the browser only. */
 export default function Game() {
   const controls = useRef<PlayerControls | null>(null);
   const audio = useRef<GameAudio | null>(null);
-  const [session] = useState(
-    () =>
-      new GameSession({
-        readInput: () => controls.current?.read() ?? NO_INPUT,
-        storage: browserStorage(),
-        newSeed: () => seedInAddress() ?? Math.floor(Math.random() * 2 ** 32),
-        askedDifficulty: difficultyInAddress(),
-        now: () => performance.now(),
-      }),
-  );
+  const [session] = useState(() => {
+    const asked = askedInAddress(window.location.search);
+    return new GameSession({
+      readInput: () => controls.current?.read() ?? NO_INPUT,
+      storage: browserStorage(),
+      newSeed: () => asked.seed ?? Math.floor(Math.random() * 2 ** 32),
+      askedDifficulty: asked.difficulty,
+      now: () => performance.now(),
+    });
+  });
   const state = useSyncExternalStore(session.subscribe, session.getState, session.getState);
   const systemReducesMotion = useSyncExternalStore(
     subscribeToReducedMotion,
@@ -84,12 +84,13 @@ export default function Game() {
   useEffect(() => {
     let last: number | null = null;
     let frame = requestAnimationFrame(function tick(now) {
-      const riding = session.getState().screen === "racing";
+      const racingBeforePoll = session.getState().screen === "racing";
       controls.current?.poll();
+      const racingAfterPoll = session.getState().screen === "racing";
       // A punch or kick pressed while no race is ridden, on the pause menu say, goes nowhere: it is read and
       // dropped here, so it isn't thrown the moment the race resumes. Nor is the kick of a gamepad's B that
-      // goes back to the race from the pause menu.
-      if (!riding || session.getState().screen !== "racing") controls.current?.read();
+      // goes back to the race from the pause menu, in the poll between the two.
+      if (!racingBeforePoll || !racingAfterPoll) controls.current?.read();
       session.advance(last === null ? 0 : (now - last) / 1000);
       // R3F derives useFrame's delta from this timestamp: pass seconds, as its clock expects.
       advance(now / 1000);
@@ -104,7 +105,7 @@ export default function Game() {
       <Scene session={session} reduceMotion={reduceMotion} />
       {state.screen === "title" && (
         <TitleScreen
-          difficulty={state.difficulty}
+          difficulty={state.raceOptions.difficulty}
           personalBest={state.personalBest}
           onChooseDifficulty={session.chooseDifficulty}
           onStart={startRace}
@@ -124,13 +125,11 @@ export default function Game() {
       {state.screen === "controls" && <ControlsScreen onBack={session.backToTitle} />}
       {state.screen === "credits" && <CreditsScreen onBack={session.backToTitle} />}
       {(state.screen === "racing" || state.screen === "paused") && (
-        <Hud session={session} reduceMotion={reduceMotion} inputDevice={inputDevice} />
+        <Hud session={session} reduceMotion={reduceMotion} inputDevice={inputDevice} soundLocked={soundLocked} />
       )}
-      {soundLocked && (state.screen === "racing" || state.screen === "paused") && <SoundLockedNotice />}
       {state.screen === "paused" && (
         <PauseMenu
-          seed={state.seed}
-          difficulty={state.difficulty}
+          raceOptions={state.raceOptions}
           onResume={session.resume}
           onRestart={restart}
           onQuit={session.quitToTitle}
@@ -142,8 +141,7 @@ export default function Game() {
           personalBest={state.personalBest}
           newBestTime={state.newBestTime}
           newBestPosition={state.newBestPosition}
-          seed={state.seed}
-          difficulty={state.difficulty}
+          raceOptions={state.raceOptions}
           onRestart={restart}
           onTitle={session.quitToTitle}
         />
@@ -163,28 +161,6 @@ function subscribeToReducedMotion(onChange: () => void) {
 /** Whether the operating system asks for reduced motion. */
 function systemPrefersReducedMotion() {
   return window.matchMedia(REDUCED_MOTION).matches;
-}
-
-/**
- * The seed the page's address asks every race to use, as in `?seed=1234`, so
- * that a race from a bug report can be played again; null when it asks for
- * none, or for something that isn't a seed (a whole number below 2^32).
- */
-function seedInAddress(): number | null {
-  const asked = new URLSearchParams(window.location.search).get("seed");
-  if (asked === null || !/^\d{1,10}$/.test(asked)) return null;
-  const seed = Number(asked);
-  return seed < 2 ** 32 ? seed : null;
-}
-
-/**
- * The difficulty the page's address asks races to be run at, as in
- * `?seed=1234&difficulty=hard`, so that a race can be played again as it
- * was; null when it asks for none, or for one there isn't.
- */
-function difficultyInAddress(): Difficulty | null {
-  const asked = new URLSearchParams(window.location.search).get("difficulty");
-  return DIFFICULTIES.find((difficulty) => difficulty === asked) ?? null;
 }
 
 /** localStorage, or undefined where the browser refuses it (private modes, blocked storage). */
