@@ -96,10 +96,11 @@ const WALKING_PACE = 2;
 /**
  * ...and riding no faster than this (m/s), it sees a car or an obstacle
  * ahead of it, in its path, as something to steer round, not as one alongside
- * it, even nose to tail with it; and it goes round a rider just in front of
- * it, in its path, on its side of them if there is room there for its bike,
- * or else on their other side if it can get clear of them there before it
- * reaches them, and otherwise waits behind them (see `sideToPass`).
+ * it, even nose to tail with it, and judges how soon it gets to one as if it
+ * rolled on at walking pace at least, as it will; and it goes round a rider
+ * just in front of it, in its path, on its side of them if there is room there
+ * for its bike, or else on their other side if it can get clear of them there
+ * before it reaches them, and otherwise waits behind them (see `sideToPass`).
  */
 const CRAWLING = 2 * WALKING_PACE;
 /** An opponent shoved sideways by a kick faster than this (m/s) rides the kick out before it steers back to its line. */
@@ -279,15 +280,19 @@ export function lineAround(
   // Where the cars and obstacles it is alongside or coming up to leave it no room.
   const unsafe: Room[] = [];
   let headOn = false;
+  // Crawling, it judges how soon it gets to them as if it rolled on at walking pace, as it will, so that slowing down
+  // never changes its mind about getting round them.
+  const rolling = me.speed <= CRAWLING ? Math.max(me.speed, WALKING_PACE) : me.speed;
   for (const thing of carsAndObstacles) {
     const ahead = thing.distance - me.distance;
     const reach = thing.halfLength + BIKE_HALF_LENGTH;
     const closing = Math.max(0, me.speed - thing.velocity);
+    const closingRolling = Math.max(0, rolling - thing.velocity);
     const lookAhead = thing.velocity < 0 ? ONCOMING_LOOK_AHEAD : FOOTPRINT_LOOK_AHEAD;
     // Crawling up to something in its path, it is behind it, however close, not alongside it.
     const inFront = me.speed <= CRAWLING && ahead > 0 && Math.abs(thing.offset - me.offset) < thing.halfWidth + BIKE_HALF_WIDTH;
     const alongside = Math.abs(ahead) < reach + 1 && !inFront;
-    if (!alongside && (ahead <= 0 || ahead - reach >= 2 + closing * lookAhead)) continue;
+    if (!alongside && (ahead <= 0 || ahead - reach >= 2 + closingRolling * lookAhead)) continue;
     // A car changing lanes takes up the road from where it is to the lane it is moving over to.
     const left = Math.min(thing.offset, thing.movingTo);
     const right = Math.max(thing.offset, thing.movingTo);
@@ -296,7 +301,7 @@ export function lineAround(
       !alongside ? [left - room, right + room] : thing.offset > me.offset ? [left - room, Infinity] : [-Infinity, right + room];
     const keepClear = around(thing.halfWidth + FOOTPRINT_CLEARANCE);
     const reachedIn = alongside ? 0 : closing > 0 ? Math.max(0, ahead - reach) / closing : Infinity;
-    const close = ahead - reach < 2 + closing * CROSSING_TIME;
+    const close = ahead - reach < 2 + closingRolling * CROSSING_TIME;
     const dodgeSideways = close && (alongside || thing.velocity < 0);
     unsafe.push({ keepClear, body: around(thing.halfWidth + BIKE_HALF_WIDTH), reachedIn, close, dodgeSideways });
     if (thing.velocity < 0 && me.offset > keepClear[0] && me.offset < keepClear[1]) headOn = true;
