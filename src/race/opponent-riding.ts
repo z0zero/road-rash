@@ -382,8 +382,10 @@ function heldBackTo(speed: number, clearPast: boolean): number {
  * `blocked`, cars' and obstacles' `unsafe`), otherwise the nearer (to
  * `current`) end of the blocked stretch that does, within the road's `edge`.
  * An opponent never steers across the path of a car or an obstacle it is
- * close to and not already in the way of: it gets as near the racing line as
- * it can on its side of them. In the way of one, it gets out of its path on
+ * close to and not already in the way of: it gets as near the racing line,
+ * within the road's edge, as it can on its side of them, and beyond the edge,
+ * as on the shoulder, it stays on its side of them rather than cross their
+ * path to get within it. In the way of one, it gets out of its path on
  * a side it can get to before it gets there, or else the nearer side. If no
  * end is within reach, it stays where it is, to hold back behind whatever is
  * in its way, or, crawling, it squeezes past it (see `squeezePast`); but
@@ -421,13 +423,14 @@ function nearestClearLine(
   const covering = stretches.find((stretch) => inside(racingLine, stretch));
   if (!covering && reachable(racingLine)) return racingLine;
   if (!covering && !inThePath) {
-    // As near the racing line as it can get on its side of the cars and obstacles in the way.
-    let [left, right] = [-edge, edge];
+    // As near the racing line, within the road's edges, as it can get on its side of the cars and obstacles in the way:
+    // beyond an edge, it stays on its side of them rather than cross their path to get within it.
+    let [left, right] = [-Infinity, Infinity];
     for (const { keepClear, body } of close) {
       if (body[1] <= current) left = Math.max(left, Math.min(keepClear[1], current));
       else right = Math.min(right, Math.max(keepClear[0], current));
     }
-    return clamp(racingLine, left, right);
+    return clamp(clamp(racingLine, -edge, edge), left, right);
   }
   const nearest = (lines: readonly number[]) =>
     lines.reduce((best, line) => (Math.abs(line - current) < Math.abs(best - current) ? line : best));

@@ -119,6 +119,31 @@ describe("getting round a rider", () => {
   });
 });
 
+describe("an obstacle close ahead", () => {
+  /** A rock on the shoulder, 0.8 m across its base each way from its middle, at `distance` and `offset`. */
+  const rock = (distance: number, offset: number): Footprint => ({ distance, offset, movingTo: offset, velocity: 0, halfLength: 0.8, halfWidth: 0.8 });
+
+  it("never takes a bike across its path to get nearer the bike's racing line", () => {
+    // Stopped on the shoulder 8.5 m out, on the right of a rock 3 m ahead at 7 m, with its racing line beyond the rock.
+    const me = bike(1000, 8.5, 0);
+
+    const { line } = lineAround(me, 4.5, [me], [rock(1003, 7)], EDGE, SHOULDER_EDGE);
+
+    // It would get to the rock before it got across its path, as wide as the rock and a bike: it stays on its right.
+    expect(line).toBeGreaterThanOrEqual(7 + 0.8 + 0.4);
+  });
+
+  it("never takes a bike across its path to go round a rider stopped just in front of it", () => {
+    // As above, with a rider stopped 2.9 m ahead of the bike and 0.2 m inside it, beside the rock, between it and the
+    // shoulder's outer edge: no bike fits between them and that edge, and their other side is the rock's path.
+    const me = bike(1000, 8.5, 0);
+
+    const { line } = lineAround(me, 4.5, [me, bike(1002.9, 8.3, 0)], [rock(1003, 7)], EDGE, SHOULDER_EDGE);
+
+    expect(line).toBeGreaterThanOrEqual(7 + 0.8 + 0.4);
+  });
+});
+
 describe("keeping to a line", () => {
   it("holds a bike back as for the line it keeps to, rather than roll on as for the line it would take", () => {
     // A cop on patrol stopped where it waited on the shoulder, 7.5 m out, with the player stopped 2.95 m ahead and
