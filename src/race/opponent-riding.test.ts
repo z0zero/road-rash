@@ -29,36 +29,133 @@ describe("getting round a rider", () => {
   });
 
   it("takes a bike stopped at the shoulder's edge round a rider stopped just in front of it on the road's side, rather than wait behind them", () => {
-    // Stopped 0.1 m inside the furthest out an opponent squeezes, with a rider stopped 2.5 m ahead and 0.2 m inside it:
+    // Stopped 0.1 m inside the furthest out an opponent squeezes, with a rider stopped 2.9 m ahead and 0.2 m inside it:
     // no bike fits between them and the shoulder's edge.
     const me = bike(1000, 8.5, 0);
 
-    const { line, holdBehind } = lineAround(me, 1.5, [me, bike(1002.5, 8.3, 0)], [], EDGE, SHOULDER_EDGE);
+    const { line, holdBehind } = lineAround(me, 1.5, [me, bike(1002.9, 8.3, 0)], [], EDGE, SHOULDER_EDGE);
 
     // It goes by on their left, clear of their bike, and rolls on, since a bike can't move sideways while it stands still.
     expect(line).toBeLessThanOrEqual(8.3 - 0.8);
     expect(holdBehind).toBeGreaterThan(0);
   });
 
+  it("holds a bike stopped at the shoulder's edge back behind a rider stopped too close in front of it to get round them", () => {
+    // As above, but the rider stands 2.5 m ahead: their bikes, 2 m long, are half a metre apart, end to end.
+    const me = bike(1000, 8.5, 0);
+
+    const { line, holdBehind } = lineAround(me, 1.5, [me, bike(1002.5, 8.3, 0)], [], EDGE, SHOULDER_EDGE);
+
+    // To go by on their left it must get a metre across, to 0.8 m left of their middle, before it reaches their back.
+    // Steering takes a bike at most 1.6 m across for every metre it rolls on, and less while it builds up: it would run
+    // into them. It waits behind them, on its side of them.
+    expect(holdBehind).toBeLessThanOrEqual(0);
+    expect(line).toBeGreaterThan(8.3);
+  });
+
   it("takes a cop on patrol crawling at the road's edge round a player stopped just in front of it, rather than wait behind them", () => {
-    // A cop on patrol squeezes past only on the road. The player stands 2.5 m ahead of it and 0.2 m inside it.
+    // A cop on patrol squeezes past only on the road. The player stands 2.9 m ahead of it and 0.2 m inside it.
+    const me = bike(1000, 5.2, 1);
+
+    const { line, holdBehind } = lineAround(me, 1.5, [me, bike(1002.9, 5, 0)], [], EDGE, EDGE);
+
+    expect(line).toBeLessThanOrEqual(5 - 0.8);
+    expect(holdBehind).toBeGreaterThan(0);
+  });
+
+  it("holds a cop on patrol crawling at the road's edge back behind a player stopped too close in front of it to get round them", () => {
+    // As above, but the player stands 2.5 m ahead of it.
     const me = bike(1000, 5.2, 1);
 
     const { line, holdBehind } = lineAround(me, 1.5, [me, bike(1002.5, 5, 0)], [], EDGE, EDGE);
 
-    expect(line).toBeLessThanOrEqual(5 - 0.8);
-    expect(holdBehind).toBeGreaterThan(0);
+    expect(holdBehind).toBeLessThanOrEqual(0);
+    expect(line).toBeGreaterThan(5);
   });
 
   it("takes a bike stopped against the left edge round a rider stopped just in front of it against the same edge", () => {
     // A bike that slides, or is kicked, off the road stops against the shoulder's outer edge, 9 m left of the centreline.
     const me = bike(1000, -9, 0);
 
-    const { line, holdBehind } = lineAround(me, 1.5, [me, bike(1002.5, -9, 0)], [], EDGE, SHOULDER_EDGE);
+    const { line, holdBehind } = lineAround(me, 1.5, [me, bike(1002.9, -9, 0)], [], EDGE, SHOULDER_EDGE);
 
     // It goes by on their right, the only side with room for its bike.
     expect(line).toBeGreaterThanOrEqual(-9 + 0.8);
     expect(holdBehind).toBeGreaterThan(0);
+  });
+
+  it("holds a bike stopped against the left edge back behind a rider stopped too close in front of it against the same edge", () => {
+    // As above, but the rider stands 2.5 m ahead: in the half metre to their back, no bike gets 0.8 m across.
+    const me = bike(1000, -9, 0);
+
+    const { line, holdBehind } = lineAround(me, 1.5, [me, bike(1002.5, -9, 0)], [], EDGE, SHOULDER_EDGE);
+
+    expect(holdBehind).toBeLessThanOrEqual(0);
+    expect(line).toBeLessThan(-9 + 0.8);
+  });
+
+  it("holds a bike crawling up fast behind a rider stopped just in front of it back, rather than cut across behind them", () => {
+    // Crawling at 4 m/s at the shoulder's edge, with a rider stopped 2.9 m ahead and 0.2 m inside it: room enough for a
+    // bike rolling round them at walking pace, but at 4 m/s it reaches their back in under a quarter of a second, and
+    // opponents steer across no faster than 4 m/s.
+    const me = bike(1000, 8.5, 4);
+
+    const { line, holdBehind } = lineAround(me, 1.5, [me, bike(1002.9, 8.3, 0)], [], EDGE, SHOULDER_EDGE);
+
+    expect(holdBehind).toBeLessThanOrEqual(0);
+    expect(line).toBeGreaterThan(8.3);
+  });
+
+  it("keeps a bike already steering round a rider stopped just in front of it going round them, rather than give up partway", () => {
+    // Rolling at walking pace at the shoulder's edge, already moving across to its left as fast as steering takes a bike
+    // at that speed (1.6 m/s for every m/s), with a rider stopped 2.75 m ahead and 0.2 m inside it. Not yet steering, it
+    // would run into them while its steering built up; moving across already, it gets clear of them.
+    const me: Motion = { ...bike(1000, 8.5, 2), steering: -3.2 };
+
+    const { line, holdBehind } = lineAround(me, 1.5, [me, bike(1002.75, 8.3, 0)], [], EDGE, SHOULDER_EDGE);
+
+    expect(line).toBeLessThanOrEqual(8.3 - 0.8);
+    expect(holdBehind).toBeGreaterThan(0);
+  });
+});
+
+describe("an obstacle close ahead", () => {
+  /** A rock on the shoulder, 0.8 m across its base each way from its middle, at `distance` and `offset`. */
+  const rock = (distance: number, offset: number): Footprint => ({ distance, offset, movingTo: offset, velocity: 0, halfLength: 0.8, halfWidth: 0.8 });
+
+  it("never takes a bike across its path to get nearer the bike's racing line", () => {
+    // Stopped on the shoulder 8.5 m out, on the right of a rock 3 m ahead at 7 m, with its racing line beyond the rock.
+    const me = bike(1000, 8.5, 0);
+
+    const { line } = lineAround(me, 4.5, [me], [rock(1003, 7)], EDGE, SHOULDER_EDGE);
+
+    // It would get to the rock before it got across its path, as wide as the rock and a bike: it stays on its right.
+    expect(line).toBeGreaterThanOrEqual(7 + 0.8 + 0.4);
+  });
+
+  it("never takes a bike across its path to go round a rider stopped just in front of it", () => {
+    // As above, with a rider stopped 2.9 m ahead of the bike and 0.2 m inside it, beside the rock, between it and the
+    // shoulder's outer edge: no bike fits between them and that edge, and their other side is the rock's path.
+    const me = bike(1000, 8.5, 0);
+
+    const { line } = lineAround(me, 4.5, [me, bike(1002.9, 8.3, 0)], [rock(1003, 7)], EDGE, SHOULDER_EDGE);
+
+    expect(line).toBeGreaterThanOrEqual(7 + 0.8 + 0.4);
+  });
+});
+
+describe("keeping to a line", () => {
+  it("holds a bike back as for the line it keeps to, rather than roll on as for the line it would take", () => {
+    // A cop on patrol stopped where it waited on the shoulder, 7.5 m out, with the player stopped 2.95 m ahead and
+    // 0.15 m inside it: room to get round them on their left, nearer the road. But it keeps to the line it is on, as a
+    // cop does while someone comes up behind it in the offsets it would cross.
+    const me = bike(1000, 7.5, 0);
+
+    const { line, holdBehind } = lineAround(me, 1.5, [me, bike(1002.95, 7.35, 0)], [], EDGE, EDGE, () => me.offset);
+
+    // On that line it would run into their back: it waits behind them.
+    expect(line).toBe(7.5);
+    expect(holdBehind).toBeLessThanOrEqual(0);
   });
 });
 

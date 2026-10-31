@@ -97,8 +97,9 @@ const WALKING_PACE = 2;
  * ...and riding no faster than this (m/s), it sees a car or an obstacle
  * ahead of it, in its path, as something to steer round, not as one alongside
  * it, even nose to tail with it; and it goes round a rider just in front of
- * it, in its path, on whichever side of them has room for its bike (see
- * `sideToPass`).
+ * it, in its path, on its side of them if there is room there for its bike,
+ * or else on their other side if it can get clear of them there before it
+ * reaches them, and otherwise waits behind them (see `sideToPass`).
  */
 const CRAWLING = 2 * WALKING_PACE;
 /** An opponent shoved sideways by a kick faster than this (m/s) rides the kick out before it steers back to its line. */
@@ -230,9 +231,10 @@ interface Room {
  * up to, block the lines close to theirs, and a rider or car alongside blocks
  * everything beyond them, so an opponent never steers across one; though,
  * crawling up to a rider just in front of it with no room for its bike on its
- * side of them, it goes round them on their other side (see `sideToPass`). A car
- * changing lanes blocks the lines from where it is to the lane it is moving
- * over to, and an opponent looks further ahead for the cars coming towards it.
+ * side of them, it goes round them on their other side if it can get clear of
+ * them there before it reaches them (see `sideToPass`). A car changing lanes
+ * blocks the lines from where it is to the lane it is moving over to, and an
+ * opponent looks further ahead for the cars coming towards it.
  * When a rider it is about to reach is in the way, it holds back to their
  * speed; a slower car or an obstacle in the way, it slows for in time to ride
  * no faster than it when it gets there; but if its line takes it clear past
@@ -240,7 +242,10 @@ interface Room {
  * it squeezes past through the nearest gap its bike fits through, out to
  * `squeezeEdge`: an opponent out onto the shoulder. Cops find their way
  * around the same way, out to the edges they give: a cop on patrol or
- * fighting back squeezes past only on the road.
+ * fighting back squeezes past only on the road. A cop that won't take the
+ * line found yet, so as not to pull across the path of a rider or a car
+ * coming up behind it, gives the line it does take (`keepTo`), and holds back
+ * as that line needs.
  */
 export function lineAround(
   me: Readonly<Motion>,
@@ -249,6 +254,7 @@ export function lineAround(
   carsAndObstacles: readonly Footprint[],
   edge: number,
   squeezeEdge: number,
+  keepTo: (line: number) => number = (line) => line,
 ) {
   const blocked: Stretch[] = [];
   /** What the riders' bikes take up, as a bike squeezing past them sees them: a bike's width either side of their middles. */
@@ -297,7 +303,7 @@ export function lineAround(
   }
   // Crawling, it can squeeze through a gap where it would otherwise stay put.
   const squeeze = me.speed <= CRAWLING ? { bodies: [...ridersBikes, ...unsafe.map(({ body }) => body)], edge: squeezeEdge } : null;
-  const line = nearestClearLine(racingLine, me.offset, blocked, unsafe, edge, squeeze);
+  const line = keepTo(nearestClearLine(racingLine, me.offset, blocked, unsafe, edge, squeeze));
   // It holds back to the speed of a rider in its way, unless its line takes it clear past them.
   let holdBehind = Infinity;
   for (const other of inTheWay) {
@@ -331,14 +337,34 @@ export function lineAround(
  * as in a bump the one in front gives way to the right. But crawling up to a
  * rider just in front of it, within a bike's width of its line, it goes by
  * them on their other side if there is no room for its bike on its own,
- * between them and `squeezeEdge`, and there is on the other: it rolls round
- * them rather than wait behind them for as long as they stand there.
+ * between them and `squeezeEdge`, and there is on the other, and it can get
+ * clear of them on that side before it reaches them (`clearInTime`): it rolls
+ * round them rather than wait behind them for as long as they stand there.
+ * Too close to them to get round, it keeps to its side and waits.
  */
 function sideToPass(me: Readonly<Motion>, other: Readonly<Motion>, ahead: number, squeezeEdge: number): number {
   const away = Math.sign(me.offset - other.offset) || (ahead > 0 ? -1 : 1);
   const inItsPath = me.speed <= CRAWLING && ahead > 0 && Math.abs(other.offset - me.offset) < BIKE_WIDTH;
   const room = (side: number) => squeezeEdge - side * other.offset > BIKE_WIDTH;
-  return !inItsPath || room(away) || !room(-away) ? away : -away;
+  return !inItsPath || room(away) || !room(-away) || !clearInTime(me, other, ahead, -away) ? away : -away;
+}
+
+/**
+ * Whether a bike at `me`, going by a rider (`other`) `ahead` metres in front
+ * of it on their side `side` (1 for their right, -1 for their left), gets
+ * clear of their bike before it reaches their back, were they to stand still.
+ * It rolls on at walking pace, or at its own speed if faster, and steering
+ * moves it across as fast as it moves a bike at that speed, up to
+ * `LINE_CHANGE_SPEED`, less the way it loses while its steering builds up to
+ * that from how fast it already moves that way: so a bike that has set off
+ * round them keeps going round them.
+ */
+function clearInTime(me: Readonly<Motion>, other: Readonly<Motion>, ahead: number, side: number): boolean {
+  const rolling = Math.max(me.speed, WALKING_PACE);
+  const sideways = Math.min(maxSidewaysSpeed(rolling), LINE_CHANGE_SPEED);
+  const across = side * (other.offset - me.offset) + BIKE_WIDTH;
+  const buildingUp = Math.max(0, sideways - side * me.steering) / TUNING.steeringResponse;
+  return ((ahead - BIKE_LENGTH) / rolling) * sideways >= across + buildingUp;
 }
 
 /**
@@ -356,8 +382,10 @@ function heldBackTo(speed: number, clearPast: boolean): number {
  * `blocked`, cars' and obstacles' `unsafe`), otherwise the nearer (to
  * `current`) end of the blocked stretch that does, within the road's `edge`.
  * An opponent never steers across the path of a car or an obstacle it is
- * close to and not already in the way of: it gets as near the racing line as
- * it can on its side of them. In the way of one, it gets out of its path on
+ * close to and not already in the way of: it gets as near the racing line,
+ * within the road's edge, as it can on its side of them, and beyond the edge,
+ * as on the shoulder, it stays on its side of them rather than cross their
+ * path to get within it. In the way of one, it gets out of its path on
  * a side it can get to before it gets there, or else the nearer side. If no
  * end is within reach, it stays where it is, to hold back behind whatever is
  * in its way, or, crawling, it squeezes past it (see `squeezePast`); but
@@ -395,13 +423,14 @@ function nearestClearLine(
   const covering = stretches.find((stretch) => inside(racingLine, stretch));
   if (!covering && reachable(racingLine)) return racingLine;
   if (!covering && !inThePath) {
-    // As near the racing line as it can get on its side of the cars and obstacles in the way.
-    let [left, right] = [-edge, edge];
+    // As near the racing line, within the road's edges, as it can get on its side of the cars and obstacles in the way:
+    // beyond an edge, it stays on its side of them rather than cross their path to get within it.
+    let [left, right] = [-Infinity, Infinity];
     for (const { keepClear, body } of close) {
       if (body[1] <= current) left = Math.max(left, Math.min(keepClear[1], current));
       else right = Math.min(right, Math.max(keepClear[0], current));
     }
-    return clamp(racingLine, left, right);
+    return clamp(clamp(racingLine, -edge, edge), left, right);
   }
   const nearest = (lines: readonly number[]) =>
     lines.reduce((best, line) => (Math.abs(line - current) < Math.abs(best - current) ? line : best));
