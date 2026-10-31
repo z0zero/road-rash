@@ -20,8 +20,12 @@ export const MENU_CONTROL = "min-w-56 rounded-md border-2 border-sun/70 bg-dusk/
  */
 export const MENU_BUTTON_LIT =
   "hover:bg-sunset hover:text-night focus-visible:bg-sunset focus-visible:text-night focus-visible:outline-none";
-/** ...and a choice in focus lit as a button is, from its radio button, the label's `peer`. */
-export const MENU_CHOICE_LIT = "peer-focus-visible:bg-sunset peer-focus-visible:text-night";
+/**
+ * ...and a choice in focus lit as a button is, from its radio button, the
+ * label's `peer`, under the pointer too.
+ */
+export const MENU_CHOICE_LIT =
+  "peer-focus-visible:bg-sunset peer-focus-visible:text-night peer-focus-visible:hover:text-night";
 
 /** The sunset behind the loading screen and the screens shown instead of the game. */
 export const SUNSET_BACKDROP = "bg-gradient-to-b from-night via-dusk to-sunset";

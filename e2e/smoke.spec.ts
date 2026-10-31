@@ -172,6 +172,17 @@ test("pauses on Esc, offering resume, restart and quit to title", async ({ page 
   await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
 });
 
+test("pauses and resumes with an Esc that the keyboard's layout puts on another key", async ({ page }) => {
+  await startRace(page);
+  await play(page, 0.2);
+  const menu = page.getByRole("dialog", { name: "Paused" });
+
+  await pressEscOnCapsLock(page);
+  await expect(menu).toBeVisible();
+  await pressEscOnCapsLock(page);
+  await expect(menu).toBeHidden();
+});
+
 test("shows the race's seed on the pause menu: the one the page's address asks for", async ({ page }) => {
   await page.goto("/?seed=1234");
   await startRacing(page);
@@ -231,6 +242,51 @@ test("moves the difficulty with the arrow keys as the D-pad does, stopping at th
   await page.keyboard.press("ArrowLeft");
   await expect(choice("Easy")).toBeChecked();
   await expect(choice("Easy")).toBeFocused();
+});
+
+test("moves through the menus with the arrow keys as the D-pad does, both ways past the difficulty, and still rides with them", async ({
+  page,
+}) => {
+  // A dozen key presses, then a race's countdown and a few seconds of it, a frame at a time.
+  test.slow();
+  const button = (name: string) => page.getByRole("button", { name, exact: true });
+  const normal = difficultyChoices(page).getByRole("radio", { name: "Normal" });
+  await expect(button("Start Race")).toBeFocused();
+
+  // Down and up move through the title's menu, the difficulty one stop in it, without changing it.
+  for (const [key, focused] of [
+    ["ArrowDown", normal],
+    ["ArrowDown", button("Controls")],
+    ["ArrowDown", button("Settings")],
+    ["ArrowUp", button("Controls")],
+    ["ArrowUp", normal],
+    ["ArrowUp", button("Start Race")],
+  ] as const) {
+    await page.keyboard.press(key);
+    await expect(focused).toBeFocused();
+  }
+  await expect(normal).toBeChecked();
+
+  // On Settings, down from Back comes round to the first slider; left turns it, and down moves on to the next.
+  await button("Settings").click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  const [master, music] = ["Master volume", "Music volume"].map((name) => settings.getByRole("slider", { name }));
+  await page.keyboard.press("ArrowDown");
+  await expect(master).toBeFocused();
+  await page.keyboard.press("ArrowLeft");
+  await expect(master).toHaveValue("95");
+  await page.keyboard.press("ArrowDown");
+  await expect(music).toBeFocused();
+  await expect(master).toHaveValue("95");
+  await expect(music).toHaveValue("70");
+  await page.keyboard.press("Escape");
+
+  // In a race, they ride.
+  await startRacing(page);
+  await page.keyboard.down("ArrowUp");
+  await play(page, 3);
+  await page.keyboard.up("ArrowUp");
+  expect(await hudSpeedKmh(page)).toBeGreaterThan(40);
 });
 
 for (const key of ["Enter", "Space"]) {
@@ -797,6 +853,22 @@ test.describe("with a gamepad", () => {
     await nextFrames(page);
     await expect(normal).toBeFocused();
     await expect(normal).toBeChecked();
+    await page.evaluate((buttons) => buttons.forEach((button) => window.fakeGamepad?.release(button)), [GAMEPAD.down, GAMEPAD.right]);
+    await nextFrames(page);
+
+    // The D-pad's down switch closing a frame before its right one, as they can: still down alone.
+    await tap(page, GAMEPAD.up, () => expect(page.getByRole("button", { name: "Start Race" })).toBeFocused());
+    await page.evaluate(
+      async ([down, right]) => {
+        window.fakeGamepad?.press(down);
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        window.fakeGamepad?.press(right);
+      },
+      [GAMEPAD.down, GAMEPAD.right],
+    );
+    await nextFrames(page);
+    await expect(normal).toBeFocused();
+    await expect(normal).toBeChecked();
   });
 
   test("moves the difficulty under Start Race with the D-pad's left and right, and A on it starts a race shown at it", async ({
@@ -860,16 +932,23 @@ test("goes back to the title from the screens it opens with Esc, wherever the fo
     await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
   }
 
-  // An Esc that the keyboard's layout puts on another key, such as Caps Lock made an extra Esc: the browser says
-  // which key it is, Escape, but not where it is.
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   const settings = page.getByRole("dialog", { name: "Settings" });
   await expect(settings).toBeVisible();
+  await pressEscOnCapsLock(page);
+  await expect(settings).toBeHidden();
+});
+
+/**
+ * Presses an Esc that the keyboard's layout puts on another key, here Caps Lock made an extra Esc: the browser says
+ * which key it is, Escape, but not where it is.
+ */
+async function pressEscOnCapsLock(page: Page) {
   const browser = await page.context().newCDPSession(page);
   await browser.send("Input.dispatchKeyEvent", { type: "rawKeyDown", key: "Escape", code: "CapsLock", windowsVirtualKeyCode: 27 });
   await browser.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "CapsLock", windowsVirtualKeyCode: 27 });
-  await expect(settings).toBeHidden();
-});
+  await browser.detach();
+}
 
 test("credits the music and disclaims any tie to Road Rash, from the title screen", async ({ page }) => {
   await page.getByRole("button", { name: "Credits" }).click();
