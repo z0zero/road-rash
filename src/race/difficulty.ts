@@ -65,7 +65,7 @@ export const DIFFICULTY_TUNING: Readonly<Record<Difficulty, DifficultyTuning>> =
     pace: 1.07,
     attacks: 2,
     breatherSeconds: 1,
-    unansweredHits: 6,
+    unansweredHits: 4,
     catchUp: { near: 75, far: 400, most: 0.08 },
   },
 };

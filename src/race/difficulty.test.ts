@@ -233,8 +233,8 @@ describe("a breather", () => {
 });
 
 describe("patience", () => {
-  it("runs out after 2 unanswered hits on Easy, 3 on Normal and 6 on Hard: a brawler then gives up on a player who doesn't hit back for a while", () => {
-    for (const [difficulty, hits] of [["easy", 2], ["normal", 3], ["hard", 6]] as const) {
+  it("runs out after 2 unanswered hits on Easy, 3 on Normal and 4 on Hard: a brawler then gives up on a player who doesn't hit back for a while", () => {
+    for (const [difficulty, hits] of [["easy", 2], ["normal", 3], ["hard", 4]] as const) {
       const { race, target, input } = alongsideABrawler(difficulty);
       const { landed } = attacksOnThePlayerBy(race, target, input, 60);
       // Its runs of hits on the player: hits less than 10 s apart, as giving up keeps it from them for 10 s at least.
