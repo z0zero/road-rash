@@ -32,8 +32,8 @@ export interface OpponentProfile {
 
 /**
  * The fourteen opponents, in rider-id order (the player is rider 0, so these
- * are riders 1 to 14). Racers are the most skilled riders, since riding is all
- * they do; bullies the least.
+ * are riders 1 to 14). Racers are, on the whole, the most skilled riders,
+ * since riding is all they do, and bullies the least.
  */
 export const OPPONENTS: readonly OpponentProfile[] = [
   { name: "Cinder", temperament: "racer", skill: 1 },

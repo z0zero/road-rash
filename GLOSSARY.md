@@ -27,7 +27,7 @@ A rider's rank in the race, from first (the leader) to last. Wrecked and busted 
 _Avoid_: Place, rank, standing
 
 **Standings**:
-Every rider's final position and finishing time once the race is over, or how their race ended, as the results list them. One rider's row is never "a standing": it is their position.
+Every rider's final position and finishing time once the race is over, or how their race ended, as the results list them, a row for each rider. On screen, a rider's row is never called "a standing": what it shows is their position, and their time or how their race ended.
 _Avoid_: Ranking, leaderboard, scoreboard
 
 **Qualified**:
@@ -69,7 +69,7 @@ How an opponent races and fights: a *racer* concentrates on racing and rarely at
 _Avoid_: Personality, style, AI type
 
 **Skill**:
-How close to the limit an opponent rides, compared with the rest of the field, from 0 (the least skilled) to 1 (the most); the difficulty then moves the whole field nearer the limit or further from it (see Pace). Racers are the most skilled.
+How close to the limit an opponent rides, compared with the rest of the field, from 0 (the least skilled) to 1 (the most); the difficulty then moves the whole field nearer the limit or further from it (see Pace). Racers are, on the whole, the most skilled, and bullies the least.
 _Avoid_: Level, difficulty, rating
 
 **Pace**:
@@ -105,7 +105,7 @@ A rider on their bike running into another rider on a bike, a cop, a car or an o
 _Avoid_: Nudge, collision
 
 **Squeezing past**:
-An opponent, or a cop, held to a standstill by what is in its way with no clear way round it, as when a rider stands beside it with a roadside rock ahead, rolling on at walking pace through the nearest gap its bike fits through, never across the path of a car close ahead. Boxed in like that in the path of a car coming at it, it squeezes out of the car's way. An opponent goes out onto the shoulder for it if need be, and so does a cop riding to bust someone or pulling over; a cop on patrol or fighting back squeezes past only on the road. Held back behind a rider who has all but stopped, it rolls on round them at walking pace too, rather than wait behind them.
+An opponent, or a cop, held to a standstill by what is in its way with no clear way round it, as when a rider stands beside it with a roadside rock ahead, rolling on at walking pace through the nearest gap its bike fits through, never across the path of a car close ahead. Boxed in like that in the path of a car coming at it, it squeezes out of the car's way. An opponent goes out onto the shoulder for it if need be, and so does a cop riding to bust someone or pulling over; a cop on patrol or fighting back squeezes past only on the road. Held back behind a rider who has all but stopped, it rolls on round them at walking pace too, rather than wait behind them: on its side of them, or on their other side if its own has no room for its bike before the edge it squeezes out to.
 _Avoid_: Nudging through, forcing past
 
 **Run-in**:
@@ -125,7 +125,7 @@ A rider off their bike after a crash, once they have stopped tumbling along the 
 _Avoid_: Running, walking, dismounted
 
 **Knock-down**:
-A car driving into a rider on foot and throwing them to the ground: they tumble again, then get up and carry on back to their bike. It is not a crash, so it costs their bike nothing. Not a knock-off, which a hit does. Only a car closing in on them along its own way, at over 1 m/s, with them in front of its middle, knocks them down: one standing still, or going slower than them, that they run into, or one already half past them when they touch it, only pushes them clear of it, and they go round it.
+A car driving into a rider on foot and throwing them to the ground: they tumble again, then get up and carry on back to their bike. It is not a crash, so it costs their bike nothing. Not a knock-off, which a hit does. Only a car closing in on them along its own way, at over 1 m/s, with them in front of its middle, knocks them down; one coming at them that fast does even if they run into it. One going their way, slower than them, that they catch up or brush as they run away from it only pushes them clear of it, and they go round it; so does one standing still, or one already half past them when they touch it.
 _Avoid_: Run over, hit
 
 **Wrecked**:
@@ -157,6 +157,10 @@ _Avoid_: Queue, slot
 **Breather**:
 The 3 s (5 s on Easy, 1 s on Hard) an opponent whose hit has just landed on the player gives them before it attacks them again. On Normal it gives none to a player who is fighting it back, who has hit it in the last 5 s; on Easy and Hard it gives them one all the same, so hitting back never brings its attacks on faster.
 _Avoid_: Cooldown, grace period
+
+**Fighting back**:
+The player fighting an opponent back: having hit it in the last 5 s. Its hits on them then don't wear its patience, it attacks them even while it waits its turn or has given up on them, and on Normal it gives them no breather (see Breather, Patience, Turn). A cop fights back too: hit by a rider, it comes after them and swings its club at them, until a while after it was last hit.
+_Avoid_: Revenge, aggro
 
 **Weapon**:
 A club a rider swings instead of punching. A rider takes one with a hit thrown at its holder during the wind-up of a swing, and drops it in a crash.
@@ -219,10 +223,6 @@ _Avoid_: Waiting, idling
 **Cop alert**:
 The warning on the HUD, with the siren, that a cop in the race is near the player: within 150 m.
 _Avoid_: Wanted level, police alert
-
-**Fighting back**:
-A cop hit by a rider coming after them and swinging its club at them, until a while after it was last hit.
-_Avoid_: Revenge, aggro
 
 **Busted**:
 The end of a rider's race because a cop caught them after a crash: a cop within 80 m of a rider who crashes rides to them at the arrest pace, and busts them if it reaches them, once they are on their feet, before they are back on their bike.
