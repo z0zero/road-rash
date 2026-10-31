@@ -17,7 +17,7 @@ function sayOr(controls: readonly PadControl[]): string {
 export function ControlsScreen({ onBack }: { onBack: () => void }) {
   const labels = useKeyboardLabels();
   return (
-    <Dialog title="Controls" panelClassName="w-[min(42rem,94vw)] gap-6 px-6 short:gap-3 sm:px-10">
+    <Dialog title="Controls" panelClassName="w-[min(42rem,94vw)] gap-6 px-6 short:gap-2 sm:px-10">
       <table className="w-full border-separate border-spacing-y-2 text-left short:border-spacing-y-1">
         <thead>
           <tr className="font-display text-xl uppercase tracking-wider text-sunset">
@@ -51,7 +51,8 @@ export function ControlsScreen({ onBack }: { onBack: () => void }) {
       <div className="flex flex-col gap-1 text-center text-sm text-sand/80">
         <p>Gamepad buttons are named as on an Xbox controller: A is the bottom one, B the right one and X the left one.</p>
         <p>
-          In menus, {sayOr(GAMEPAD_MENUS.move)} moves between buttons and {sayOr(GAMEPAD_MENUS.press)} presses them.
+          In menus, the arrow keys, {sayOr(GAMEPAD_MENUS.move)} move between buttons, and {sayOr(GAMEPAD_MENUS.press)}{" "}
+          presses them.
         </p>
         <p>After a crash, steer to run back to your bike, and brake to stand still.</p>
         {labels === null && <p>The letter keys are where they are on a US keyboard, whatever yours are labelled.</p>}

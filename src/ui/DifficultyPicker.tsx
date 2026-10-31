@@ -1,5 +1,5 @@
 import { useId } from "react";
-import { moveForArrowKey, type Press } from "@/input/menus";
+import type { Press } from "@/input/menus";
 import { DIFFICULTIES, type Difficulty } from "@/race";
 import { difficultyName } from "./format";
 import { MENU_CHOICE_LIT, MENU_CONTROL } from "./panel";
@@ -33,18 +33,19 @@ export function DifficultyPicker({
             value={choice}
             checked={choice === difficulty}
             onChange={() => onChoose(choice)}
+            // The arrow keys move the choice along the row, and up and down off it, as on every menu (`listenToKeyboard`).
             onKeyDown={(event) => {
-              if (moveForArrowKey(document, event.key)) event.preventDefault();
-              else if (event.key === "Enter" || event.key === " ") {
+              if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
                 onStart(event);
               }
             }}
             className="peer sr-only"
           />
-          {/* The chosen one dark, its name in the sun's colour, underlined; lit only while the row has the focus. */}
+          {/* The chosen one dark, its name in the sun's colour, underlined; lit only while the row has the focus. Under
+              the pointer, a name not chosen brightens, and the chosen and the lit keep their colours. */}
           <span
-            className={`block cursor-pointer rounded px-3 py-1 text-center font-display text-lg uppercase tracking-wider text-sand/75 decoration-2 underline-offset-4 transition hover:text-sand peer-checked:bg-night/80 peer-checked:text-sun peer-checked:underline ${MENU_CHOICE_LIT}`}
+            className={`block cursor-pointer rounded px-3 py-1 text-center font-display text-lg uppercase tracking-wider text-sand/75 decoration-2 underline-offset-4 transition hover:text-sand peer-checked:bg-night/80 peer-checked:text-sun peer-checked:underline peer-checked:hover:text-sun ${MENU_CHOICE_LIT}`}
           >
             {difficultyName(choice)}
           </span>
