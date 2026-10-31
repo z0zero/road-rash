@@ -1,4 +1,5 @@
 import { KEYS, RIDING_KEYS, type Key } from "@/input/bindings";
+import type { Press } from "@/input/menus";
 import type { Difficulty } from "@/race";
 import type { PersonalBest } from "@/save-data/save-data";
 import { Button } from "./Button";
@@ -26,7 +27,7 @@ export function TitleScreen({
   /** The personal best on that difficulty. */
   personalBest: PersonalBest;
   onChooseDifficulty: (difficulty: Difficulty) => void;
-  onStart: () => void;
+  onStart: (press: Press) => void;
   onControls: () => void;
   onSettings: () => void;
   onCredits: () => void;

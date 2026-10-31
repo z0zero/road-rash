@@ -1068,20 +1068,55 @@ test.describe("sound", () => {
     await expect.poll(() => loudness(page), { timeout: 10_000 }).toBeGreaterThan(0.01);
   });
 
-  test("says nothing of a locked sound after a race started by a click, even where the browser never plays it", async ({
+  test("says that a key press or click turns the sound on after a gamepad starts the race just after a click, where the browser starts it only from one", async ({
     page,
   }) => {
-    await page.addInitScript(neverPlayAudio);
+    await page.addInitScript(plugInAGamepad);
+    await page.addInitScript(activatedOnlyByKeysAndClicks);
+    await page.addInitScript(soundStartsOnlyInAKeyPressOrClick);
     await page.reload();
+    await page.clock.pauseAt(RACE_STARTS);
 
-    await page.getByRole("button", { name: "Start Race" }).click();
-    await page.clock.fastForward(1_200);
-    await nextFrames(page);
-
+    // The click gives the page the player's activation for a few seconds, but the browser starts no sound for the
+    // gamepad's A that then starts the race from the difficulty.
+    await difficultyChoices(page).getByText("Easy").click();
+    await gamepad(page).press(GAMEPAD.a);
+    await play(page, 0.2);
+    await gamepad(page).release(GAMEPAD.a);
+    const notice = page.getByTestId("sound-locked");
+    await play(page, 1.2);
+    await expect(notice).toBeVisible();
     expect(await audioStates(page)).toEqual(["suspended"]);
-    await expect(page.getByTestId("countdown")).toBeVisible();
-    await expect(page.getByTestId("sound-locked")).toBeHidden();
+
+    await page.keyboard.press("w");
+
+    await expect.poll(() => audioStates(page)).toEqual(["running"]);
+    await expect(notice).toBeHidden();
   });
+
+  /** Browsers that do and don't say whether the page has the player's activation, as the scripts that make them. */
+  const ACTIVATION = [
+    ["", activatedOnlyByKeysAndClicks],
+    [" in a browser that can't say whether the page has the player's activation", withoutUserActivation],
+  ] as const;
+
+  for (const [browser, activation] of ACTIVATION) {
+    test(`says nothing of a locked sound after a race started by a click, even where the browser never plays it${browser}`, async ({
+      page,
+    }) => {
+      await page.addInitScript(activation);
+      await page.addInitScript(neverPlayAudio);
+      await page.reload();
+
+      await page.getByRole("button", { name: "Start Race" }).click();
+      await page.clock.fastForward(1_200);
+      await nextFrames(page);
+
+      expect(await audioStates(page)).toEqual(["suspended"]);
+      await expect(page.getByTestId("countdown")).toBeVisible();
+      await expect(page.getByTestId("sound-locked")).toBeHidden();
+    });
+  }
 
   test("stops saying that a key press or click turns the sound on once one hasn't", async ({ page }) => {
     await page.addInitScript(plugInAGamepad);
@@ -1170,6 +1205,14 @@ function activatedOnlyByKeysAndClicks() {
 }
 
 /**
+ * Runs in the page before its scripts: a browser that can't say whether the page has the player's activation, as
+ * Safari before 16.4 and Firefox before 120 can't.
+ */
+function withoutUserActivation() {
+  Reflect.deleteProperty(Navigator.prototype, "userActivation");
+}
+
+/**
  * Runs in the page before its scripts: a browser that keeps sound locked until the page's first key press or click,
  * as Safari does: until then, an audio context made or resumed stays suspended. A gamepad's press is not one.
  */
@@ -1186,6 +1229,33 @@ function lockSoundUntilAKeyOrClick() {
     }
     resume() {
       return unlocked ? super.resume() : new Promise<void>(() => {});
+    }
+  };
+}
+
+/**
+ * Runs in the page before its scripts: a browser that starts an audio context only while it handles a key press or
+ * click, any key (Esc too), though the page keeps the player's activation for a few seconds after one, as Safari does.
+ * A context that has started once may play from then on.
+ */
+function soundStartsOnlyInAKeyPressOrClick() {
+  let handling = false;
+  for (const gesture of ["keydown", "keyup", "mousedown", "mouseup", "click"]) {
+    // The window hears a press first, as it is captured, and last, as it bubbles up after React has handled it.
+    window.addEventListener(gesture, (event) => (handling = event.isTrusted), { capture: true });
+    window.addEventListener(gesture, () => (handling = false));
+  }
+  const started = new WeakSet<AudioContext>();
+  const Original = window.AudioContext;
+  window.AudioContext = class extends Original {
+    constructor(options?: AudioContextOptions) {
+      super(options);
+      if (handling) started.add(this);
+      else void super.suspend();
+    }
+    resume() {
+      if (handling) started.add(this);
+      return started.has(this) ? super.resume() : new Promise<void>(() => {});
     }
   };
 }
