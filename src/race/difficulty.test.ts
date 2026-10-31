@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { createRace, isPlayer, NO_INPUT, PLAYER, type Difficulty, type PlayerInput, type Race } from ".";
 import {
   autopilot,
-  chase,
   CLOSED_ROAD,
   eventsUntil,
   nearestOpponent,
@@ -10,6 +9,7 @@ import {
   NO_COPS,
   player,
   rideAlongside,
+  rideInto,
   secondsUntil,
   setUpRace,
   stepFor,
@@ -143,13 +143,18 @@ describe("a race on Normal", () => {
 /**
  * A race on `difficulty`, on a closed road with no cops, in which the player,
  * on a bike with next to no condition left, wrecked it in the first seconds
- * by riding into the opponent nearest them, raced to the finish: catch-up
- * stops once the player's race is over, so the opponents ride at their pace.
+ * by riding into the first obstacle up the road, raced to the finish:
+ * catch-up stops once the player's race is over, so the opponents ride at
+ * their pace.
  */
 function wreckedAtTheStart(difficulty: Difficulty, seed = 1) {
   const race = setUpRace({ seed, difficulty }, { ...CLOSED_ROAD, ...NO_COPS, playerCondition: 1 });
   stepFor(race, 3);
-  secondsUntil(race, chase(race, nearestOpponent(race), 12), () => player(race).status === "wrecked", 30);
+  const start = player(race).distance;
+  const first = race.track.obstacles
+    .filter((obstacle) => obstacle.distance > start + 50)
+    .reduce((nearest, obstacle) => (obstacle.distance < nearest.distance ? obstacle : nearest));
+  secondsUntil(race, rideInto(race, first, 20), () => player(race).status === "wrecked", 60);
   return { race, results: race.fastForward() };
 }
 
@@ -213,23 +218,23 @@ function attacksOnThePlayerBy(race: Race, attacker: number, input: () => PlayerI
 }
 
 describe("a breather", () => {
-  it("lasts 5 s on Easy, 3 s on Normal and 2 s on Hard: after its hit lands on a player who doesn't hit back, a brawler attacks them again no sooner", () => {
-    for (const [difficulty, breather, next] of [["easy", 5, null], ["normal", 3, 5], ["hard", 2, 3]] as const) {
+  it("lasts 5 s on Easy, 3 s on Normal and 1 s on Hard: after its hit lands on a player who doesn't hit back, a brawler attacks them again no sooner", () => {
+    for (const [difficulty, breather, soon] of [["easy", 5, null], ["normal", 3, 4], ["hard", 1, 2]] as const) {
       const { race, target, input } = alongsideABrawler(difficulty);
       const { thrown, landed } = attacksOnThePlayerBy(race, target, input, 40);
       const waits = landed.flatMap((hit) => thrown.filter((at) => at > hit).slice(0, 1).map((at) => at - hit));
 
       expect(waits.length, difficulty).toBeGreaterThanOrEqual(2);
       expect(Math.min(...waits), difficulty).toBeGreaterThanOrEqual(breather);
-      // Shorter than the next easier difficulty's breather, now and then: its own is what holds the brawler back.
-      if (next !== null) expect(Math.min(...waits), difficulty).toBeLessThan(next);
+      // Within a second of the breather's end, now and then, at Normal's rate of attacks or more: the breather is what holds it back.
+      if (soon !== null) expect(Math.min(...waits), difficulty).toBeLessThan(soon);
     }
   });
 });
 
 describe("patience", () => {
-  it("runs out after 2 unanswered hits on Easy, 3 on Normal and 4 on Hard: a brawler then gives up on a player who doesn't hit back for a while", () => {
-    for (const [difficulty, hits] of [["easy", 2], ["normal", 3], ["hard", 4]] as const) {
+  it("runs out after 2 unanswered hits on Easy, 3 on Normal and 6 on Hard: a brawler then gives up on a player who doesn't hit back for a while", () => {
+    for (const [difficulty, hits] of [["easy", 2], ["normal", 3], ["hard", 6]] as const) {
       const { race, target, input } = alongsideABrawler(difficulty);
       const { landed } = attacksOnThePlayerBy(race, target, input, 60);
       // Its runs of hits on the player: hits less than 10 s apart, as giving up keeps it from them for 10 s at least.
@@ -319,6 +324,7 @@ describe("catch-up", () => {
 
     // On Normal, an opponent slows only from 75 m ahead, by the full 8% from 400 m, and most ride on out of sight.
     expect(opponentsJustAheadOfASlowPlayer("normal", seeds)).toBeLessThan(2);
-    expect(opponentsJustAheadOfASlowPlayer("easy", seeds)).toBeGreaterThan(3);
+    // On Easy they ride slower too, which on its own keeps fewer than 4 of them there (3.4, with Normal's catch-up).
+    expect(opponentsJustAheadOfASlowPlayer("easy", seeds)).toBeGreaterThan(4.4);
   });
 });

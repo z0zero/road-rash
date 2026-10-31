@@ -143,6 +143,46 @@ test("shows the race's seed on the pause menu, and races the seed the page's add
   await expect(page.getByRole("dialog", { name: "Paused" }).getByTestId("race-seed")).toHaveText(/^Race seed 1234$/i);
 });
 
+/** The difficulty beside Start Race on the title screen: its choices are radios, named after their difficulty. */
+function difficultyChoices(page: Page) {
+  return page.getByRole("group", { name: "Difficulty" });
+}
+
+test("chooses the difficulty beside Start Race with the mouse or the arrow keys, remembers it, and races it", async ({ page }) => {
+  const difficulty = difficultyChoices(page);
+  await expect(difficulty.getByRole("radio", { name: "Normal" })).toBeChecked();
+
+  await difficulty.getByText("Easy").click();
+  await expect(difficulty.getByRole("radio", { name: "Easy" })).toBeChecked();
+  await page.keyboard.press("ArrowRight");
+  await expect(difficulty.getByRole("radio", { name: "Normal" })).toBeChecked();
+  await page.keyboard.press("ArrowRight");
+  await expect(difficulty.getByRole("radio", { name: "Hard" })).toBeChecked();
+
+  await page.reload();
+  await expect(difficultyChoices(page).getByRole("radio", { name: "Hard" })).toBeChecked();
+  await startRacing(page);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Paused" }).getByTestId("race-difficulty")).toHaveText(/^Hard$/i);
+});
+
+test("races the seed and difficulty the page's address asks for, without changing the difficulty the player chose", async ({
+  page,
+}) => {
+  await page.goto("/?seed=1234&difficulty=easy");
+  await expect(difficultyChoices(page).getByRole("radio", { name: "Easy" })).toBeChecked();
+  await startRacing(page);
+
+  await page.keyboard.press("Escape");
+
+  const paused = page.getByRole("dialog", { name: "Paused" });
+  await expect(paused.getByTestId("race-difficulty")).toHaveText(/^Easy$/i);
+  await expect(paused.getByTestId("race-seed")).toHaveText(/^Race seed 1234$/i);
+  await page.clock.resume();
+  await page.goto("/");
+  await expect(difficultyChoices(page).getByRole("radio", { name: "Normal" })).toBeChecked();
+});
+
 test("pauses by itself when the browser tab is hidden", async ({ page }) => {
   await startRacing(page);
 
@@ -288,6 +328,29 @@ test("goes back to the title from the results with Esc, once they can be pressed
   await page.keyboard.press("Escape");
   await expect(results).toBeHidden();
   await expect(page.getByRole("button", { name: "Start Race" })).toBeVisible();
+});
+
+test("shows the difficulty beside the seed on the results, with the personal best on that difficulty", async ({ page }) => {
+  // Half a minute of racing, a frame at a time.
+  test.slow();
+  const best = (time: number, position: number) => ({ time, position });
+  await page.evaluate(
+    (saved) => localStorage.setItem("rev-and-wreck:v2", JSON.stringify(saved)),
+    { personalBests: { easy: best(200.5, 1), normal: best(185.25, 4), hard: best(190.75, 6) } },
+  );
+  await page.goto(WRECKED_EARLY + "&difficulty=hard");
+  await expect(page.getByTestId("title-personal-best")).toHaveText(/^Personal best on Hard 3:10\.75 · Best position 6th$/);
+  await startRacing(page);
+  await page.keyboard.down("w");
+  const results = page.getByRole("dialog", { name: "Wrecked" });
+  expect(await playUntil(page, 60, () => results.isVisible())).toBe(true);
+  await page.keyboard.up("w");
+
+  await expect(results.getByTestId("race-difficulty")).toHaveText(/^Hard$/i);
+  await expect(results.getByTestId("race-seed")).toHaveText(/^Race seed 17$/i);
+  await expect(results.getByText("Best on Hard")).toBeVisible();
+  await expect(results.getByTestId("personal-best")).toHaveText("3:10.75");
+  await expect(results.getByTestId("best-position")).toHaveText("6th");
 });
 
 /** Buttons of the standard gamepad mapping, named as on an Xbox controller. */
@@ -488,8 +551,12 @@ test.describe("with a gamepad", () => {
   });
 
   test("moves between menu buttons with the D-pad or the left stick, and presses them with A", async ({ page }) => {
+    // Eight presses and pushes, each waiting for the frames that read it.
+    test.slow();
     await expect(page.getByRole("button", { name: "Start Race" })).toBeFocused();
 
+    // The difficulty beside Start Race comes first.
+    await tap(page, GAMEPAD.down, () => expect(difficultyChoices(page).getByRole("radio", { name: "Normal" })).toBeFocused());
     await tap(page, GAMEPAD.down, () => expect(page.getByRole("button", { name: "Controls" })).toBeFocused());
     await gamepad(page).push(0, 1);
     await expect(page.getByRole("button", { name: "Settings" })).toBeFocused();
@@ -554,6 +621,7 @@ test.describe("with a gamepad", () => {
   });
 
   test("doesn't press a button again for its being held through a lost focus", async ({ page }) => {
+    await tap(page, GAMEPAD.down, () => expect(difficultyChoices(page).getByRole("radio", { name: "Normal" })).toBeFocused());
     await tap(page, GAMEPAD.down, () => expect(page.getByRole("button", { name: "Controls" })).toBeFocused());
     const controls = page.getByRole("dialog", { name: "Controls" });
     await gamepad(page).press(GAMEPAD.a);
@@ -572,15 +640,40 @@ test.describe("with a gamepad", () => {
   test("moves through a menu once for a stick wavering at the edge of a push", async ({ page }) => {
     await expect(page.getByRole("button", { name: "Start Race" })).toBeFocused();
 
+    // Down from Start Race is the difficulty beside it.
+    const difficulty = difficultyChoices(page).getByRole("radio", { name: "Normal" });
     await gamepad(page).push(0, 0.7);
-    await expect(page.getByRole("button", { name: "Controls" })).toBeFocused();
+    await expect(difficulty).toBeFocused();
     for (const y of [0.5, 0.7, 0.5, 0.7]) {
       await gamepad(page).push(0, y);
       await nextFrames(page);
     }
 
-    await expect(page.getByRole("button", { name: "Controls" })).toBeFocused();
+    await expect(difficulty).toBeFocused();
     await gamepad(page).push(0, 0);
+  });
+
+  test("moves the difficulty beside Start Race with the D-pad's left and right, and races it", async ({ page }) => {
+    // Nine presses, each waiting for the frames that read it, then a race's first frames.
+    test.slow();
+    await expect(page.getByRole("button", { name: "Start Race" })).toBeFocused();
+    const choice = (name: string) => difficultyChoices(page).getByRole("radio", { name });
+
+    await tap(page, GAMEPAD.down, () => expect(choice("Normal")).toBeFocused());
+    await tap(page, GAMEPAD.right, () => expect(choice("Hard")).toBeChecked());
+    // It stops at the ends, as a slider does.
+    await tap(page, GAMEPAD.right, () => expect(choice("Hard")).toBeChecked());
+    await tap(page, GAMEPAD.left, () => expect(choice("Normal")).toBeChecked());
+    await tap(page, GAMEPAD.left, () => expect(choice("Easy")).toBeChecked());
+    await expect(choice("Easy")).toBeFocused();
+
+    // The difficulty is one stop between the buttons, whichever is chosen.
+    await tap(page, GAMEPAD.down, () => expect(page.getByRole("button", { name: "Controls" })).toBeFocused());
+    await tap(page, GAMEPAD.up, () => expect(choice("Easy")).toBeFocused());
+    await tap(page, GAMEPAD.up, () => expect(page.getByRole("button", { name: "Start Race" })).toBeFocused());
+    await tap(page, GAMEPAD.a, () => expect(page.getByTestId("countdown")).toBeVisible());
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "Paused" }).getByTestId("race-difficulty")).toHaveText(/^Easy$/i);
   });
 
   test("turns a volume slider in focus with the D-pad", async ({ page }) => {
