@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createRace, isPlayer, NO_INPUT, PLAYER, type Difficulty, type PlayerInput, type Race } from ".";
 import {
+  attacksOnThePlayer,
   autopilot,
   CLOSED_ROAD,
   eventsUntil,
@@ -218,103 +219,92 @@ function alongsideABrawler(difficulty: Difficulty, seed = 1) {
   return { race, target, input };
 }
 
-/**
- * Rides `race` with `input`, the player never hitting back, for `seconds`,
- * and lists the attacks the rider `attacker` threw at the player and landed
- * on them, by race clock.
- */
-function attacksOnThePlayerBy(race: Race, attacker: number, input: () => PlayerInput, seconds: number) {
-  const thrown: number[] = [];
-  const landed: number[] = [];
-  for (let step = 0; step < seconds * STEPS_PER_SECOND; step++) {
-    race.step(input());
-    const { clock } = race.snapshot();
-    for (const event of race.drainEvents()) {
-      if (event.type !== "attack-thrown" && event.type !== "attack-landed") continue;
-      if (event.attacker.kind !== "rider" || event.attacker.id !== attacker) continue;
-      if (event.target?.kind !== "rider" || event.target.id !== PLAYER) continue;
-      (event.type === "attack-thrown" ? thrown : landed).push(clock);
-    }
-  }
-  return { thrown, landed };
-}
-
-describe("a breather", () => {
-  it("lasts 5 s on Easy, 3 s on Normal and 1 s on Hard: after its hit lands on a player who doesn't hit back, a brawler attacks them again no sooner", () => {
-    for (const [difficulty, breather, soon] of [["easy", 5, null], ["normal", 3, 4], ["hard", 1, 2]] as const) {
-      const { race, target, input } = alongsideABrawler(difficulty);
-      const { thrown, landed } = attacksOnThePlayerBy(race, target, input, 40);
-      const waits = landed.flatMap((hit) => thrown.filter((at) => at > hit).slice(0, 1).map((at) => at - hit));
-
-      expect(waits.length, difficulty).toBeGreaterThanOrEqual(2);
-      expect(Math.min(...waits), difficulty).toBeGreaterThanOrEqual(breather);
-      // Within a second of the breather's end, now and then, at Normal's rate of attacks or more: the breather is what holds it back.
-      if (soon !== null) expect(Math.min(...waits), difficulty).toBeLessThan(soon);
-    }
-  });
-});
+/** Races in which the player gets alongside the brawler who lines up nearest them within a minute. */
+const ALONGSIDE_A_BRAWLER = [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24];
 
 /**
  * Over races from `seeds` on `difficulty`, in each of which the player rides
- * up alongside the brawler who lined up nearest them, lands a punch on it and
- * rides on beside it without attacking: the steps from each of the brawler's
- * hits that landed on the player while they were fighting it back (in the 5 s
- * after their punch landed) to its next attack on them.
+ * up alongside the brawler who lined up nearest them and rides on beside it:
+ * the steps from each of the brawler's hits on the player to its next attack
+ * on them. A player who is `fightingBack` lands a punch on it first, then
+ * never attacks again, and only its hits in the 5 s after that punch landed,
+ * while they are fighting it back, count; any other never hits back.
  */
-function waitsAfterHitsOnAPlayerFightingBack(difficulty: Difficulty, seeds: readonly number[]) {
+function waitsAfterItsHits(difficulty: Difficulty, seeds: readonly number[], fightingBack: boolean) {
   const waits: number[] = [];
   for (const seed of seeds) {
     const { race, target, input } = alongsideABrawler(difficulty, seed);
-    const punching = () => ({ ...input(), punch: true });
-    eventsUntil(race, punching, (event) => event.type === "attack-landed" && isPlayer(event.attacker) && event.target.id === target, 10);
+    if (fightingBack) {
+      const punching = () => ({ ...input(), punch: true });
+      eventsUntil(race, punching, (event) => event.type === "attack-landed" && isPlayer(event.attacker) && event.target.id === target, 10);
+    }
+    const counted = fightingBack ? 5 * STEPS_PER_SECOND : Infinity;
     let landedAt: number | null = null;
-    for (let step = 1; step <= 12 * STEPS_PER_SECOND; step++) {
-      race.step(input());
-      for (const event of race.drainEvents()) {
-        if (event.type !== "attack-thrown" && event.type !== "attack-landed") continue;
-        if (event.attacker.kind !== "rider" || event.attacker.id !== target || event.target?.kind !== "rider" || event.target.id !== PLAYER) continue;
-        if (event.type === "attack-thrown" && landedAt !== null) {
-          waits.push(step - landedAt);
-          landedAt = null;
-        }
-        if (event.type === "attack-landed" && step < 5 * STEPS_PER_SECOND) landedAt = step;
+    for (const { kind, attacker, step } of attacksOnThePlayer(race, input, fightingBack ? 12 : 40).attacks) {
+      if (attacker !== target) continue;
+      if (kind === "thrown" && landedAt !== null) {
+        waits.push(step - landedAt);
+        landedAt = null;
       }
+      if (kind === "landed" && step < counted) landedAt = step;
     }
   }
   return waits;
 }
 
-describe("a breather on Easy and Hard", () => {
-  it("holds while the player fights back: after its hit lands on a player who has just hit it, a brawler attacks them again no sooner, where on Normal it trades blows at once", WHOLE_RACES, () => {
-    const seeds = [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
-    for (const [difficulty, breather] of [["easy", 5], ["hard", 1]] as const) {
-      const waits = waitsAfterHitsOnAPlayerFightingBack(difficulty, seeds);
+describe("a breather", () => {
+  it("lasts 5 s on Easy, 3 s on Normal and 1 s on Hard: after its hit lands on a player who doesn't hit back, a brawler attacks them again no sooner", WHOLE_RACES, () => {
+    for (const [difficulty, breather] of [["easy", 5], ["normal", 3], ["hard", 1]] as const) {
+      const waits = waitsAfterItsHits(difficulty, ALONGSIDE_A_BRAWLER.slice(0, 6), false);
 
-      expect(waits.length, difficulty).toBeGreaterThanOrEqual(3);
+      expect(waits.length, difficulty).toBeGreaterThanOrEqual(4);
       expect(Math.min(...waits), difficulty).toBeGreaterThanOrEqual(breather * STEPS_PER_SECOND);
       // Within a second of the breather's end, now and then: the breather is what holds it back.
       expect(Math.min(...waits), difficulty).toBeLessThan((breather + 1) * STEPS_PER_SECOND);
     }
+  });
+
+  it("holds on Easy and Hard while the player fights back: after its hit lands on a player who has just hit it, a brawler attacks them again no sooner, where on Normal it trades blows at once", WHOLE_RACES, () => {
+    for (const [difficulty, breather] of [["easy", 5], ["hard", 1]] as const) {
+      const waits = waitsAfterItsHits(difficulty, ALONGSIDE_A_BRAWLER.slice(0, 12), true);
+
+      expect(waits.length, difficulty).toBeGreaterThanOrEqual(3);
+      expect(Math.min(...waits), difficulty).toBeGreaterThanOrEqual(breather * STEPS_PER_SECOND);
+      expect(Math.min(...waits), difficulty).toBeLessThan((breather + 1) * STEPS_PER_SECOND);
+    }
     // On Normal, as in v1.0.0, a brawl is a brawl: it attacks a player who hits back whenever it is free to.
-    const normal = waitsAfterHitsOnAPlayerFightingBack("normal", seeds);
+    const normal = waitsAfterItsHits("normal", ALONGSIDE_A_BRAWLER.slice(0, 12), true);
     expect(normal.length).toBeGreaterThanOrEqual(3);
     expect(Math.min(...normal)).toBeLessThan(1 * STEPS_PER_SECOND);
   });
 });
 
+/** The value most of `values` share (the first of those that share it most, if several do). */
+function mostCommon(values: readonly number[]) {
+  const counts = new Map<number, number>();
+  for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1);
+  return [...counts].reduce((most, next) => (next[1] > most[1] ? next : most))[0];
+}
+
 describe("patience", () => {
-  it("runs out after 2 unanswered hits on Easy, 3 on Normal and 4 on Hard: a brawler then gives up on a player who doesn't hit back for a while", () => {
+  it("runs out after 2 unanswered hits on Easy, 3 on Normal and 4 on Hard: a brawler then gives up on a player who doesn't hit back for a while", WHOLE_RACES, () => {
     for (const [difficulty, hits] of [["easy", 2], ["normal", 3], ["hard", 4]] as const) {
-      const { race, target, input } = alongsideABrawler(difficulty);
-      const { landed } = attacksOnThePlayerBy(race, target, input, 60);
       // Its runs of hits on the player: hits less than 10 s apart, as giving up keeps it from them for 10 s at least.
       const runs: number[] = [];
-      landed.forEach((at, index) => {
-        if (index === 0 || at - landed[index - 1] >= 10) runs.push(1);
-        else runs[runs.length - 1]++;
-      });
+      for (const seed of ALONGSIDE_A_BRAWLER.slice(0, 6)) {
+        const { race, target, input } = alongsideABrawler(difficulty, seed);
+        let lastHit = -Infinity;
+        for (const { kind, attacker, step } of attacksOnThePlayer(race, input, 60).attacks) {
+          if (attacker !== target || kind !== "landed") continue;
+          if (step - lastHit >= 10 * STEPS_PER_SECOND) runs.push(1);
+          else runs[runs.length - 1]++;
+          lastHit = step;
+        }
+      }
 
-      expect(runs.length, difficulty).toBeGreaterThanOrEqual(2);
+      expect(runs.length, difficulty).toBeGreaterThanOrEqual(6);
+      // Most often it gives up once its patience runs out; now and then the player gets away from it first.
+      expect(mostCommon(runs), difficulty).toBe(hits);
       expect(Math.max(...runs), difficulty).toBe(hits);
     }
   });
@@ -377,9 +367,7 @@ const chance = ({ seconds, attacks }: { seconds: number; attacks: number }) => M
 
 describe("how often opponents attack the player", () => {
   it("is less often on Easy and more often on Hard: a brawler attacks a player who fights it back at its own rate on each", WHOLE_RACES, () => {
-    // Races in which the player gets alongside that brawler within a minute.
-    const seeds = [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24];
-    const [easy, normal, hard] = (["easy", "normal", "hard"] as const).map((difficulty) => attacksOnAPlayerFightingBack(difficulty, seeds));
+    const [easy, normal, hard] = (["easy", "normal", "hard"] as const).map((difficulty) => attacksOnAPlayerFightingBack(difficulty, ALONGSIDE_A_BRAWLER));
 
     // A brawler attacks a player within its reach about 1.8 times a second on Normal.
     expect(rate(normal)).toBeGreaterThan(1.2);

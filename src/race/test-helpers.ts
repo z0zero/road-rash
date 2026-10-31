@@ -393,6 +393,34 @@ export function eventsUntil(
   return events;
 }
 
+/** An attack a rider threw at the player, or one that landed on them: who threw it, and the step it came in. */
+export interface AttackOnThePlayer {
+  readonly kind: "thrown" | "landed";
+  readonly attacker: RiderId;
+  /** Counted from the first step ridden, 1. */
+  readonly step: number;
+}
+
+/**
+ * Rides `race` with `input` for `seconds` and lists the attacks riders threw
+ * at the player and landed on them, and the steps the player was knocked off
+ * in, counting steps from 1.
+ */
+export function attacksOnThePlayer(race: Race, input: () => PlayerInput, seconds: number) {
+  const attacks: AttackOnThePlayer[] = [];
+  const knockOffs: number[] = [];
+  for (let step = 1; step <= Math.round(seconds * STEPS_PER_SECOND); step++) {
+    race.step(input());
+    for (const event of race.drainEvents()) {
+      if (event.type === "crash" && event.rider === PLAYER && event.cause === "knocked-off") knockOffs.push(step);
+      if (event.type !== "attack-thrown" && event.type !== "attack-landed") continue;
+      if (event.attacker.kind !== "rider" || event.target?.kind !== "rider" || event.target.id !== PLAYER) continue;
+      attacks.push({ kind: event.type === "attack-thrown" ? "thrown" : "landed", attacker: event.attacker.id, step });
+    }
+  }
+  return { attacks, knockOffs };
+}
+
 /** The opponent of a temperament (any, if not given) who lines up nearest the player. */
 export function nearestOpponent(race: Race, temperament?: Temperament): RiderId {
   return race
