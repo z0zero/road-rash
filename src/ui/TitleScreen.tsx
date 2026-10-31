@@ -47,7 +47,7 @@ export function TitleScreen({
         <Button autoFocus onClick={onStart}>
           Start Race
         </Button>
-        <DifficultyPicker difficulty={difficulty} onChoose={onChooseDifficulty} />
+        <DifficultyPicker difficulty={difficulty} onChoose={onChooseDifficulty} onStart={onStart} />
         <Button onClick={onControls}>Controls</Button>
         <Button onClick={onSettings}>Settings</Button>
         <Button onClick={onCredits}>Credits</Button>

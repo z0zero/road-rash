@@ -16,7 +16,7 @@ A browser motorcycle combat racing game inspired by Road Rash on the SEGA Genesi
 | Pause | Esc or P | Start |
 | Back, in menus | Esc | B |
 
-- Choose Easy, Normal or Hard beside Start Race. On Easy the opponents ride slower and fight less, and the field stays nearer you; on Hard they ride closer to the limit and fight more. Each difficulty keeps its own personal best.
+- Choose Easy, Normal or Hard beside Start Race, with a click, or with ←/→ or the D-pad once it has the focus; Enter or A there starts the race. On Easy the opponents ride slower and fight less, and the field stays nearer you; on Hard they ride closer to the limit and fight more. Each difficulty keeps its own personal best.
 - You start last. Ride hard, and fight anyone who rides up beside you.
 - To take a rider's club, throw a hit at them while they wind up a swing.
 - Every hit costs stamina. A rider with no stamina left is knocked off their bike by the next hit.
