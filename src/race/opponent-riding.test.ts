@@ -18,7 +18,7 @@ const EDGE = 6 - 0.8;
 const SHOULDER_EDGE = 6 + 3 - 0.4;
 
 describe("getting round a rider", () => {
-  it("keeps a crawling bike to its own side of a rider stopped just in front of it, rather than cut across behind them", () => {
+  it("keeps a crawling bike to its own side of a rider stopped just in front of it, with room there, rather than cut across behind them", () => {
     // Crawling at walking pace, with a rider stopped 2.5 m ahead and half a metre to its right, its racing line beyond them.
     const me = bike(1000, 1, 2);
 
