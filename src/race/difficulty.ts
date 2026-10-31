@@ -28,8 +28,15 @@ export interface DifficultyTuning {
   readonly pace: number;
   /** How often opponents attack the player when they are within reach and free to, as a share of how often on Normal. */
   readonly attacks: number;
-  /** The breather (seconds) an opponent gives a player who isn't fighting it back, after each of its hits lands on them. */
+  /** The breather (seconds) an opponent gives the player after each of its hits lands on them. */
   readonly breatherSeconds: number;
+  /**
+   * Whether an opponent gives its breather to a player who is fighting it
+   * back too, so that hitting back never brings its attacks on faster; if
+   * not, a brawl is a brawl, and it attacks a player fighting it back
+   * whenever it is free to.
+   */
+  readonly breatherWhenFoughtBack: boolean;
   /**
    * How far a brawler's or bully's patience goes with a player who doesn't
    * hit back: once this many of its hits in a row have landed on them while
@@ -51,6 +58,7 @@ export const DIFFICULTY_TUNING: Readonly<Record<Difficulty, DifficultyTuning>> =
     pace: 0.89,
     attacks: 0.5,
     breatherSeconds: 5,
+    breatherWhenFoughtBack: true,
     unansweredHits: 2,
     catchUp: { near: 25, far: 150, most: 0.08 },
   },
@@ -58,6 +66,7 @@ export const DIFFICULTY_TUNING: Readonly<Record<Difficulty, DifficultyTuning>> =
     pace: 1,
     attacks: 1,
     breatherSeconds: 3,
+    breatherWhenFoughtBack: false,
     unansweredHits: 3,
     catchUp: { near: 75, far: 400, most: 0.08 },
   },
@@ -65,7 +74,8 @@ export const DIFFICULTY_TUNING: Readonly<Record<Difficulty, DifficultyTuning>> =
     pace: 1.07,
     attacks: 2,
     breatherSeconds: 1,
-    unansweredHits: 6,
+    breatherWhenFoughtBack: true,
+    unansweredHits: 4,
     catchUp: { near: 75, far: 400, most: 0.08 },
   },
 };
