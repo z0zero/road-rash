@@ -196,6 +196,19 @@ describe("an obstacle close ahead", () => {
     expect(line).toBeLessThanOrEqual(6);
     expect(holdBehind).toBeGreaterThan(0);
   });
+
+  it("keeps a crawling bike already moving across the path of a rock close ahead going across, once it is too close to stop short of it", () => {
+    // Rolling at walking pace 7.05 m out, moving across to its left at 3.1 m/s, beside a rider stopped 8.3 m out and level
+    // with a rock (0.5 m across its base each way) 6 m out, whose back is 1.2 m ahead of its front: steering, which
+    // takes a tenth of a second to die away, carries it the 0.15 m into the rock's path whatever it does now.
+    const me: Motion = { ...bike(1000, 7.05, 1.94), steering: -3.09 };
+    const smallRock: Footprint = { distance: 1002.7, offset: 6, movingTo: 6, velocity: 0, halfLength: 0.5, halfWidth: 0.5 };
+
+    const { line } = lineAround(me, 4.5, [me, bike(1002.7, 8.3, 0)], [smallRock], EDGE, SHOULDER_EDGE);
+
+    // It carries on across, to beyond the rock's path, which reaches 6 - 0.5 - 0.4 m, rather than stop in it.
+    expect(line).toBeLessThanOrEqual(5.1);
+  });
 });
 
 describe("keeping to a line", () => {
