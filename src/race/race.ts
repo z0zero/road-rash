@@ -59,8 +59,8 @@ export interface RaceOptions {
 }
 
 /**
- * How the Race module's own tests may set a race up besides its seed, to try
- * one rule at a time. The game never does, and `@/race` doesn't export it:
+ * How the Race module's own tests may set a race up besides its options, to
+ * try one rule at a time. The game never does, and `@/race` doesn't export it:
  * every race in the game runs in traffic, with cops, on perfect bikes. Tests
  * reach it through `setUpRace` in their helpers.
  */
