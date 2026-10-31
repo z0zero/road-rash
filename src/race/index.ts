@@ -12,7 +12,7 @@
 export { createRace, NO_INPUT } from "./race";
 export { isPlayer, PLAYER } from "./riders";
 export { COP_FULL_STAMINA } from "./cops";
-export { DEFAULT_DIFFICULTY, DIFFICULTIES } from "./difficulty";
+export { DEFAULT_DIFFICULTY, DIFFICULTIES, isDifficulty } from "./difficulty";
 export { COP_ALERT_RANGE, FULL_CONDITION, FULL_STAMINA, QUALIFYING_POSITION, TOP_SPEED } from "./limits";
 export { AHEAD as TRAFFIC_AHEAD, BEHIND as TRAFFIC_BEHIND, MOST_CARS } from "./traffic";
 export { STEP_SECONDS } from "./steps";
