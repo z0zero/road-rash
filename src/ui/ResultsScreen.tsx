@@ -66,8 +66,8 @@ export function ResultsScreen({
   }, [ready]);
   return (
     // Centred by its margins, and no wider than the window leaves room for, as a screen over the game is (see `Dialog`).
-    // In a short window, the spacing is tighter, so that Restart and Back to title are in view even after a first
-    // finish with a new best.
+    // In a short window, the spacing is tighter, and the column beside the standings wider, for a new best to fit on
+    // one line: so the whole panel is in view even after a first finish with a new best, in a wide font too.
     <div
       role="dialog"
       aria-modal="true"
@@ -75,7 +75,7 @@ export function ResultsScreen({
       className="absolute inset-0 flex flex-col overflow-y-auto bg-night/55 p-4 backdrop-blur-[2px]"
     >
       <div className={`m-auto flex w-[min(52rem,94vw)] max-w-full flex-col gap-6 px-8 py-7 short:py-4 md:flex-row md:gap-10 ${PANEL}`}>
-        <div className="flex flex-col items-center gap-4 short:gap-2 md:w-72 md:shrink-0">
+        <div className="flex flex-col items-center gap-4 short:gap-2 md:w-72 md:shrink-0 short:md:w-80">
           <h2 id="results-title" className={`text-6xl short:text-5xl ${PANEL_TITLE}`}>
             {BANNERS[results.outcome]}
           </h2>
@@ -100,7 +100,8 @@ export function ResultsScreen({
               The rest of the field is racing to the finish&hellip;
             </p>
           )}
-          <dl className="grid w-full grid-cols-2 gap-x-6 gap-y-2 text-lg short:gap-y-0.5 short:text-base">
+          {/* Each label has the room its figure leaves, so that "Best on Normal" stays on one line in a wide font too. */}
+          <dl className="grid w-full grid-cols-[1fr_auto] gap-x-6 gap-y-2 text-lg short:gap-y-0.5 short:text-base">
             <dt className="text-sand/80">Position</dt>
             <dd data-testid="results-position" className="text-right font-semibold tabular-nums text-sand">
               {results.position === null ? "–" : `${formatPosition(results.position)} of ${results.standings.length}`}
@@ -119,7 +120,7 @@ export function ResultsScreen({
             </dd>
           </dl>
           {newBests && (
-            <p className="text-center font-display text-2xl uppercase italic text-sunset short:text-xl">New best {newBests}!</p>
+            <p className="text-center font-display text-2xl uppercase italic text-sunset short:text-lg">New best {newBests}!</p>
           )}
           <div ref={buttons} inert={!ready} className="flex flex-col gap-3 short:gap-2">
             <Button ref={restart} onClick={onRestart} className="short:py-2">
