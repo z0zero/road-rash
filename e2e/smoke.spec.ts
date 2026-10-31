@@ -179,8 +179,8 @@ function scrollSizes(screen: Locator) {
 for (const viewport of [
   { width: 1280, height: 577 },
   { width: 1024, height: 576 },
-  // Tall enough for the screens' full spacing, but not for Controls' with it.
-  { width: 1280, height: 700 },
+  // As a 1366x768 laptop's maximized browser leaves.
+  { width: 1366, height: 657 },
 ]) {
   test.describe(`in a window ${viewport.width}x${viewport.height}`, () => {
     test.use({ viewport });
@@ -195,6 +195,21 @@ for (const viewport of [
     });
   });
 }
+
+test.describe("in a window 1280x641, too short for the title screen with its full spacing", () => {
+  test.use({ viewport: { width: 1280, height: 641 } });
+
+  test("fits the title screen in without scrolling it, down to the personal best", async ({ page }) => {
+    await page.evaluate(() =>
+      localStorage.setItem("rev-and-wreck:v2", JSON.stringify({ personalBests: { normal: { time: 185.25, position: 4 } } })),
+    );
+    await page.reload();
+
+    await expect(page.getByTestId("title-personal-best")).toBeVisible();
+    const { scrollHeight, clientHeight } = await scrollSizes(page.getByTestId("title-screen"));
+    expect(scrollHeight).toBeLessThanOrEqual(clientHeight);
+  });
+});
 
 test.describe("in a window 480x800, as a browser snapped to a third of a wide screen leaves", () => {
   test.use({ viewport: { width: 480, height: 800 } });
