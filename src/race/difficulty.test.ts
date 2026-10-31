@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createRace, isPlayer, NO_INPUT, PLAYER, type Difficulty, type PlayerInput, type Race } from ".";
+import { createRace, isPlayer, NO_INPUT, PLAYER, type Difficulty, type PlayerInput, type Race, type RaceResults, type RiderId } from ".";
 import {
   attacksOnThePlayer,
   autopilot,
@@ -165,10 +165,9 @@ describe("a race on Normal", () => {
 
 /**
  * A race on `difficulty`, on a closed road with no cops, in which the player,
- * on a bike with next to no condition left, wrecked it in the first seconds
- * by riding into the first obstacle up the road, raced to the finish:
- * catch-up stops once the player's race is over, so the opponents ride at
- * their pace.
+ * on a bike with next to no condition left, has just wrecked it in the first
+ * seconds by riding into the first obstacle up the road: catch-up stops once
+ * the player's race is over, so from then on the opponents ride at their pace.
  */
 function wreckedAtTheStart(difficulty: Difficulty, seed = 1) {
   const race = setUpRace({ seed, difficulty }, { ...CLOSED_ROAD, ...NO_COPS, playerCondition: 1 });
@@ -178,18 +177,21 @@ function wreckedAtTheStart(difficulty: Difficulty, seed = 1) {
     .filter((obstacle) => obstacle.distance > start + 50)
     .reduce((nearest, obstacle) => (obstacle.distance < nearest.distance ? obstacle : nearest));
   secondsUntil(race, rideInto(race, first, 20), () => player(race).status === "wrecked", 60);
-  return { race, results: race.fastForward() };
+  return race;
 }
 
-/** The finishing time of each racer (the opponents who seldom fight, so ride at their pace), by rider id. */
-function racersTimes({ race, results }: ReturnType<typeof wreckedAtTheStart>) {
+/** The finishing time of each racer (the opponents who seldom fight, so ride at their pace) in a race raced to the finish, by rider id. */
+function racersTimes(race: Race, results: RaceResults) {
   const racers = race.snapshot().riders.filter((rider) => rider.temperament === "racer");
   return racers.map(({ id }) => results.standings.find((standing) => standing.rider === id)?.time ?? null);
 }
 
 describe("the opponents' pace", () => {
   it("is a little slower on Easy and closer to the limit on Hard: every racer finishes later on Easy, and sooner on Hard", WHOLE_RACES, () => {
-    const [easy, normal, hard] = (["easy", "normal", "hard"] as const).map((difficulty) => racersTimes(wreckedAtTheStart(difficulty)));
+    const [easy, normal, hard] = (["easy", "normal", "hard"] as const).map((difficulty) => {
+      const race = wreckedAtTheStart(difficulty);
+      return racersTimes(race, race.fastForward());
+    });
 
     expect(normal.length).toBe(6);
     normal.forEach((time, racer) => {
@@ -379,36 +381,62 @@ describe("how often opponents attack the player", () => {
 });
 
 /**
- * How many opponents are within 150 m ahead of a struggling player, on
- * average over the first two and a half minutes of races from `seeds` on
- * `difficulty`, on a closed road with no cops: the player rides at no more
- * than 36 m/s (130 km/h), slowing for the bends, and never hits back.
+ * Where the opponent `target` is in `race`, stepped `steps` times by `step`:
+ * its speed as it first passed each 10 m mark along the track, and how far
+ * ahead of the player it was then (metres).
  */
-function opponentsJustAheadOfASlowPlayer(difficulty: Difficulty, seeds: readonly number[]) {
-  let steps = 0;
-  let ahead = 0;
-  for (const seed of seeds) {
-    const race = setUpRace({ seed, difficulty }, { ...CLOSED_ROAD, ...NO_COPS });
-    stepFor(race, 3);
-    const input = autopilot(race, { targetSpeed: 36, lane: 1.5 });
-    for (let step = 0; step < 150 * STEPS_PER_SECOND && player(race).status === "racing"; step++) {
-      race.step(input());
-      const { riders } = race.snapshot();
-      const me = riders[PLAYER];
-      steps++;
-      ahead += riders.filter((rider) => rider.id !== PLAYER && rider.status === "racing" && rider.distance > me.distance && rider.distance - me.distance < 150).length;
-    }
+function passing(race: Race, target: RiderId, steps: number, step: () => void) {
+  const marks = new Map<number, { speed: number; ahead: number }>();
+  for (let i = 0; i < steps; i++) {
+    step();
+    const { riders } = race.snapshot();
+    const them = riders[target];
+    const mark = Math.round(them.distance / 10) * 10;
+    if (them.status === "racing" && !them.crash && !marks.has(mark)) marks.set(mark, { speed: them.speed, ahead: them.distance - riders[PLAYER].distance });
   }
-  return ahead / steps;
+  return marks;
 }
 
-describe("catch-up", () => {
-  it("holds the field nearer a struggling player on Easy, slowing opponents from 25 m ahead of them and by the full 8% from 150 m", WHOLE_RACES, () => {
-    const seeds = [1, 2, 3];
+/**
+ * How fast the racer who lines up nearest the player rides each of `aheads`
+ * metres in front of them on `difficulty`, as a share of its pace: its speed
+ * where it is that far ahead of a player who follows it, within 15% or 5 m,
+ * against its speed at the same marks of the track in the race in which the
+ * player has wrecked at the start, where it rides at its pace. The median over
+ * the marks from 1 km on, in the first 90 s, and how many there are.
+ */
+function sharesOfItsPace(difficulty: Difficulty, aheads: readonly number[], seed = 1) {
+  const followed = aheads.map((ahead) => {
+    const race = setUpRace({ seed, difficulty }, { ...CLOSED_ROAD, ...NO_COPS });
+    stepFor(race, 3);
+    const target = nearestOpponent(race, "racer");
+    const start = player(race).distance;
+    // The player follows it at its speed, closing in or dropping back at up to 6 m/s.
+    const following = autopilot(race, {
+      lane: 1.5,
+      targetSpeed: ({ riders }) => riders[target].speed + Math.max(-6, Math.min(6, 0.4 * (riders[target].distance - riders[PLAYER].distance - ahead))),
+    });
+    return { ahead, target, start, marks: passing(race, target, 90 * STEPS_PER_SECOND, () => race.step(following())) };
+  });
+  const wrecked = wreckedAtTheStart(difficulty, seed);
+  const atItsPace = passing(wrecked, followed[0].target, 90 * STEPS_PER_SECOND, () => wrecked.fastForward(1));
+  return followed.map(({ ahead, start, marks }) => {
+    const shares = [...marks]
+      .filter(([mark, at]) => mark >= start + 1000 && Math.abs(at.ahead - ahead) <= Math.max(5, 0.15 * ahead) && atItsPace.has(mark))
+      .map(([mark, { speed }]) => speed / atItsPace.get(mark)!.speed)
+      .sort((a, b) => a - b);
+    return { share: shares[Math.floor(shares.length / 2)], marks: shares.length };
+  });
+}
 
-    // On Normal, an opponent slows only from 75 m ahead, by the full 8% from 400 m, and most ride on out of sight.
-    expect(opponentsJustAheadOfASlowPlayer("normal", seeds)).toBeLessThan(2);
-    // On Easy they ride slower too, which on its own keeps fewer than 4 of them there (3.4, with Normal's catch-up).
-    expect(opponentsJustAheadOfASlowPlayer("easy", seeds)).toBeGreaterThan(4.4);
+describe("catch-up on Easy", () => {
+  it("slows an opponent ahead of the player from 25 m, and by the full 8% from 150 m: at its pace 15 m ahead of them, slower 100 m ahead, 8% slower 200 m ahead", WHOLE_RACES, () => {
+    const [near, between, far] = sharesOfItsPace("easy", [15, 100, 200]);
+
+    for (const { marks } of [near, between, far]) expect(marks).toBeGreaterThan(50);
+    expect(near.share).toBeCloseTo(1, 2);
+    expect(between.share).toBeGreaterThan(0.93);
+    expect(between.share).toBeLessThan(0.97);
+    expect(far.share).toBeCloseTo(0.92, 2);
   });
 });
