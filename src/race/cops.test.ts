@@ -758,6 +758,33 @@ describe("a cop following the player", () => {
       expect(player(race).distance - cop().distance).toBeGreaterThan(1);
     },
   );
+
+  it.each([3, 5, 6, 10])("never pushes a player who stops dead too close in front of it on the shoulder, in traffic (seed %i)", (seed) => {
+    // As above, pulling in 2.1 m in front of it at 1.5 m/s, in traffic: in these races a car comes up behind the cop in
+    // the race's lanes, or passes it, while the player pulls in.
+    const { race, stoppedAt, standing } = stoppedInFrontOfTheWaitingCop({ seed, setup: {} });
+
+    expect(furthestPushedFrom(race, stoppedAt, 5, standing)).toBeLessThan(0.1);
+  });
+
+  it.each([
+    [2.5, 1],
+    [2.5, 3],
+    [2.5, 6],
+    [2.5, 12],
+    [3, 12],
+  ])(
+    "never rolls on into a player who rides in at %f m/s and stops dead just in front of it on the shoulder while a car coming up behind keeps it on its line (seed %i)",
+    (speed, seed) => {
+      // The player passes the waiting cop and pulls in at this speed, stopping 2.9 m (at 2.5 m/s) or 3.2 m (at 3 m/s) in
+      // front of it, where it has room to get round them; but in these races a car comes up behind it in the race's
+      // lanes as it sets off round them, and it never pulls across the path of one.
+      const { race, cop, stoppedAt, standing } = stoppedInFrontOfTheWaitingCop({ passing: speed, pullingIn: speed, seed, setup: {} });
+      expect(stoppedAt.distance - cop().distance).toBeGreaterThan(2.8);
+
+      expect(furthestPushedFrom(race, stoppedAt, 5, standing)).toBeLessThan(0.1);
+    },
+  );
 });
 
 describe("a cop holding back", () => {
