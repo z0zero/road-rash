@@ -166,6 +166,43 @@ test("chooses the difficulty beside Start Race with the mouse or the arrow keys,
   await expect(page.getByRole("dialog", { name: "Paused" }).getByTestId("race-difficulty")).toHaveText(/^Hard$/i);
 });
 
+test("moves the difficulty with the arrow keys as the D-pad does, stopping at the ends, and leaves it with up and down", async ({
+  page,
+}) => {
+  const choice = (name: string) => difficultyChoices(page).getByRole("radio", { name });
+  await expect(page.getByRole("button", { name: "Start Race" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(choice("Normal")).toBeFocused();
+
+  await page.keyboard.press("ArrowRight");
+  await expect(choice("Hard")).toBeChecked();
+  await page.keyboard.press("ArrowRight");
+  await expect(choice("Hard")).toBeChecked();
+  await page.keyboard.press("ArrowUp");
+  await expect(page.getByRole("button", { name: "Start Race" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("ArrowDown");
+  await expect(page.getByRole("button", { name: "Controls" })).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("ArrowLeft");
+  await expect(choice("Easy")).toBeChecked();
+  await expect(choice("Easy")).toBeFocused();
+});
+
+for (const key of ["Enter", "Space"]) {
+  test(`starts the race with ${key} on the difficulty beside Start Race`, async ({ page }) => {
+    await expect(page.getByRole("button", { name: "Start Race" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(difficultyChoices(page).getByRole("radio", { name: "Normal" })).toBeFocused();
+
+    await page.keyboard.press(key);
+
+    await expect(page.getByTestId("countdown")).toBeVisible();
+  });
+}
+
 test("races the seed and difficulty the page's address asks for, without changing the difficulty the player chose", async ({
   page,
 }) => {
@@ -722,10 +759,9 @@ test.describe("with a gamepad", () => {
     await tap(page, GAMEPAD.left, () => expect(choice("Easy")).toBeChecked());
     await expect(choice("Easy")).toBeFocused();
 
-    // The difficulty is one stop between the buttons, whichever is chosen.
+    // The difficulty is one stop between the buttons, whichever is chosen; A on it starts the race.
     await tap(page, GAMEPAD.down, () => expect(page.getByRole("button", { name: "Controls" })).toBeFocused());
     await tap(page, GAMEPAD.up, () => expect(choice("Easy")).toBeFocused());
-    await tap(page, GAMEPAD.up, () => expect(page.getByRole("button", { name: "Start Race" })).toBeFocused());
     await tap(page, GAMEPAD.a, () => expect(page.getByTestId("countdown")).toBeVisible());
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog", { name: "Paused" }).getByTestId("race-difficulty")).toHaveText(/^Easy$/i);
