@@ -204,7 +204,8 @@ function throwClearOf(footprint: Footprint, isACar: boolean, bike: Motion, body:
  * How fast (m/s) a car (by its footprint) closes in on a rider on foot at
  * `body` along its own way: its own speed, less however fast they get away
  * from it its way. A car standing still closes in on nobody, and nor does one
- * going slower than them that they run into.
+ * going their way slower than them; one coming at them closes in on them at
+ * its own speed, however fast they run into it.
  */
 function closingSpeed(car: Footprint, body: Readonly<Body>): number {
   return Math.abs(car.velocity) - Math.max(0, Math.sign(car.velocity) * body.speed);
@@ -307,9 +308,11 @@ export function runIntoCarsAndObstacles(race: RaceState, cars: readonly Footprin
 /**
  * A car (one of `cars`, by their footprints) that drives into a rider on foot
  * knocks them down: one closing in on them along its own way at over
- * `DRIVING_INTO`, with them in front of its middle. A car standing still, or
- * going slower than them, that they run into, or one already half past them
- * when they touch it, only pushes them clear of it, and they go round it.
+ * `DRIVING_INTO`, with them in front of its middle, as one coming at them
+ * does even if they run into it. One going their way, slower than them, that
+ * they catch up or brush as they run away from it, one standing still, or one
+ * already half past them when they touch it, only pushes them clear of it,
+ * and they go round it.
  */
 export function knockDownRidersOnFoot(race: RaceState, cars: readonly Footprint[]) {
   for (const rider of race.riders) {
