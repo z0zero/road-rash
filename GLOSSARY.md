@@ -61,11 +61,11 @@ How an opponent races and fights: a *racer* concentrates on racing and rarely at
 _Avoid_: Personality, style, AI type
 
 **Skill**:
-How close to the limit an opponent rides, from 0 (the least skilled) to 1 (the most). Racers are the most skilled.
+How close to the limit an opponent rides, compared with the rest of the field, from 0 (the least skilled) to 1 (the most); the difficulty then moves the whole field nearer the limit or further from it (see Pace). Racers are the most skilled.
 _Avoid_: Level, difficulty, rating
 
 **Pace**:
-How fast an opponent rides when nothing gets in its way: a share of the fastest it could safely go at each point of the track, higher the more skilled it is. Catch-up and its intent raise or lower it a little.
+How fast an opponent rides when nothing gets in its way: a share of the fastest it could safely go at each point of the track, higher the more skilled it is and the harder the difficulty (0.89 times Normal's on Easy, 1.07 times on Hard). Catch-up and its intent raise or lower it a little.
 _Avoid_: Target speed, cruising speed
 
 **Intent**:
