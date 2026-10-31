@@ -69,7 +69,7 @@ const DIRECTIONS: readonly Direction[] = ["up", "down", "left", "right"];
 export interface GamepadHandlers {
   /** Start was pressed. */
   onPause(): void;
-  /** The D-pad was pressed, or the left stick pushed, one way. */
+  /** The D-pad was pressed, or the left stick pushed, one way: one way at most each poll. */
   onMenuMove(direction: Direction): void;
   /** A was pressed. */
   onMenuPress(): void;
@@ -112,9 +112,12 @@ const NONE: readonly (Gamepad | null)[] = [];
  * right trigger or A throttles, the left trigger brakes, the left stick or
  * the D-pad steers, X punches and B kicks. A punch or kick press counts once,
  * in the next step read. Start, A, B and the D-pad or the left stick's pushes
- * also call their `handlers`, for pausing and for menus. Gamepads without
- * the standard mapping are ignored: their buttons could be anywhere. While
- * the window has lost focus, the gamepads count for nothing, as if let go.
+ * also call their `handlers`, for pausing and for menus: one way at most each
+ * poll, so that a D-pad pressed, or a stick pushed, between two ways, down
+ * and right say, doesn't move onto a choice and move it along at once.
+ * Gamepads without the standard mapping are ignored: their buttons could be
+ * anywhere. While the window has lost focus, the gamepads count for nothing,
+ * as if let go.
  */
 export function listenToGamepads(target: Window, handlers: GamepadHandlers): Gamepads {
   /** What every gamepad was doing at the last poll, by the gamepad's index; one missing then is new. */
@@ -147,6 +150,8 @@ export function listenToGamepads(target: Window, handlers: GamepadHandlers): Gam
       let throttle = 0;
       let brake = 0;
       let steer = 0;
+      /** Whether this poll has moved through a menu already. */
+      let moved = false;
       for (const pad of gamepadsOf(target.navigator)) {
         if (!pad || !pad.connected || pad.mapping !== "standard") continue;
         const before = lastSeen.get(pad.index) ?? DOING_NOTHING;
@@ -169,7 +174,9 @@ export function listenToGamepads(target: Window, handlers: GamepadHandlers): Gam
         if (anyJustPressed(GAMEPAD_MENUS.press, now, before)) handlers.onMenuPress();
         if (anyJustPressed(GAMEPAD.back, now, before)) handlers.onBack();
         for (const direction of DIRECTIONS) {
-          if (isPointing(now, direction) && !isPointing(before, direction)) handlers.onMenuMove(direction);
+          if (moved || !isPointing(now, direction) || isPointing(before, direction)) continue;
+          handlers.onMenuMove(direction);
+          moved = true;
         }
       }
       // What the last poll saw is done with: this poll's is the last seen now.
@@ -236,7 +243,13 @@ function steeringOf(pad: Gamepad, state: PadState): number {
   return beyond <= 0 ? 0 : Math.sign(across) * Math.min(1, beyond / (1 - STICK_DEAD_ZONE));
 }
 
-/** Sets which ways the left stick points now into `stick`, given which ways it pointed `before`. */
+/**
+ * Sets which ways the left stick points now into `stick`, given which ways it
+ * pointed `before`. Pushed between two ways, it points one of them: the way
+ * it pointed already, if it did, so that a stick wavering about the middle
+ * doesn't point one way, then the other; otherwise the way it is pushed the
+ * furthest, so down and a little right is down.
+ */
 function pointStick(stick: Record<Direction, boolean>, pad: Gamepad, before: Readonly<PadState>) {
   const across = pad.axes[LEFT_STICK_X] ?? 0;
   const down = pad.axes[LEFT_STICK_Y] ?? 0;
@@ -244,6 +257,12 @@ function pointStick(stick: Record<Direction, boolean>, pad: Gamepad, before: Rea
   stick.down = isPushed(down, before.stick.down);
   stick.left = isPushed(-across, before.stick.left);
   stick.right = isPushed(across, before.stick.right);
+  if ((stick.up || stick.down) && (stick.left || stick.right)) {
+    const acrossBefore = before.stick.left || before.stick.right;
+    const pointsAcross = acrossBefore === (before.stick.up || before.stick.down) ? Math.abs(across) > Math.abs(down) : acrossBefore;
+    if (pointsAcross) stick.up = stick.down = false;
+    else stick.left = stick.right = false;
+  }
 }
 
 /** Whether the stick, pushed `push` of the way one way, points that way, given whether it pointed that way before. */

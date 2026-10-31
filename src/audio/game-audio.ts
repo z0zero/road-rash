@@ -1,5 +1,6 @@
 import type { GameSession, RaceView, Screen, SessionState } from "@/game/session";
 import { clamp } from "@/math";
+import type { Settings } from "@/save-data/save-data";
 import {
   isPlayer,
   PLAYER,
@@ -48,8 +49,9 @@ export interface GameAudio {
 
 /**
  * A browser that lets the sound start does so at once; one still holding it
- * back this long after a race asked for it (milliseconds) is keeping it
- * locked until a key press or click.
+ * back this long after a race asked for it without a key press or click
+ * (milliseconds) is keeping it locked until one. One still holding it back
+ * this long after a key press or click asked for it isn't waiting for one.
  */
 const LOCKED_AFTER_MS = 1000;
 
@@ -105,7 +107,11 @@ const LOUDEST_GRAVEL_SPEED = 25;
  * music straight away, so the music is ready when the race starts. Nothing
  * plays until `unlock`. A browser can keep the sound locked even then, as
  * some do when a gamepad starts the race: `onLockChange` hears when it does,
- * and when the sound starts after all, from the next key press or click.
+ * so that the player can be told a key press or click turns it on, and when
+ * the sound starts after all, from the next one. It never says so to a player
+ * who would hear nothing anyway, with the volumes all the way down, nor after
+ * a key press or click has failed to start the sound: such a browser isn't
+ * waiting for one.
  */
 export function startGameAudio(session: SoundSource, onLockChange: (locked: boolean) => void = () => {}): GameAudio {
   const loading = new AbortController();
@@ -115,12 +121,18 @@ export function startGameAudio(session: SoundSource, onLockChange: (locked: bool
   let broken = false;
   /** Whether the browser is keeping the sound locked, as `onLockChange` last heard. */
   let locked = false;
+  /** Set once a key press or click has asked for the sound and the browser still held it back: it never says it is locked again. */
+  let notWaitingForAKey = false;
+  /** Checks whether the browser held the sound back from a race asked for without a key press or click... */
   let lockCheck: number | undefined;
+  /** ...and from a key press or click; undefined when none is due. */
+  let keyCheck: number | undefined;
 
   const setLocked = (now: boolean) => {
-    if (now === locked) return;
-    locked = now;
-    onLockChange(now);
+    const told = now && !notWaitingForAKey && wouldBeHeard(session.getState().settings);
+    if (told === locked) return;
+    locked = told;
+    onLockChange(told);
   };
   /** Whether the browser is holding the sound back: there is sound, the page can be seen, but it isn't playing. */
   const heldBack = () => sound !== null && !document.hidden && sound.context.state !== "running";
@@ -146,9 +158,19 @@ export function startGameAudio(session: SoundSource, onLockChange: (locked: bool
   const stopHearingFrames = session.onFrame((view) => withSound((sound) => sound.frame(view)));
   const followVisibility = () => withSound((sound) => sound.setAudible(!document.hidden));
   document.addEventListener("visibilitychange", followVisibility);
-  /** A key press or click while the browser holds the sound back asks it again to play it: now it may. */
+  /**
+   * A key press or click while the browser holds the sound back asks it again
+   * to play it: now it may. If it still doesn't, it isn't waiting for one.
+   */
   const askAgain = () => {
-    if (heldBack()) withSound((sound) => sound.setAudible(true));
+    if (!heldBack()) return;
+    withSound((sound) => sound.setAudible(true));
+    keyCheck ??= window.setTimeout(() => {
+      keyCheck = undefined;
+      if (!heldBack()) return;
+      notWaitingForAKey = true;
+      setLocked(false);
+    }, LOCKED_AFTER_MS);
   };
   for (const gesture of GESTURES) window.addEventListener(gesture, askAgain, { capture: true, passive: true });
 
@@ -174,7 +196,14 @@ export function startGameAudio(session: SoundSource, onLockChange: (locked: bool
         sound.follow(session.getState());
       });
       window.clearTimeout(lockCheck);
-      lockCheck = window.setTimeout(() => setLocked(heldBack()), LOCKED_AFTER_MS);
+      // Asked for from a key press or click, the sound plays now if the browser ever lets it. Asked for without
+      // one, as from a gamepad's press, it may be kept locked until one.
+      if (hasUserActivation()) setLocked(false);
+      else {
+        // Still locked from the last race, it is told so again at once, unless the volumes have gone down since.
+        setLocked(locked);
+        lockCheck = window.setTimeout(() => setLocked(heldBack()), LOCKED_AFTER_MS);
+      }
     },
     dispose() {
       loading.abort();
@@ -184,10 +213,26 @@ export function startGameAudio(session: SoundSource, onLockChange: (locked: bool
       document.removeEventListener("visibilitychange", followVisibility);
       for (const gesture of GESTURES) window.removeEventListener(gesture, askAgain, { capture: true });
       window.clearTimeout(lockCheck);
+      window.clearTimeout(keyCheck);
       sound?.close();
       sound = null;
     },
   };
+}
+
+/**
+ * Whether the page has the player's activation, which browsers let sound
+ * start from: a key press, click or tap in the last moment. A gamepad's press
+ * gives it in some browsers, but not in Safari, nor in Firefox before 155.
+ * Where the browser can't say, it hasn't.
+ */
+function hasUserActivation(): boolean {
+  return navigator.userActivation?.isActive === true;
+}
+
+/** Whether anything would be heard at the player's volumes: not with the master volume, or both the others, at 0. */
+function wouldBeHeard({ masterVolume, musicVolume, effectsVolume }: Settings): boolean {
+  return masterVolume > 0 && (musicVolume > 0 || effectsVolume > 0);
 }
 
 /** How the player hears a sound: how loud (0 to 1) and how far left or right (-1 to 1). */

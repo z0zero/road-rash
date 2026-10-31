@@ -13,6 +13,11 @@ export const DIFFICULTIES: readonly Difficulty[] = ["easy", "normal", "hard"];
 /** The difficulty a race is run at unless another is chosen. */
 export const DEFAULT_DIFFICULTY: Difficulty = "normal";
 
+/** Whether `value`, such as one read from saved data or the page's address, is a difficulty. */
+export function isDifficulty(value: unknown): value is Difficulty {
+  return DIFFICULTIES.some((difficulty) => difficulty === value);
+}
+
 /** How catch-up holds the field near the player (see `catchUpFor`). */
 export interface CatchUp {
   /** Opponents within this many metres of the player, along the track, ride at their usual pace... */
