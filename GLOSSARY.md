@@ -27,7 +27,7 @@ A rider's rank in the race, from first (the leader) to last. Wrecked and busted 
 _Avoid_: Place, rank, standing
 
 **Standings**:
-Every rider's final position and finishing time once the race is over, or how their race ended, as the results list them. One rider's row is never "a standing": it is their position.
+Every rider's final position and finishing time once the race is over, or how their race ended, as the results list them, a row for each rider. On screen, a rider's row is never called "a standing": what it shows is their position, and their time or how their race ended.
 _Avoid_: Ranking, leaderboard, scoreboard
 
 **Qualified**:
