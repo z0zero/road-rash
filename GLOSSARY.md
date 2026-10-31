@@ -97,7 +97,7 @@ A rider on their bike running into another rider on a bike, a cop, a car or an o
 _Avoid_: Nudge, collision
 
 **Squeezing past**:
-An opponent, or a cop, held to a standstill by what is in its way with no clear way round it, as when a rider stands beside it with a roadside rock ahead, rolling on at walking pace through the nearest gap its bike fits through. An opponent goes out onto the shoulder for it if need be, and so does a cop riding to bust someone or pulling over; a cop on patrol or fighting back squeezes past only on the road. Held back behind a rider who has all but stopped, it rolls on round them at walking pace too, rather than wait behind them.
+An opponent, or a cop, held to a standstill by what is in its way with no clear way round it, as when a rider stands beside it with a roadside rock ahead, rolling on at walking pace through the nearest gap its bike fits through, never across the path of a car close ahead. Boxed in like that in the path of a car coming at it, it squeezes out of the car's way. An opponent goes out onto the shoulder for it if need be, and so does a cop riding to bust someone or pulling over; a cop on patrol or fighting back squeezes past only on the road. Held back behind a rider who has all but stopped, it rolls on round them at walking pace too, rather than wait behind them.
 _Avoid_: Nudging through, forcing past
 
 **Run-in**:
