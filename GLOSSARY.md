@@ -155,7 +155,7 @@ A brawler's or bully's go at fighting the player. One at a time rides alongside 
 _Avoid_: Queue, slot
 
 **Breather**:
-The 3 s (5 s on Easy, 1 s on Hard) an opponent whose hit has just landed on the player gives them before it attacks them again. On Normal it gives none to a player who is fighting it back, who has hit it in the last 5 s; on Easy and Hard it gives them one all the same, so hitting back never brings its attacks on faster.
+The 3 s (5 s on Easy, 1 s on Hard) an opponent whose hit has just landed on the player gives them before it attacks them again. On Normal it gives none to a player who is fighting it back, who has hit it in the last 5 s; on Easy and Hard it gives them one all the same.
 _Avoid_: Cooldown, grace period
 
 **Fighting back**:
