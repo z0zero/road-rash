@@ -211,6 +211,46 @@ describe("an obstacle close ahead", () => {
   });
 });
 
+describe("a slow car close ahead", () => {
+  it("keeps a crawling bike on its side of a slow car's path, rather than start across behind it, when the car would be alongside it first", () => {
+    // Crawling at 4 m/s on the shoulder 6.19 m out, with the back of a saloon going 2 m/s in the outer lane 1.2 m
+    // ahead of its front, and its racing line beyond the car.
+    const me = bike(1000, 6.19, 4);
+
+    const { line } = lineAround(me, 1.5, [me], [saloon(1004.5, 4.5, 2)], EDGE, SHOULDER_EDGE);
+
+    // Slowing down to walking pace, it would get within a metre of the car's back, alongside it, before it got into
+    // the car's path, which reaches 4.5 + 0.9 + 0.4 m, and could cross it no further. It stays on its side of it.
+    expect(line).toBeGreaterThanOrEqual(4.5 + 0.9 + 0.4);
+  });
+
+  it("holds a crawling bike to walking pace as it crosses behind a slow car pulling away from it, as it judged it would", () => {
+    // Rolling at walking pace on the shoulder 6.84 m out, with the back of a saloon pulling away at 3 m/s in the outer
+    // lane 1.2 m ahead of its front, and its racing line beyond the car.
+    const me = bike(1000, 6.84, 2);
+
+    const { line, holdBehind } = lineAround(me, 1.5, [me], [saloon(1004.5, 4.5, 3)], EDGE, SHOULDER_EDGE);
+
+    // It crosses the car's path, which reaches 4.5 - 0.9 - 0.4 m, behind it, rolling on at walking pace: opening the
+    // throttle, it would catch the car up and find it alongside before it got across.
+    expect(line).toBeLessThanOrEqual(4.5 - 0.9 - 0.4);
+    expect(holdBehind).toBeLessThanOrEqual(2);
+  });
+
+  it("passes a slow car whose path it is beside at walking pace, rather than ride level with its back corner", () => {
+    // Crawling at 4 m/s on the road's edge 6 m out, just beside the path of a saloon going 2 m/s in the outer lane,
+    // whose back is a quarter of a metre ahead of its front, with its racing line beyond the car.
+    const me = bike(1000, 6, 4);
+
+    const { line, holdBehind } = lineAround(me, 1.5, [me], [saloon(1003.55, 4.5, 2)], EDGE, SHOULDER_EDGE);
+
+    // The car is alongside it before it could get into its path, which reaches 4.5 + 0.9 + 0.4 m: it stays beside it,
+    // and goes past it at walking pace, 2 m/s faster than the car, rather than be held to the car's speed for good.
+    expect(line).toBeGreaterThanOrEqual(4.5 + 0.9 + 0.4);
+    expect(holdBehind).toBeGreaterThanOrEqual(2 + 2);
+  });
+});
+
 describe("keeping to a line", () => {
   it("holds a bike back as for the line it keeps to, rather than roll on as for the line it would take", () => {
     // A cop on patrol stopped where it waited on the shoulder, 7.5 m out, with the player stopped 2.95 m ahead and

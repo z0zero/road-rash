@@ -78,6 +78,8 @@ const HOLD_BACK_TIME = 0.8;
 const BIKE_HALF_LENGTH = BIKE_LENGTH / 2;
 /** ...and this many to either side of it. */
 const BIKE_HALF_WIDTH = BIKE_WIDTH / 2;
+/** A car or an obstacle less than this many metres ahead of a bike's front, or behind its back, is alongside it. */
+const LEVEL_WITH = 1;
 /** Opponents pass cars and obstacles with this many metres between their middle and the side of what they pass. */
 const FOOTPRINT_CLEARANCE = 1;
 /** Opponents look this many seconds ahead for the cars and obstacles they are coming up to... */
@@ -95,16 +97,19 @@ const CROSSING_TIME = 1.5;
  */
 const WALKING_PACE = 2;
 /**
- * ...and riding no faster than this (m/s), it sees a car or an obstacle
- * ahead of it, in its path, as something to steer round, not as one alongside
- * it, even nose to tail with it, and judges how soon it gets to one as if it
+ * ...and riding no faster than this (m/s), it sees a car or an obstacle ahead
+ * of it, in its path, as something to steer round, not as one alongside it,
+ * even nose to tail with it, and judges how soon it gets to one as if it
  * rolled on at walking pace at least, as it will, cutting across the path of
  * one close ahead, never one coming towards it, only if it gets across before
- * it gets there or is already moving across too fast to stop short of it;
- * and it goes round a rider just in front of it, in its path, on its side of
- * them if there is room there for its bike, or else on their other side, but
- * only if the line it takes gets it clear of them before it reaches them, and
- * otherwise waits behind them (see `lineAround`).
+ * it gets there, and into the path of a car driving on before the car is
+ * alongside it, rolling on across it at walking pace, or is already moving
+ * across too fast to stop short of it; and it goes round a rider just in front
+ * of it, in its path, on its side of them if there is room there for its bike,
+ * or else on their other side, but only if the line it takes gets it clear of
+ * them before it reaches them, and otherwise waits behind them (see
+ * `lineAround`). A car going along the track no faster than this is a slow
+ * car, crawling along too.
  */
 const CRAWLING = 2 * WALKING_PACE;
 /** An opponent shoved sideways by a kick faster than this (m/s) rides the kick out before it steers back to its line. */
@@ -289,22 +294,25 @@ interface Room {
  * side of them, it goes round them on their other side if the line it takes
  * there gets it clear of them before it reaches them (see `sideToPass`), and
  * crawling up to a car or an obstacle close ahead, it cuts across its path
- * only if it gets across before it gets there (see `nearestClearLine`). A car
- * changing lanes blocks the lines from where it is to the lane it is moving
- * over to, and an opponent looks further ahead for the cars coming towards it.
- * When a rider it is about to reach is in the way, it holds back to their
- * speed; a slower car or an obstacle in the way, it slows for in time to ride
- * no faster than it when it gets there; but if its line takes it clear past
- * either, it rolls on at walking pace at least: past a rider, crawling, only
- * if it gets clear of them before it reaches their back, were they to stand
- * still, steering as it does (see `getsThereFirst`). Crawling, with no clear
- * line, it squeezes past through the nearest gap its bike fits through, out
- * to `squeezeEdge`: an opponent out onto the shoulder. Cops find their way
- * around the same way, out to the edges they give: a cop on patrol or
- * fighting back squeezes past only on the road. A cop that won't take the
- * line found yet, so as not to pull across the path of a rider or a car
- * coming up behind it, gives the line it does take (`keepTo`), and holds back
- * as that line needs.
+ * only if it gets across before it gets there, and into the path of a car
+ * driving on before the car is alongside it (see `nearestClearLine`), and
+ * rolls on across the path of a car driving on at walking pace, as it judged
+ * it would. A car changing lanes blocks the lines from where it is to the lane
+ * it is moving over to, and an opponent looks further ahead for the cars
+ * coming towards it. When a rider it is about to reach is in the way, it holds
+ * back to their speed; a slower car or an obstacle in the way, it slows for in
+ * time to ride no faster than it when it gets there; but if its line takes it
+ * clear past either, it rolls on at walking pace at least: past a rider,
+ * crawling, only if it gets clear of them before it reaches their back, were
+ * they to stand still, steering as it does (see `getsThereFirst`); and beside
+ * the path of a slow car, crawling along no faster than a crawling bike, at
+ * walking pace faster than the car. Crawling, with no clear line, it squeezes
+ * past through the nearest gap its bike fits through, out to `squeezeEdge`: an
+ * opponent out onto the shoulder. Cops find their way around the same way, out
+ * to the edges they give: a cop on patrol or fighting back squeezes past only
+ * on the road. A cop that won't take the line found yet, so as not to pull
+ * across the path of a rider or a car coming up behind it, gives the line it
+ * does take (`keepTo`), and holds back as that line needs.
  */
 export function lineAround(
   me: Readonly<Motion>,
@@ -329,7 +337,7 @@ export function lineAround(
     const lookAhead = thing.velocity < 0 ? ONCOMING_LOOK_AHEAD : FOOTPRINT_LOOK_AHEAD;
     // Crawling up to something in its path, it is behind it, however close, not alongside it.
     const inFront = me.speed <= CRAWLING && ahead > 0 && Math.abs(thing.offset - me.offset) < thing.halfWidth + BIKE_HALF_WIDTH;
-    const alongside = Math.abs(ahead) < reach + 1 && !inFront;
+    const alongside = Math.abs(ahead) < reach + LEVEL_WITH && !inFront;
     if (!alongside && (ahead <= 0 || ahead - reach >= 2 + closingRolling * lookAhead)) continue;
     // A car changing lanes takes up the road from where it is to the lane it is moving over to.
     const left = Math.min(thing.offset, thing.movingTo);
@@ -348,15 +356,17 @@ export function lineAround(
   const evadingAt = (offset: number) => unsafe.some(({ keepClear: [from, to] }) => offset > from && offset < to);
   /**
    * Whether, crawling, it gets across the path of a car or an obstacle it is coming up to (`room`), and that isn't
-   * coming towards it, on its way to `line`, before it gets there; or is moving across towards it too fast to stop
-   * short of its path, as its steering dies away, and so carries on across rather than stop in it.
+   * coming towards it, on its way to `line`, before it gets there, and into the path of a car driving on before the
+   * car is alongside it, which would keep it from getting any further across; or is moving across towards it too fast
+   * to stop short of its path, as its steering dies away, and so carries on across rather than stop in it.
    */
   const getsAcross = ({ body: [from, to], gap, velocity, reachedIn }: Room, line: number) => {
     if (me.speed > CRAWLING || reachedIn === 0 || velocity < 0) return false;
     const [near, far] = line < me.offset ? [to, from] : [from, to];
     const movingThatWay = Math.sign(line - me.offset) * me.steering;
     if (movingThatWay > 0 && movingThatWay / TUNING.steeringResponse >= Math.abs(near - me.offset)) return true;
-    return getsThereFirst(me, far, line, gap, velocity, evadingAt);
+    const inBeforeAlongside = velocity === 0 || getsThereFirst(me, near, line, gap - LEVEL_WITH, velocity, evadingAt);
+    return inBeforeAlongside && getsThereFirst(me, far, line, gap, velocity, evadingAt);
   };
   /**
    * Whether its `line` takes it clear past a rider ahead of it (`other`), and, crawling, gets it clear of them before
@@ -423,6 +433,11 @@ export function lineAround(
   }
   // Boxed in, with a car coming at it: it brakes hard, to drop back behind whoever is boxing it in and get out of the way.
   if (headOn && line === me.offset) holdBehind = 0;
+  // Crawling across the path of a car driving on close ahead, it rolls on at walking pace, as it judged it would
+  // (`getsAcross`): opening the throttle, it could catch the car up and find it alongside before it got across.
+  const crossingBehind = ({ body: [from, to], close, velocity, reachedIn }: Room) =>
+    close && velocity > 0 && reachedIn > 0 && ((to <= me.offset && line < to) || (from >= me.offset && line > from));
+  if (me.speed <= CRAWLING && unsafe.some(crossingBehind)) holdBehind = Math.min(holdBehind, WALKING_PACE);
   for (const thing of carsAndObstacles) {
     const ahead = thing.distance - me.distance;
     if (ahead <= 0 || thing.velocity < 0) continue;
@@ -432,9 +447,14 @@ export function lineAround(
     if ((me.offset > from && me.offset < to) || (line > from && line < to)) {
       const room = Math.max(0, ahead - thing.halfLength - BIKE_HALF_LENGTH - 2);
       const slowEnough = thing.velocity + Math.sqrt(2 * PLANNED_BRAKING * room);
-      // ...it slows for it in time, unless its line takes it clear past it.
-      const clearPast = line <= left - thing.halfWidth - BIKE_HALF_WIDTH || line >= right + thing.halfWidth + BIKE_HALF_WIDTH;
-      holdBehind = Math.min(holdBehind, heldBackTo(slowEnough, clearPast));
+      // ...it slows for it in time, unless its line takes it clear past it: already beside the path of a slow car,
+      // crawling along no faster than a crawling bike, on the side its line keeps to, it passes the car at walking
+      // pace, rather than ride level with its back corner for good.
+      const [pathFrom, pathTo] = [left - thing.halfWidth - BIKE_HALF_WIDTH, right + thing.halfWidth + BIKE_HALF_WIDTH];
+      const clearPast = line <= pathFrom || line >= pathTo;
+      const besideIt = (line <= pathFrom && me.offset <= pathFrom) || (line >= pathTo && me.offset >= pathTo);
+      const passing = besideIt && thing.velocity <= CRAWLING ? thing.velocity : 0;
+      holdBehind = Math.min(holdBehind, heldBackTo(slowEnough, clearPast, passing));
     }
   }
   return { line, holdBehind, evading: evadingAt(me.offset) };
@@ -473,10 +493,12 @@ function sideToPass(me: Readonly<Motion>, other: Readonly<Motion>, ahead: number
  * How fast a bike held back behind something in its way rides: no faster
  * than `speed`; but if its line takes it clear past it (`clearPast`), it rolls
  * on at walking pace at least, so that it never stands for good behind
- * something that has stopped.
+ * something that has stopped; and already beside the path of a slow car
+ * going along the track at `passing` m/s, at walking pace faster than it, so
+ * that it never rides level with it for good.
  */
-function heldBackTo(speed: number, clearPast: boolean): number {
-  return clearPast ? Math.max(speed, WALKING_PACE) : speed;
+function heldBackTo(speed: number, clearPast: boolean, passing = 0): number {
+  return clearPast ? Math.max(speed, passing + WALKING_PACE) : speed;
 }
 
 /**
