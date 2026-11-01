@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { Difficulty } from "@/race";
 import { BOT_NAMES, DIFFICULTIES, type BotName } from "./bot";
@@ -33,9 +33,10 @@ export interface CutInLog {
 
 /**
  * Every log in `paths`, each a log or a folder searched for *.log files: run logs and cut-in logs, told apart by
- * their SUMMARY line. Files without one, such as a run that is still going, are left out with a note on stderr. Two
- * logs of the same races (a run's, or a difficulty's cut-ins, on a seed both have) are refused, since they would count
- * those races twice.
+ * their SUMMARY line. Files without one, such as a run that is still going, are left out with a note on stderr. A log
+ * that `paths` reach more than once, such as a folder and a log in it, is read once. Two logs of the same races (a
+ * run's, or a difficulty's cut-ins, on a seed both have) are refused, since they would count those races twice, and
+ * so is a log that can't be read, such as one cut short or edited by hand.
  */
 export function readLogs(paths: readonly string[]) {
   const runs: RunLog[] = [];
@@ -45,7 +46,8 @@ export function readLogs(paths: readonly string[]) {
   const once = (what: string, seeds: readonly number[], file: string) => {
     for (const seed of seeds) {
       const other = logOf.get(`${what} ${seed}`);
-      if (other !== undefined && other !== file) {
+      if (other === file) throw new Refusal(`${file}: seed ${seed} of ${what} is in it twice`);
+      if (other !== undefined) {
         throw new Refusal(
           `Seed ${seed} of ${what} is in two logs, ${other} and ${file}. The report reads every log in the folders it is given, so keep a try on other seeds in a folder of its own (--out).`,
         );
@@ -53,18 +55,30 @@ export function readLogs(paths: readonly string[]) {
       logOf.set(`${what} ${seed}`, file);
     }
   };
+  /** The logs already read, by their real path, so that a log reached twice is read once. */
+  const read = new Set<string>();
   for (const file of paths.flatMap(logsIn)) {
+    const real = realpathSync(file);
+    if (read.has(real)) continue;
+    read.add(real);
     const lines = readFileSync(file, "utf8").split("\n");
     const summary = lines.find((l) => l.startsWith("SUMMARY "));
     if (!summary) {
       console.error(`(${file} has no SUMMARY line, so it is left out)`);
       continue;
     }
-    const json = (l: string): unknown => JSON.parse(l);
+    /** `text`, from the log's `line`, as JSON, or a refusal naming the line. */
+    const json = (text: string, line = text): unknown => {
+      try {
+        return JSON.parse(text);
+      } catch (error) {
+        throw new Refusal(`${file}: line ${lines.indexOf(line) + 1} can't be read (${(error as Error).message})`);
+      }
+    };
     if (summary.startsWith("SUMMARY {")) {
-      const s = json(summary.slice(8)) as { mode: string; cfg: string; opts: string; aloneShare: number; within10Share: number };
-      const { pace } = json(s.cfg) as { pace: number };
-      const opts = json(s.opts) as { difficulty?: string };
+      const s = json(summary.slice(8), summary) as { mode: string; cfg: string; opts: string; aloneShare: number; within10Share: number };
+      const { pace } = json(s.cfg, summary) as { pace: number };
+      const opts = json(s.opts, summary) as { difficulty?: string };
       const difficulty = DIFFICULTIES.find((d) => d === (opts.difficulty ?? "normal"));
       const bot = BOT_NAMES.find((b) => b === s.mode);
       if (!bot || typeof pace !== "number" || !difficulty) throw new Refusal(`${file}: not a play-test run's SUMMARY`);
@@ -76,7 +90,7 @@ export function readLogs(paths: readonly string[]) {
       const difficulty = DIFFICULTIES.find((d) => d === summary.split(" ")[1]);
       if (!difficulty) throw new Refusal(`${file}: not a cut-in measure's SUMMARY`);
       const runIns = lines.filter((l) => l.startsWith("{")).map((l) => json(l) as RunIn);
-      const races = lines.filter((l) => l.startsWith("RACE ")).map((l) => json(l.slice(5)) as { seed: number });
+      const races = lines.filter((l) => l.startsWith("RACE ")).map((l) => json(l.slice(5), l) as { seed: number });
       once(`${capital(difficulty)} cut-ins`, races.map((r) => r.seed), file);
       cutIns.push({ file, difficulty, runIns, races });
     }
