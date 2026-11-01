@@ -11,11 +11,13 @@ Node 22.12 or newer. Install with `npm ci`.
 | `npm run dev` | Development server on http://localhost:3000. Pick another port with `PORT=4102 npm run dev`. |
 | `npm run build` | Static export into `out/`. |
 | `npm run lint` | ESLint, including the Race module's purity rules. |
-| `npm run typecheck` | Generates Next's route types, then type-checks the app, and the Race module again without DOM types. |
+| `npm run typecheck` | Generates Next's route types, then type-checks the app, the Race module again without DOM types, and the play-test bots. |
 | `npm test` | Vitest unit tests: the Race module and save data. `npm run test:watch` re-runs them on change. |
 | `npm run test:smoke` | Playwright smoke test against `out/`, so run `npm run build` first. It serves `out/` on `PORT` (default 3000). The first time on a new machine, run `npx playwright install chromium`. |
+| `npm run playtest -- <difficulty> <bot> <pace> <first seed>-<last seed>` | A play-test bot (`racer`, `counter` or `brawler`) rides those races headless, and their log goes into `playtest-logs/`. `cut-ins <difficulty> <seeds>` runs the cut-in measure, `all` the whole set behind the release notes' numbers (about an hour), and `--race <commit>` rides another commit's Race module. See `tools/playtest/README.md`. |
+| `npm run playtest:report -- <logs> [--against <logs>]` | The release notes' measured claims from those logs, beside another set's. |
 
-CI (`.github/workflows/ci.yml`) runs lint, typecheck, unit tests, the build and the smoke test on every push and pull request.
+CI (`.github/workflows/ci.yml`) runs lint, typecheck, unit tests, the build and the smoke test on every push and pull request. It doesn't run the play-test, which takes an hour.
 
 ## Code map
 
@@ -28,6 +30,7 @@ CI (`.github/workflows/ci.yml`) runs lint, typecheck, unit tests, the build and 
 - `src/ui`: the title screen (with the difficulty under Start Race, `DifficultyPicker.tsx`), controls, settings (volumes and Reduce motion), credits, HUD (with the cop alert and the hit-back prompt, and a note while the browser keeps the sound locked), pause menu and results screen (with its remark), and the screens for touch-only devices and browsers without WebGL 2. The screens over the game share one `Dialog`, but for the results screen, which is laid out on its own and shares only its way back (`useBackKey`) with it; every screen shares one look (`panel.ts`). Keys are named as the player's keyboard labels them where the browser can say (`key-names.ts`), and the Controls screen and the hit-back prompt show them, and gamepad buttons, as key caps (`KeyCaps.tsx`).
 - `src/math.ts`: small numeric helpers (`clamp`, `smoothstep`, `radians`) for the renderer, the sound, the UI and the input. The Race module keeps its own.
 - `e2e`: the Playwright smoke test.
+- `tools/playtest`: the play-test bots, which play the player's part in headless races to measure the game, and the report of the release notes' claims from their logs (`README.md`). Each bot has a file: the racer (`racer.ts`), which rides fast and clean and never attacks; the counter-puncher (`counter-puncher.ts`), which rides as the racer does and hits back; and the brawler (`brawler.ts`), which races as the racer does but starts fights. `main.ts` is the command line: `run.ts` rides a bot over a range of seeds and logs each race, `cut-ins.ts` measures opponents cutting across the racer, `whole-set.ts` lists the runs behind the release notes, and `report.ts` reads their logs (`logs.ts`). Beyond `@/race`, the bots ride by four of the Race module's own rules (`race-rules.ts`). `playtest.mjs` bundles it all with this checkout's src/race, or a commit's, and runs it. Nothing in `src` imports it, and its own `tsconfig.json` checks it, outside the Next build.
 
 ## Agent skills
 

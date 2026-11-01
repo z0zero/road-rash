@@ -11,10 +11,12 @@
     "dev": "next dev",
     "build": "next build",
     "lint": "eslint",
-    "typecheck": "next typegen && tsc --noEmit && tsc --noEmit -p tsconfig.race.json",
+    "typecheck": "next typegen && tsc --noEmit && tsc --noEmit -p tsconfig.race.json && tsc --noEmit -p tools/playtest",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:smoke": "playwright test"
+    "test:smoke": "playwright test",
+    "playtest": "node tools/playtest/playtest.mjs",
+    "playtest:report": "node tools/playtest/playtest.mjs report"
   },
   "dependencies": {
     "@react-three/drei": "~10.7.9",

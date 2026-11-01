@@ -1,0 +1,22 @@
+{
+  // Type-checks the play-test (README.md) as Node runs it, without DOM types, with the Race module it rides. The
+  // root tsconfig.json leaves tools/ out, so that the Next build doesn't check it.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "noFallthroughCasesInSwitch": true,
+    "allowJs": true,
+    "checkJs": true,
+    "paths": {
+      "@/*": ["../../src/*"]
+    }
+  },
+  "include": ["*.ts", "*.mjs"]
+}

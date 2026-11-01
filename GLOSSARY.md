@@ -231,3 +231,9 @@ _Avoid_: Arrested, caught, jailed
 **Arrest pace**:
 How fast a cop rides to a crashed rider to bust them: braking down to 8 m/s at once, and no faster all the way, so that a rider who crashes close in front of a cop is caught, and one who crashes with it following at its usual gap can run back to their bike first.
 _Avoid_: Chase speed, pursuit speed
+
+### Play-testing
+
+**Play-test bot**:
+A script that plays the player's part in races ridden headless, to measure the game, at a pace of its own: a share of a safe one. The *racer* bot rides fast and clean and never attacks, the *counter-puncher* rides as it does but hits back at an opponent that has just hit it, and the *brawler* bot races but starts fights. A bot is neither a player nor an opponent, and "racer" and "brawler" here name bots, not temperaments.
+_Avoid_: AI player, test player
