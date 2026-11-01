@@ -198,6 +198,21 @@ for (const viewport of [
   });
 }
 
+test.describe("in a window 1280x768, the shortest with the screens' full spacing", () => {
+  test.use({ viewport: { width: 1280, height: 768 } });
+
+  test("fits a race's results in without scrolling them", async ({ page }) => {
+    // Half a minute of racing, a frame at a time.
+    test.slow();
+    const results = await wreckedEarly(page);
+    await play(page, 1.6);
+    await expect(results.getByRole("button", { name: "Restart" })).toBeFocused();
+
+    const { scrollHeight, clientHeight } = await scrollSizes(results);
+    expect(scrollHeight).toBeLessThanOrEqual(clientHeight);
+  });
+});
+
 test.describe("in a window 1280x641, too short for the title screen with its full spacing", () => {
   test.use({ viewport: { width: 1280, height: 641 } });
 
