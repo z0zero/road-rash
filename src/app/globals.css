@@ -67,6 +67,14 @@
  */
 @custom-variant short (@media (max-height: 47.9375em));
 
+/*
+ * A window too narrow for Controls' table at its full size: less than 30em
+ * wide, 480 px at the default font size and 600 at Chrome's Large (20 px), as
+ * the table grows with the font. Windows 640 px wide or more keep the full
+ * size at any font size: the table fits in them up to the Large font size.
+ */
+@custom-variant cramped (@media (width < 30em) and (width < 640px));
+
 html,
 body {
   margin: 0;

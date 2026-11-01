@@ -44,15 +44,17 @@ export function TitleScreen({
     // Centred by its margins, which give way where the window is too short even for the tighter spacing of a short
     // one: then it starts at the top and scrolls, rather than overflowing both ways out of reach. In a window narrower
     // than 1024 px, the line of keys under the buttons can take two lines; where that window is also less than 37em
-    // tall (592 px at the default font size), such as 768x576, the spacing is tighter still, for the screen to fit.
+    // tall (592 px at the default font size), such as 768x576, the spacing is tighter still, for the screen to fit. In
+    // one narrower than 34em (544 px), where its lines wrap more, the tighter spacing goes on in windows less than 38em
+    // tall (608 px), such as 500x600.
     <div
       data-testid="title-screen"
       className="absolute inset-0 flex flex-col overflow-y-auto bg-gradient-to-b from-night/75 via-dusk/35 to-transparent px-6 py-4"
     >
-      <div className="my-auto flex flex-col items-center gap-6 text-center short:gap-4 max-lg:[@media(max-height:36.9375em)]:gap-3">
+      <div className="my-auto flex flex-col items-center gap-6 text-center short:gap-4 max-lg:[@media(max-height:36.9375em)]:gap-3 max-[34em]:[@media(max-height:37.9375em)]:gap-3">
         <GameTitle />
         <p className={`text-lg text-sand ${OVER_THE_SCENE}`}>Race the coastal cliff road at sunset. Don&apos;t wreck it.</p>
-        <div className="flex flex-col gap-3 short:gap-2 max-lg:[@media(max-height:36.9375em)]:gap-1.5">
+        <div className="flex flex-col gap-3 short:gap-2 max-lg:[@media(max-height:36.9375em)]:gap-1.5 max-[34em]:[@media(max-height:37.9375em)]:gap-1.5">
           <Button autoFocus onClick={onStart}>
             Start Race
           </Button>

@@ -18,19 +18,20 @@ function sayOr(controls: readonly PadControl[]): string {
  *
  * The tallest of the screens a `Dialog` shows. It is wide enough for each row, and each note but the first, to stay on
  * one line, even in a wide font such as Linux's DejaVu Sans. In a short window, its gaps, rows and Back are tighter, and
- * its padding and title too, as every screen's are (see `Dialog`).
+ * its padding and title too, as every screen's are (see `Dialog`). In a cramped one, its padding and table are smaller,
+ * for the table to fit in it even with a larger font, as at 480 px wide with a 20 px font.
  */
 export function ControlsScreen({ onBack }: { onBack: () => void }) {
   const labels = useKeyboardLabels();
   return (
-    <Dialog title="Controls" panelClassName="w-[min(52rem,94vw)] gap-6 px-6 sm:px-10 short:gap-1.5">
-      <table className="w-full border-separate border-spacing-y-2 text-left short:border-spacing-y-1">
+    <Dialog title="Controls" panelClassName="w-[min(52rem,94vw)] gap-6 px-6 sm:px-10 short:gap-1.5 cramped:px-4">
+      <table className="w-full border-separate border-spacing-y-2 text-left short:border-spacing-y-1 cramped:[&_kbd]:text-xs">
         <thead>
-          <tr className="font-display text-xl uppercase tracking-wider text-sunset">
+          <tr className="font-display text-xl uppercase tracking-wider text-sunset cramped:text-base">
             <th scope="col" className="font-normal">
               <span className="sr-only">Action</span>
             </th>
-            <th scope="col" className="px-3 font-normal">
+            <th scope="col" className="px-3 font-normal cramped:px-2">
               Keyboard
             </th>
             <th scope="col" className="font-normal">
@@ -41,10 +42,10 @@ export function ControlsScreen({ onBack }: { onBack: () => void }) {
         <tbody>
           {CONTROLS.map(({ control, label }) => (
             <tr key={control}>
-              <th scope="row" className="pr-3 text-lg font-semibold text-sand">
+              <th scope="row" className="pr-3 text-lg font-semibold text-sand cramped:pr-2 cramped:text-base">
                 {label}
               </th>
-              <td className="px-3">
+              <td className="px-3 cramped:px-2">
                 <Alternatives combos={keyCombos(KEYS[control], labels)} />
               </td>
               <td>
