@@ -723,6 +723,8 @@ test.describe("with a gamepad", () => {
   });
 
   test("throttles on the right trigger or A, brakes on the left trigger and pauses on Start", async ({ page }) => {
+    // About ten seconds of racing, a frame at a time.
+    test.slow();
     await startRacing(page);
 
     await gamepad(page).press(GAMEPAD.rightTrigger);
@@ -746,6 +748,8 @@ test.describe("with a gamepad", () => {
   });
 
   test("lets go of every held control while the window has lost focus", async ({ page }) => {
+    // About ten seconds of racing, a frame at a time.
+    test.slow();
     await startRacing(page);
     await page.keyboard.down("w");
     await gamepad(page).press(GAMEPAD.rightTrigger);
