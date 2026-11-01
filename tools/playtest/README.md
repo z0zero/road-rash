@@ -65,7 +65,7 @@ npm run playtest:report -- playtest-logs/working-tree
 
 Prints each measured claim of the 1.1.0 release notes in their words, with the numbers behind it from the logs given (folders or files): positions, qualifying, hits, knock-offs, time alone, remounts, cut-ins and the riding claim's stalls, ± one standard error, each run's seed ranges apart and then together. A claim none of whose runs are in the logs says so, and the report starts by naming the whole set's runs it didn't find.
 
-The report reads every `.log` under the folders it is given, and refuses two logs of the same races (a run's, or a difficulty's cut-ins, on a seed both have), naming both. So keep a try on other seeds, such as `npm run playtest -- normal racer 1.0 1-2 --out playtest-logs/try`, in a folder of its own.
+The report reads every `.log` under the folders it is given, each once however many times they reach it (a folder and a log in it, say), and refuses two logs of the same races (a run's, or a difficulty's cut-ins, on a seed both have), naming both, and a log it can't read, naming the line. So keep a try on other seeds, such as `npm run playtest -- normal racer 1.0 1-2 --out playtest-logs/try`, in a folder of its own.
 
 ### Comparing two commits
 

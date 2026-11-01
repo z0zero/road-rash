@@ -198,21 +198,6 @@ for (const viewport of [
   });
 }
 
-test.describe("in a window 1280x768, the shortest with the screens' full spacing", () => {
-  test.use({ viewport: { width: 1280, height: 768 } });
-
-  test("fits a race's results in without scrolling them", async ({ page }) => {
-    // Half a minute of racing, a frame at a time.
-    test.slow();
-    const results = await wreckedEarly(page);
-    await play(page, 1.6);
-    await expect(results.getByRole("button", { name: "Restart" })).toBeFocused();
-
-    const { scrollHeight, clientHeight } = await scrollSizes(results);
-    expect(scrollHeight).toBeLessThanOrEqual(clientHeight);
-  });
-});
-
 test.describe("in a window 1280x641, too short for the title screen with its full spacing", () => {
   test.use({ viewport: { width: 1280, height: 641 } });
 
@@ -240,7 +225,9 @@ test.describe("in a window 480x800, as a browser snapped to a third of a wide sc
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
   });
 
-  test("fits a race's results' width in, without scrolling them sideways", async ({ page }) => {
+  test("fits a race's results' width in, without scrolling them sideways, and all of them in a window resized to 1280x768, the shortest with the screens' full spacing", async ({
+    page,
+  }) => {
     // Half a minute of racing, a frame at a time.
     test.slow();
     const results = await wreckedEarly(page);
@@ -249,6 +236,11 @@ test.describe("in a window 480x800, as a browser snapped to a third of a wide sc
 
     const { scrollWidth, clientWidth } = await scrollSizes(results);
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+
+    // Resized, the results lay out as they would if they had opened at that size, so one ride checks both windows.
+    await page.setViewportSize({ width: 1280, height: 768 });
+    const { scrollHeight, clientHeight } = await scrollSizes(results);
+    expect(scrollHeight).toBeLessThanOrEqual(clientHeight);
   });
 });
 
@@ -404,6 +396,8 @@ for (const key of ["Enter", "Space"]) {
 test("shows the seed and difficulty the page's address asks for on the pause menu, without changing the difficulty the player chose", async ({
   page,
 }) => {
+  // Two page loads and four seconds of racing, a frame at a time.
+  test.slow();
   await difficultyChoices(page).getByText("Hard").click();
   await page.goto("/?seed=1234&difficulty=easy");
   await expect(difficultyChoices(page).getByRole("radio", { name: "Easy" })).toBeChecked();
