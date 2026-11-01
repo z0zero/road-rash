@@ -42,15 +42,17 @@ export function TitleScreen({
   }).join(" or ");
   return (
     // Centred by its margins, which give way where the window is too short even for the tighter spacing of a short
-    // one: then it starts at the top and scrolls, rather than overflowing both ways out of reach.
+    // one: then it starts at the top and scrolls, rather than overflowing both ways out of reach. In a window narrower
+    // than 1024 px, the line of keys under the buttons can take two lines; where that window is also less than 37em
+    // tall (592 px at the default font size), such as 768x576, the spacing is tighter still, for the screen to fit.
     <div
       data-testid="title-screen"
       className="absolute inset-0 flex flex-col overflow-y-auto bg-gradient-to-b from-night/75 via-dusk/35 to-transparent px-6 py-4"
     >
-      <div className="my-auto flex flex-col items-center gap-6 text-center short:gap-4">
+      <div className="my-auto flex flex-col items-center gap-6 text-center short:gap-4 max-lg:[@media(max-height:36.9375em)]:gap-3">
         <GameTitle />
         <p className={`text-lg text-sand ${OVER_THE_SCENE}`}>Race the coastal cliff road at sunset. Don&apos;t wreck it.</p>
-        <div className="flex flex-col gap-3 short:gap-2">
+        <div className="flex flex-col gap-3 short:gap-2 max-lg:[@media(max-height:36.9375em)]:gap-1.5">
           <Button autoFocus onClick={onStart}>
             Start Race
           </Button>
