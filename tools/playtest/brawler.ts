@@ -1,5 +1,6 @@
 import type { AttackSnapshot, RiderId, RiderSnapshot, Track } from "@/race";
 import { clamp, KICK_SHARE, randomFrom, type Bot } from "./bot";
+import { TUNING } from "./race-rules";
 import { makeRacer, type Fighting, type Plan, type Situation } from "./racer";
 
 /**
@@ -62,8 +63,9 @@ export function makeBrawler(track: Track, pace: number, seed: number): Bot {
     let punch = false;
     let kick = false;
     if (!me.attack) {
-      const reachAcross = me.weapon === "club" ? 2.4 : 1.8;
-      const inReach = (x: { distance: number; offset: number }) => Math.abs(x.offset - me.offset) <= reachAcross && Math.abs(x.distance - d) <= 2;
+      // A swing's reach with a club, else a punch's, from the race's tuning, as the counter-puncher's.
+      const reachAcross = TUNING.attacks[me.weapon === "club" ? "club-swing" : "punch"].reachAcross;
+      const inReach = (x: { distance: number; offset: number }) => Math.abs(x.offset - me.offset) <= reachAcross && Math.abs(x.distance - d) <= TUNING.attackReachAlong;
       if (me.weapon !== "club" && [...riders, ...cops].some((x) => windingUpASwing(x.attack) && inReach(x))) {
         punch = true;
         stealTries++;
