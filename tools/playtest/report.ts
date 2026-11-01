@@ -1,6 +1,7 @@
 import type { Difficulty } from "@/race";
 import { BOT_NAMES, DIFFICULTIES, type BotName } from "./bot";
-import { readLogs, type CutInLog, type LoggedRace, type RunLog } from "./logs";
+import { capital, paceText, readLogs, type CutInLog, type LoggedRace, type RunLog } from "./logs";
+import { nameOf, WHOLE_SET } from "./whole-set";
 
 /**
  * The 1.1.0 release notes' measured claims (CHANGELOG.md), from the logs in `paths`, each claim in the notes' words
@@ -18,6 +19,8 @@ export function report(paths: readonly string[], against: readonly string[]): st
     "",
     `From ${logs.runs.length} run logs and ${logs.cutIns.length} cut-in logs in ${paths.join(", ")}. ± is one standard error.`,
     "A run's seed ranges are given apart, then together.",
+    "",
+    wholeSetIn(logs),
   ];
   /** A section: a claim in the notes' words, then the numbers behind it, with a note on them, if any of its runs are in the logs. */
   const section = (heading: string, lines: readonly string[], note?: string) => {
@@ -138,6 +141,21 @@ export function report(paths: readonly string[], against: readonly string[]): st
   return out;
 }
 
+/** Which of the whole set's runs (whole-set.ts) the logs lack: those without a log of every one of the run's seeds. */
+function wholeSetIn({ runs, cutIns }: ReturnType<typeof readLogs>) {
+  const missing = WHOLE_SET.filter((job) => {
+    const seeds = new Set(
+      job.kind === "cut-ins"
+        ? cutIns.filter((l) => l.difficulty === job.difficulty).flatMap((l) => l.races.map((r) => r.seed))
+        : runs.filter((l) => l.difficulty === job.difficulty && l.bot === job.bot && l.pace === Number(job.pace)).flatMap((l) => l.rows.map((r) => r.seed)),
+    );
+    return Array.from({ length: job.last - job.first + 1 }, (_, i) => job.first + i).some((seed) => !seeds.has(seed));
+  });
+  return missing.length
+    ? `Of the whole set's ${WHOLE_SET.length} runs, ${missing.length === 1 ? "1 is not here, or not on all its seeds" : `${missing.length} are not here, or not on all their seeds`}: ${missing.map(nameOf).join("; ")}.`
+    : `All ${WHOLE_SET.length} of the whole set's runs are here.`;
+}
+
 /** Every race of `logs`, with its log. */
 const racesIn = (logs: readonly RunLog[]) => logs.flatMap((log) => log.rows.map((row) => ({ row, log })));
 
@@ -158,17 +176,13 @@ const NINE_RUNS: readonly (readonly [Difficulty, BotName, number, number, number
 ];
 
 const keyOf = (difficulty: Difficulty, bot: BotName, pace: number) => `${difficulty} ${bot} ${paceText(pace)}`;
-const paceText = (pace: number) => (Number.isInteger(pace) ? pace.toFixed(1) : String(pace));
 
-/** The logs of each run (difficulty, bot and pace), by their first seed; two logs of a run must not share a seed. */
+/** The logs of each run (difficulty, bot and pace), by their first seed (readLogs makes sure no two share a seed). */
 function runsOf(logs: readonly RunLog[]) {
   const runs = new Map<string, RunLog[]>();
   for (const log of logs) {
     const key = keyOf(log.difficulty, log.bot, log.pace);
     const these = runs.get(key) ?? [];
-    const seeds = new Set(these.flatMap((l) => l.rows.map((r) => r.seed)));
-    const twice = log.rows.find((r) => seeds.has(r.seed));
-    if (twice) throw new Error(`Seed ${twice.seed} of ${key} is in two logs, ${log.file} and another`);
     runs.set(key, [...these, log].sort((a, b) => (a.rows[0]?.seed ?? 0) - (b.rows[0]?.seed ?? 0)));
   }
   return new Map([...runs].sort(([a], [b]) => order(a) - order(b)));
@@ -390,6 +404,5 @@ const f2 = (x: number) => (Number.isFinite(x) ? x.toFixed(2) : "–");
 const pct = (x: number) => (Number.isFinite(x) ? `${Math.round(x * 100)}%` : "–");
 const signed = (x: number, digits: number) => (Number.isFinite(x) ? `${x >= 0 ? "+" : "−"}${Math.abs(x).toFixed(digits)}` : "–");
 const ordinal = (n: number) => (Number.isFinite(n) ? `${n}${n === 1 ? "st" : n === 2 ? "nd" : n === 3 ? "rd" : "th"}` : "–");
-const capital = (s: string) => s[0].toUpperCase() + s.slice(1);
 /** One race in how many: `races` / `count`. */
 const oneIn = (races: number, count: number, digits: number) => (count > 0 ? (races / count).toFixed(digits) : "∞");

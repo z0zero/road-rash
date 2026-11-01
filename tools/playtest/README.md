@@ -37,13 +37,15 @@ npm run playtest -- normal racer 1.0 1-24
 
 A run is a bot's races at a difficulty on a range of seeds: here the expert on Normal, seeds 1 to 24. It prints each race as it ends and writes `playtest-logs/working-tree/seeds-1-24/normal/racer-1.0.log`. A run of 24 races took 2½ to 4½ minutes on a 4-CPU machine busy with other work; the slower the bot, the longer its races.
 
+A run writes its log as `<log>.part` and renames it to `<log>` once its last race is done. Ctrl+C (or SIGTERM) stops a run at once, leaving the `.part` file, which the next run of it replaces and the report ignores.
+
 ### The cut-in measure
 
 ```sh
 npm run playtest -- cut-ins hard 1-24
 ```
 
-The racer at full pace, with every run-in of it with an opponent sorted by who moved across into whom in the half second before. A *strict cut-across* is one where the racer's line cleared the opponent's bike by 0.8 m half a second before, and the opponent's move across closed more of the gap than the racer's. The log goes to `.../seeds-1-24/hard/cut-ins.log`.
+The racer at full pace, with every run-in of it with an opponent sorted by who moved across into whom in the half second before. A *strict cut-across* is one where, half a second before, the racer's line cleared the opponent's bike by 0.8 m or more between their middles, and in that half second the opponent moved across towards the racer by at least 0.25 m, and by more than the racer moved towards it. The log goes to `.../seeds-1-24/hard/cut-ins.log`.
 
 ### The whole set
 
@@ -53,23 +55,27 @@ npm run playtest -- all
 
 Everything behind the 1.1.0 release notes (`whole-set.ts`): every bot at its paces on every difficulty on seeds 1-24, the 48-seed claims' runs again on seeds 25-48, and the cut-in measure on each difficulty. That is 35 runs and 840 races, just under an hour two at a time on that machine. `--jobs` sets how many run at a time, half your CPUs unless given.
 
+`all` leaves out the runs whose logs are already in the folder, so running it again after it was stopped rides only what is missing; `--redo` rides every run again. Ctrl+C (or SIGTERM) stops the runs under way, waits for them to end and starts no more: each leaves its log's `.part` file.
+
 ### The report
 
 ```sh
 npm run playtest:report -- playtest-logs/working-tree
 ```
 
-Prints each measured claim of the 1.1.0 release notes in their words, with the numbers behind it from the logs given (folders or files): positions, qualifying, hits, knock-offs, time alone, remounts, cut-ins and the riding claim's stalls, ± one standard error, each run's seed ranges apart and then together. A claim none of whose runs are in the logs says so.
+Prints each measured claim of the 1.1.0 release notes in their words, with the numbers behind it from the logs given (folders or files): positions, qualifying, hits, knock-offs, time alone, remounts, cut-ins and the riding claim's stalls, ± one standard error, each run's seed ranges apart and then together. A claim none of whose runs are in the logs says so, and the report starts by naming the whole set's runs it didn't find.
+
+The report reads every `.log` under the folders it is given, and refuses two logs of the same races (a run's, or a difficulty's cut-ins, on a seed both have), naming both. So keep a try on other seeds, such as `npm run playtest -- normal racer 1.0 1-2 --out playtest-logs/try`, in a folder of its own.
 
 ### Comparing two commits
 
 ```sh
 npm run playtest -- all                  # this checkout's src/race, uncommitted changes too
-npm run playtest -- all --race main      # main's src/race, into playtest-logs/main
-npm run playtest:report -- playtest-logs/working-tree --against playtest-logs/main
+npm run playtest -- all --race v1.1.0    # v1.1.0's src/race, into playtest-logs/v1.1.0
+npm run playtest:report -- playtest-logs/working-tree --against playtest-logs/v1.1.0
 ```
 
-`--race <commit>` rides that commit's src/race with this checkout's bots; any commit from v1.0.0 on works. With `--against`, the report sets the other logs beside these: every Normal run as two samples (this less that), as "plays as 1.0.0 did" was measured, then every run in both seed by seed, with the races that ended differently.
+`--race <commit>` rides that commit's src/race with this checkout's bots. Any branch, tag or commit from v1.0.0 on works, such as `origin/main` (into `playtest-logs/origin-main`), `v1.1.0` or `0f8f3ea`. Commits before 2c512c8, such as v1.0.0, have no difficulties: they have one race, Normal's. On them a run refuses `easy` and `hard`, and `all` rides only the whole set's 11 Normal runs. With `--against`, the report sets the other logs beside these: every Normal run as two samples (this less that), as "plays as 1.0.0 did" was measured, then every run in both seed by seed, with the races that ended differently.
 
 A race is deterministic: the same seed, difficulty and race code give the same race, so a change that doesn't touch a race leaves its log row byte for byte the same. `cmp` or `diff` between two runs' logs shows exactly which races changed. One run is enough to check a change you expect to touch few races; a change to the opponents' riding or fighting needs the whole set, and a change within about two standard errors may be chance.
 
