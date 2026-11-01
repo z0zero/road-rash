@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.1.0 (2026-10-31)
+## 1.1.0 (2026-11-01)
 
 Choose how hard the race is, plus the follow-ups to 1.0.0 (issue #13).
 
