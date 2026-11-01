@@ -742,7 +742,7 @@ describe("a cop following the player", () => {
     [2.1, 1.5],
     [0.7, 2],
   ])(
-    "waits behind a player who stops dead too close in front of it on the shoulder to get round them, and never touches them (pulling in %f m in front of it at %f m/s)",
+    "paddles back from a player who stops dead too close in front of it on the shoulder to get round them from where it stands, then comes round them, and never touches them (pulling in %f m in front of it at %f m/s)",
     (ahead, pullingIn) => {
       // The player rides past the first cop as above, but pulls in on the shoulder sooner or more slowly, and stops dead
       // a little over a bike's length in front of it, within a bike's width of the line it waited on. It would run into
@@ -750,12 +750,26 @@ describe("a cop following the player", () => {
       const { race, cop, waiting, stoppedAt, standing } = stoppedInFrontOfTheWaitingCop({ ahead, pullingIn });
       expect(stoppedAt.distance - cop().distance).toBeLessThan(2.5);
       expect(Math.abs(stoppedAt.offset - waiting.offset)).toBeLessThan(0.8);
+      const from = cop().distance;
+      let fastestBack = 0;
+      let furthestBack = 0;
+      const watching = () => {
+        fastestBack = Math.max(fastestBack, -cop().speed);
+        furthestBack = Math.max(furthestBack, from - cop().distance);
+        return standing();
+      };
 
-      const pushed = furthestPushedFrom(race, stoppedAt, 5, standing);
+      const pushed = furthestPushedFrom(race, stoppedAt, 5, watching);
 
-      // It never pushed them anywhere, and it is still behind them.
+      // It paddled back, at walking pace or slower, by less than half a bike's length...
+      expect(fastestBack).toBeGreaterThan(0);
+      expect(fastestBack).toBeLessThanOrEqual(0.5);
+      expect(furthestBack).toBeLessThan(1);
+      // ...and came round them: level with them and beside them, on their side nearer the road, without having pushed
+      // them anywhere.
+      expect(Math.abs(cop().distance - player(race).distance)).toBeLessThan(1);
+      expect(player(race).offset - cop().offset).toBeGreaterThan(0.8);
       expect(pushed).toBeLessThan(0.1);
-      expect(player(race).distance - cop().distance).toBeGreaterThan(1);
     },
   );
 
@@ -811,6 +825,39 @@ describe("a cop holding back", () => {
     // It is back behind the player once they have ridden on.
     expect(race.snapshot().cops[0]).toMatchObject({ status: "riding" });
   });
+
+  it("pulls over onto the shoulder of the side of the road it set off for, even going round a player across the middle of the road on its way there", () => {
+    // On a closed road, the player rides past the first cop at 15 m/s in the inner lane, its lane, and lets it follow
+    // them there; then, 27.6 s after it joined the race, they stop dead in that lane. Its turn at following them ends
+    // as it comes up behind them, and holding back from a player who has stopped, it pulls over, setting off for the
+    // right-hand shoulder: but it goes round them on their left, across the middle of the road, to get there.
+    const race = startedRace(1, CLOSED_ROAD);
+    const cop = () => race.snapshot().cops[0];
+    secondsUntil(race, autopilot(race), () => player(race).distance >= cop().distance - 200, 150);
+    const pilot = autopilot(race, { lane: 1.5, targetSpeed: 15 });
+    secondsUntil(race, pilot, () => player(race).distance >= cop().distance, 60);
+    const joined = race.snapshot().clock;
+    secondsUntil(race, pilot, () => race.snapshot().clock > joined + 27.6, 40);
+    let lastOffset = player(race).offset;
+    const stopping = (): PlayerInput => {
+      const sideways = (player(race).offset - lastOffset) * STEPS_PER_SECOND;
+      lastOffset = player(race).offset;
+      return { ...NO_INPUT, brake: 1, steer: steerTowards(race, 1.5, sideways) };
+    };
+    let leftmost = Infinity;
+
+    for (let step = 0; step < 10 * STEPS_PER_SECOND; step++) {
+      race.step(stopping());
+      leftmost = Math.min(leftmost, cop().offset);
+    }
+
+    // It went across the middle of the road only as far as it took to get round them...
+    expect(leftmost).toBeLessThan(0);
+    expect(leftmost).toBeGreaterThan(-1);
+    // ...and stopped on the right-hand shoulder, clear of the road, not the oncoming side's.
+    expect(cop().speed).toBeLessThan(0.5);
+    expect(cop().offset).toBeGreaterThan(race.track.roadHalfWidth + 0.4);
+  });
 });
 
 describe("a cop moving across the road", () => {
@@ -829,6 +876,34 @@ describe("a cop moving across the road", () => {
       }
     }
 
+    expect(intoACop).toEqual([]);
+  });
+});
+
+describe("a cop riding to bust a crashed rider", () => {
+  it("never pulls across the path of a rider coming up behind it, nor brakes harder than they can: no rider runs into it", WHOLE_RACES, () => {
+    // In these races on Easy, ridden with the autopilot knocking off any rider within reach, an opponent ran into a cop
+    // braking hard down to its arrest pace across its path (seeds 16 and 30), or in it (seed 35).
+    const intoACop: string[] = [];
+    let busting = 0;
+    for (const seed of [16, 30, 35]) {
+      const race = startedRace({ seed, difficulty: "easy" });
+      const pilot = autopilot(race);
+      const fighting = (): PlayerInput => {
+        const { riders } = race.snapshot();
+        return { ...pilot(), punch: nearestWithinReach(riders, riders[PLAYER]) !== null };
+      };
+      secondsUntil(race, pilot, () => player(race).distance >= race.snapshot().cops[0].distance, 150);
+      for (let step = 0; step < 45 * STEPS_PER_SECOND; step++) {
+        race.step(player(race).status === "racing" ? fighting() : NO_INPUT);
+        if (race.snapshot().cops.some((cop) => cop.busting !== null)) busting++;
+        for (const event of race.drainEvents()) {
+          if (isCrash(event) && event.cause === "cop") intoACop.push(`seed ${seed} at ${race.snapshot().clock.toFixed(1)} s: rider ${event.rider}`);
+        }
+      }
+    }
+
+    expect(busting).toBeGreaterThan(0);
     expect(intoACop).toEqual([]);
   });
 });

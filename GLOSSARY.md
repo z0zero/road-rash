@@ -105,7 +105,7 @@ A rider on their bike running into another rider on a bike, a cop, a car or an o
 _Avoid_: Nudge, collision
 
 **Squeezing past**:
-An opponent, or a cop, held to a standstill by what is in its way with no clear way round it, as when a rider stands beside it with a roadside rock ahead, rolling on at walking pace through the nearest gap its bike fits through, never across the path of a car or an obstacle close ahead. Boxed in like that in the path of a car coming at it, it squeezes out of the car's way. An opponent goes out onto the shoulder for it if need be, and so does a cop riding to bust someone or pulling over; a cop on patrol or fighting back squeezes past only on the road. Held back behind a rider who has all but stopped, it rolls on round them at walking pace too, rather than wait behind them: on its side of them, or on their other side if its own has no room for its bike before the edge it squeezes out to. It rolls on round them only if, steering as it does, the line it takes gets it clear of them before it reaches their back, and crawling, it cuts across the path of a car or an obstacle close ahead, never one coming towards it, only if it gets across before it gets there, and into the path of a car driving on before the car is alongside it, or once it is moving across too fast to stop short of it; otherwise it waits behind them rather than run into them. It judges all this as if it rolled on at walking pace, as it will: it rolls on across the path of a car driving on at walking pace too, so that neither slowing down nor speeding up changes its mind. Beside the path of a slow car, crawling along no faster than a crawling bike, with its line keeping it there, it passes the car at walking pace, rather than ride level with its back corner.
+An opponent, or a cop, held to a standstill by what is in its way with no clear way round it, as when a rider stands beside it with a roadside rock ahead, rolling on at walking pace through the nearest gap its bike fits through, never across the path of a car or an obstacle close ahead. Boxed in like that in the path of a car coming at it, it squeezes out of the car's way. An opponent goes out onto the shoulder for it if need be, and so does a cop riding to bust someone or pulling over; a cop on patrol or fighting back squeezes past only on the road. Held back behind a rider who has all but stopped, it rolls on round them at walking pace too, rather than wait behind them: on its side of them, or on their other side if its own has no room for its bike before the edge it squeezes out to. It rolls on round them only if, steering as it does, the line it takes gets it clear of them before it reaches their back, and crawling, it cuts across the path of a car or an obstacle close ahead, never one coming towards it, only if it gets across before it gets there, and into the path of a car driving on before the car is alongside it, or once it is moving across too fast to stop short of it; otherwise it waits behind them rather than run into them. It judges all this as if it rolled on at walking pace, as it will: it rolls on across the path of a car driving on at walking pace too, so that neither slowing down nor speeding up changes its mind. Beside the path of a slow car, crawling along no faster than a crawling bike, with its line keeping it there, it passes the car at walking pace, rather than ride level with its back corner. A cop's bike can roll backwards, but a cop held back to a stop stays put rather than roll back, but for one thing: boxed in at a standstill behind a rider stopped in its way, with its line round them blocked only by too little room, it paddles back at 0.5 m/s, steering for that line, until it can get round them before it reaches their back, and never once they are 3 m ahead of it, no longer in its way; then it rolls on round them.
 _Avoid_: Nudging through, forcing past
 
 **Run-in**:
@@ -209,15 +209,15 @@ Everything beside the road that nobody can hit: palms, pines, rocks, houses, sig
 _Avoid_: Props, decoration
 
 **Cop**:
-A police officer on a motorcycle who rides among the riders and busts anyone who crashes nearby. Two cops wait on the shoulder and join the race as the player passes them, then stay near the player.
+A police officer on a motorcycle who rides among the riders and busts anyone who crashes nearby. Two cops wait on the shoulder and join the race as the player passes them, then stay near the player. Whatever it is doing, a cop never pulls across the path of a rider or a car coming up behind it; and riding to bust someone, fighting back or pulling over, it brakes no harder than lets one behind it in its path stop short of it, braking as hard as they can match.
 _Avoid_: Police, officer
 
 **Patrol**:
-What a cop in the race does when nobody needs busting: riding near the player, the cops taking turns to follow them about 1.5 s behind while the other holds well back. While the player is down after a crash it isn't riding to, a cop on patrol pulls over onto the shoulder, and so does one holding back from a player who rides slowly, rather than slow almost to a stop in the race's lanes. A cop never pulls across the path of a rider or a car coming up behind it, and cars slow down for a slower cop in their lane as for a slower rider.
+What a cop in the race does when nobody needs busting: riding near the player, the cops taking turns to follow them about 1.5 s behind while the other holds well back. While the player is down after a crash it isn't riding to, a cop on patrol pulls over onto the shoulder, and so does one holding back from a player who rides slowly, rather than slow almost to a stop in the race's lanes: onto the shoulder on the side of the road it is on as it sets off, which it keeps to even if it has to go round a rider across the middle of the road on its way there. Cars slow down for a slower cop in their lane as for a slower rider.
 _Avoid_: Chase, pursuit
 
 **Standing by**:
-A cop staying by a rider it has busted for a few seconds, pulled over onto the shoulder, before riding on.
+A cop staying by a rider it has busted for a few seconds, pulled over onto the shoulder on the side of the road it was on as it set off, before riding on.
 _Avoid_: Waiting, idling
 
 **Cop alert**:
@@ -225,11 +225,11 @@ The warning on the HUD, with the siren, that a cop in the race is near the playe
 _Avoid_: Wanted level, police alert
 
 **Busted**:
-The end of a rider's race because a cop caught them after a crash: a cop within 80 m of a rider who crashes rides to them at the arrest pace, and busts them if it reaches them, once they are on their feet, before they are back on their bike.
+The end of a rider's race because a cop caught them after a crash: a cop within 80 m of a rider who crashes rides to them at the arrest pace, and busts them if it reaches them at that pace or slower, once they are on their feet, before they are back on their bike.
 _Avoid_: Arrested, caught, jailed
 
 **Arrest pace**:
-How fast a cop rides to a crashed rider to bust them: braking down to 8 m/s at once, and no faster all the way, so that a rider who crashes close in front of a cop is caught, and one who crashes with it following at its usual gap can run back to their bike first.
+How fast a cop rides to a crashed rider to bust them: braking down to 8 m/s at once, though no harder than lets a rider coming up behind it stop short of it, busting nobody before it has, and no faster all the way, so that a rider who crashes close in front of a cop is caught, and one who crashes with it following at its usual gap can run back to their bike first.
 _Avoid_: Chase speed, pursuit speed
 
 ### Play-testing
