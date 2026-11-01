@@ -1,14 +1,15 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import { availableParallelism } from "node:os";
+import { availableParallelism, constants } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Difficulty } from "@/race";
 import { BOT_NAMES, DIFFICULTIES } from "./bot";
 import { measureCutIns } from "./cut-ins";
+import { Refusal } from "./logs";
 import { report } from "./report";
 import { run } from "./run";
-import { WHOLE_SET, type Job } from "./whole-set";
+import { nameOf, WHOLE_SET, type Job } from "./whole-set";
 
 /**
  * The play-test's command line (README.md). playtest.mjs runs it once it has bundled the play-test with the Race
@@ -18,7 +19,8 @@ const USAGE = `Usage: npm run playtest -- <what> [options]       (see tools/play
 
   <difficulty> <bot> <pace> <seeds>   one run: a bot's races on those seeds, such as: normal racer 1.0 1-24
   cut-ins <difficulty> <seeds>        the cut-in measure, the racer at full pace, such as: hard 1-24
-  all                                 the whole set behind the 1.1.0 release notes: ${WHOLE_SET.length} runs
+  all                                 the whole set behind the 1.1.0 release notes: ${WHOLE_SET.length} runs, but for
+                                      those whose logs are already there
   report <logs>... [--against <logs>...]
                                       the release notes' claims from logs (folders or files);
                                       npm run playtest:report -- <logs>... does the same
@@ -31,12 +33,19 @@ const USAGE = `Usage: npm run playtest -- <what> [options]       (see tools/play
 Options:
   --race <commit>   ride that commit's Race module (src/race) instead of this checkout's
   --out <folder>    where the logs go: playtest-logs/<commit>, or playtest-logs/working-tree, unless given
-  --jobs <n>        all: how many runs at a time (default ${defaultJobs()}, half the CPUs)`;
+  --jobs <n>        all: how many runs at a time (default ${defaultJobs()}, half the CPUs)
+  --redo            all: ride the runs whose logs are already there again`;
 
 class UsageError extends Error {}
 
+/**
+ * Set by playtest.mjs to the commit it bundled when that commit's Race module has no difficulties, as before 2c512c8
+ * (v1.0.0, say): such a race is Normal's whatever it is asked for.
+ */
+const WITHOUT_DIFFICULTIES = process.env.PLAYTEST_RACE_WITHOUT_DIFFICULTIES;
+
 async function main(args: readonly string[]): Promise<number> {
-  const { words, race, out = join("playtest-logs", (race ?? "working-tree").replace(/[^\w.-]/g, "-")), jobs = defaultJobs(), against } = parse(args);
+  const { words, race, out = join("playtest-logs", (race ?? "working-tree").replace(/[^\w.-]/g, "-")), jobs = defaultJobs(), against, redo } = parse(args);
   const [what, ...rest] = words;
   if (what === undefined || what === "help" || what === "--help") {
     console.log(USAGE);
@@ -51,9 +60,12 @@ async function main(args: readonly string[]): Promise<number> {
   }
   if (what === "all") {
     if (rest.length) throw new UsageError(`all takes no more words: ${rest.join(" ")}`);
-    return runAll(out, jobs);
+    return runAll(out, jobs, redo);
   }
   const job = jobOf(words);
+  if (WITHOUT_DIFFICULTIES && job.difficulty !== "normal") {
+    throw new Refusal(`${WITHOUT_DIFFICULTIES} has no difficulties (they came in 2c512c8): its one race is Normal's, so ride it on normal, not ${job.difficulty}.`);
+  }
   const started = Date.now();
   const file = logFile(out, job);
   if (job.kind === "cut-ins") {
@@ -68,20 +80,46 @@ async function main(args: readonly string[]): Promise<number> {
   return 0;
 }
 
-/** Runs the whole set, `jobs` at a time, each in a process of its own running this same script. */
-async function runAll(out: string, jobs: number): Promise<number> {
+/**
+ * Runs the whole set, `jobs` at a time, each in a process of its own running this same script, leaving out the runs
+ * whose logs are already in `out` unless `redo`. On a commit without difficulties it runs only the Normal runs. Ctrl+C
+ * or SIGTERM stops the runs under way, waits for them to end and runs no more: each leaves its log's .part file.
+ */
+async function runAll(out: string, jobs: number, redo: boolean): Promise<number> {
   const started = Date.now();
   const script = fileURLToPath(import.meta.url);
-  const queue = [...WHOLE_SET];
+  const set = WITHOUT_DIFFICULTIES ? WHOLE_SET.filter((job) => job.difficulty === "normal") : WHOLE_SET;
+  const there = redo ? [] : set.filter((job) => existsSync(logFile(out, job)));
+  const queue = set.filter((job) => !there.includes(job));
+  const total = queue.length;
   const failed: string[] = [];
   let done = 0;
-  console.log(`The whole set: ${queue.length} runs, ${jobs} at a time, into ${out}`);
+  if (WITHOUT_DIFFICULTIES) {
+    console.log(`${WITHOUT_DIFFICULTIES} has no difficulties (they came in 2c512c8): its one race is Normal's, so only the whole set's ${set.length} Normal runs are ridden.`);
+  }
+  if (there.length) console.log(`${there.length} of the ${set.length} runs already have their logs in ${out}, so they are left as they are (--redo rides them again).`);
+  if (!total) return 0;
+  console.log(`The whole set: ${runs(total)}, ${Math.min(jobs, total)} at a time, into ${out}`);
+
+  const running = new Set<ChildProcess>();
+  let stoppedBy: NodeJS.Signals | undefined;
+  const stop = (signal: NodeJS.Signals) => {
+    stoppedBy ??= signal;
+    queue.length = 0;
+    for (const child of running) child.kill(signal);
+  };
+  process.on("SIGINT", stop);
+  process.on("SIGTERM", stop);
+
   const worker = async () => {
     for (let job = queue.shift(); job; job = queue.shift()) {
       const words = job.kind === "cut-ins" ? ["cut-ins", job.difficulty, `${job.first}-${job.last}`] : [job.difficulty, job.bot, job.pace, `${job.first}-${job.last}`];
-      const { code, lastLine } = await runScript(script, [...words, "--out", out]);
+      const { code, signal, lastLine } = await runScript(script, [...words, "--out", out], running);
+      // Ctrl+C reaches the runs as well, and may end one before this process hears of it.
+      if (signal === "SIGINT" || signal === "SIGTERM") stop(signal);
+      if (stoppedBy && code !== 0) continue;
       done++;
-      const count = `[${String(done).padStart(2)}/${WHOLE_SET.length}]`;
+      const count = `[${String(done).padStart(2)}/${total}]`;
       if (code === 0) console.log(`${count} ${lastLine}`);
       else {
         failed.push(nameOf(job));
@@ -90,31 +128,26 @@ async function runAll(out: string, jobs: number): Promise<number> {
     }
   };
   await Promise.all(Array.from({ length: jobs }, worker));
-  console.log(`${WHOLE_SET.length - failed.length} of ${WHOLE_SET.length} runs in ${minutes(Date.now() - started)}, logs in ${out}`);
+  if (stoppedBy) {
+    console.log(`Stopped by ${stoppedBy} after ${done} of ${runs(total)} (${minutes(Date.now() - started)}). A run cut short leaves its log's .part file; npm run playtest -- all rides it again.`);
+    return 128 + constants.signals[stoppedBy];
+  }
+  console.log(`${total - failed.length} of ${runs(total)} in ${minutes(Date.now() - started)}, logs in ${out}`);
   if (failed.length) console.log(`Failed: ${failed.join("; ")}`);
   return failed.length ? 1 : 0;
 }
 
-/** The runs under way, each in a process of its own: a signal to stop is passed on to them. */
-const running = new Set<ChildProcess>();
-for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.on(signal, () => {
-    for (const child of running) child.kill(signal);
-    process.exit(1);
-  });
-}
-
-/** Runs this script with `args` in a new process, keeping the last line it prints. */
-function runScript(script: string, args: readonly string[]) {
-  return new Promise<{ code: number; lastLine: string }>((resolve) => {
+/** Runs this script with `args` in a new process, in `running` while it runs, keeping the last line it prints. */
+function runScript(script: string, args: readonly string[], running: Set<ChildProcess>) {
+  return new Promise<{ code: number; signal: NodeJS.Signals | null; lastLine: string }>((resolve) => {
     const child = spawn(process.execPath, [script, ...args], { stdio: ["ignore", "pipe", "inherit"] });
     running.add(child);
     let text = "";
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (chunk: string) => (text = (text + chunk).slice(-4000)));
-    child.on("close", (code) => {
+    child.on("close", (code, signal) => {
       running.delete(child);
-      resolve({ code: code ?? 1, lastLine: text.trim().split("\n").pop() ?? "" });
+      resolve({ code: code ?? (signal ? 128 + constants.signals[signal] : 1), signal, lastLine: text.trim().split("\n").pop() ?? "" });
     });
   });
 }
@@ -125,6 +158,7 @@ function parse(args: readonly string[]) {
   let race: string | undefined;
   let out: string | undefined;
   let jobs: number | undefined;
+  let redo = false;
   for (let i = 0; i < args.length; i++) {
     const word = args[i];
     const value = () => {
@@ -133,6 +167,7 @@ function parse(args: readonly string[]) {
       return next;
     };
     if (word === "--race") race = value();
+    else if (word === "--redo") redo = true;
     else if (word === "--out") out = value();
     else if (word === "--jobs") {
       jobs = Number(value());
@@ -143,7 +178,7 @@ function parse(args: readonly string[]) {
     } else if (word.startsWith("--") && word !== "--help") throw new UsageError(`Unknown option ${word}`);
     else words.push(word);
   }
-  return { words, race, out, jobs, against };
+  return { words, race, out, jobs, against, redo };
 }
 
 function jobOf(words: readonly string[]): Job {
@@ -178,8 +213,8 @@ function logFile(out: string, job: Job) {
   return join(out, `seeds-${job.first}-${job.last}`, job.difficulty, job.kind === "cut-ins" ? "cut-ins.log" : `${job.bot}-${job.pace}.log`);
 }
 
-const nameOf = (job: Job) =>
-  `${job.difficulty[0].toUpperCase()}${job.difficulty.slice(1)} ${job.kind === "cut-ins" ? "cut-ins" : `${job.bot} ${job.pace}`}, seeds ${job.first}-${job.last}`;
+/** A number of runs, such as 1 run or 35 runs. */
+const runs = (n: number) => `${n} run${n === 1 ? "" : "s"}`;
 
 /** A time as minutes and seconds, such as 2:05. */
 function minutes(ms: number) {
@@ -196,7 +231,11 @@ function defaultJobs() {
 try {
   process.exitCode = await main(process.argv.slice(2));
 } catch (error) {
-  if (!(error instanceof UsageError)) throw error;
-  console.error(`${error.message}\n\n${USAGE}`);
-  process.exitCode = 2;
+  if (error instanceof Refusal) {
+    console.error(error.message);
+    process.exitCode = 1;
+  } else if (error instanceof UsageError) {
+    console.error(`${error.message}\n\n${USAGE}`);
+    process.exitCode = 2;
+  } else throw error;
 }

@@ -7,8 +7,8 @@ import { makeRacer, RIDER_MARGIN } from "./racer";
  * The cut-in measure, for the release notes' known limitation that an opponent pulling out round a car, or back to
  * its line, doesn't look behind it: the racer rides at full pace (1.0), and every run-in of it with an opponent is
  * classified by who moved across into whom in the half second before it. A *strict cut-across* is one where, half a
- * second before, the racer's line cleared the opponent's bike by 0.8 m between their middles, and the opponent's own
- * move across closed more of the gap than the racer's.
+ * second before, the racer's line cleared the opponent's bike by 0.8 m or more between their middles, and in that half
+ * second the opponent moved across towards the racer by at least 0.25 m, and by more than the racer moved towards it.
  *
  * Its log has a JSON line a run-in, a RACE line a race and a SUMMARY line, which it also returns. It is written to
  * `file`.part and moved to `file` once complete. `onRace` hears of each race as it ends.

@@ -38,3 +38,7 @@ export const WHOLE_SET: readonly Job[] = [
   ...DIFFICULTIES.flatMap((difficulty) => EVERY_DIFFICULTY.map(([bot, pace]): Job => ({ kind: "run", difficulty, bot, pace, first: 1, last: 24 }))),
   ...SEEDS_25_TO_48.map(([difficulty, bot, pace]): Job => ({ kind: "run", difficulty, bot, pace, first: 25, last: 48 })),
 ];
+
+/** A run's name, such as "Normal racer 1.0, seeds 1-24". */
+export const nameOf = (job: Job) =>
+  `${job.difficulty[0].toUpperCase()}${job.difficulty.slice(1)} ${job.kind === "cut-ins" ? "cut-ins" : `${job.bot} ${job.pace}`}, seeds ${job.first}-${job.last}`;
