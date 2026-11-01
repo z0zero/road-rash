@@ -258,11 +258,50 @@ describe("keeping to a line", () => {
     // cop does while someone comes up behind it in the offsets it would cross.
     const me = bike(1000, 7.5, 0);
 
-    const { line, holdBehind } = lineAround(me, 1.5, [me, bike(1002.95, 7.35, 0)], [], EDGE, EDGE, () => me.offset);
+    const { line, holdBehind } = lineAround(me, 1.5, [me, bike(1002.95, 7.35, 0)], [], EDGE, EDGE, { keepTo: () => me.offset });
 
-    // On that line it would run into their back: it waits behind them.
+    // On that line it would run into their back: it waits behind them, neither rolling on nor paddling back, since that
+    // line doesn't take it round them.
     expect(line).toBe(7.5);
     expect(holdBehind).toBeLessThanOrEqual(0);
+  });
+});
+
+describe("a cop held back behind a rider", () => {
+  /** A cop finds its way as an opponent does, here with nobody coming up behind it to keep it to its line. */
+  const AS_A_COP = { keepTo: (line: number) => line };
+
+  it("stays put at a standstill behind a rider who has all but stopped in its path, rather than roll backwards", () => {
+    // Stopped in its lane, with a rider crawling at 0.3 m/s half a metre ahead of its front: it would run into their
+    // back before it got round them, and they are still moving, so it waits for them to move on.
+    const me = bike(1000, 1.5, 0);
+
+    const { holdBehind } = lineAround(me, 1.5, [me, bike(1002.5, 1.5, 0.3)], [], EDGE, EDGE, AS_A_COP);
+
+    expect(holdBehind).toBe(0);
+  });
+
+  it("waits at a standstill behind a rider stopped in its path, rather than back away from them, with no way round them", () => {
+    // Boxed in at the road's edge: a rider stopped just in front of it, and another stopped beside it on its left.
+    const me = bike(1000, 5.2, 0);
+
+    const { line, holdBehind } = lineAround(me, 1.5, [me, bike(1002.1, 5.2, 0), bike(1000, 3.8, 0)], [], EDGE, EDGE, AS_A_COP);
+
+    expect(line).toBe(5.2);
+    expect(holdBehind).toBe(0);
+  });
+
+  it("paddles back at a standstill behind a rider stopped in its path while its line round them would take it into their back, but not once they are out of its way", () => {
+    const me = bike(1000, 1.5, 0);
+
+    // Nose to tail with them, 0.1 m short of their back, and 3.05 m behind their middle, no longer in its way.
+    const close = lineAround(me, 1.5, [me, bike(1002.1, 1.5, 0)], [], EDGE, EDGE, AS_A_COP);
+    const clear = lineAround(me, 1.5, [me, bike(1003.05, 1.5, 0)], [], EDGE, EDGE, AS_A_COP);
+
+    // Round them on their left, paddling back at 0.5 m/s until it can get clear of them before it reaches them.
+    expect(close.line).toBeLessThanOrEqual(1.5 - 0.8);
+    expect(close.holdBehind).toBe(-0.5);
+    expect(clear.holdBehind).toBeGreaterThan(0);
   });
 });
 

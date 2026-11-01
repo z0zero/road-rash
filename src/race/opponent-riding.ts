@@ -121,6 +121,24 @@ const RIDING_OUT_A_KICK = 1;
 const EVASIVE_RESPONSE = 4;
 /** ...at up to this many metres per second sideways. */
 const EVASIVE_SPEED = 6;
+/**
+ * A cop at a standstill, boxed in behind a rider stopped just in front of it,
+ * with too little room to get round them, paddles back at this speed (m/s),
+ * steering for its line round them, since a bike can't move sideways while it
+ * stands still; but only until it has the room, and never once they are no
+ * longer in its way, `ALONGSIDE` metres ahead of it (see `lineAround`).
+ */
+const PADDLING_BACK = 0.5;
+
+/**
+ * How a cop finds its way around, besides as an opponent does (see
+ * `lineAround`): the line it takes when it would take `line`, so as never to
+ * pull across the path of a rider or a car coming up behind it. Its bike can
+ * roll backwards, as a rider's can't.
+ */
+export interface ACopsWay {
+  readonly keepTo: (line: number) => number;
+}
 
 /** What an opponent is up to besides racing. */
 export interface Intent {
@@ -308,11 +326,17 @@ interface Room {
  * the path of a slow car, crawling along no faster than a crawling bike, at
  * walking pace faster than the car. Crawling, with no clear line, it squeezes
  * past through the nearest gap its bike fits through, out to `squeezeEdge`: an
- * opponent out onto the shoulder. Cops find their way around the same way, out
- * to the edges they give: a cop on patrol or fighting back squeezes past only
- * on the road. A cop that won't take the line found yet, so as not to pull
- * across the path of a rider or a car coming up behind it, gives the line it
- * does take (`keepTo`), and holds back as that line needs.
+ * opponent out onto the shoulder. Cops (`cop`) find their way around the same
+ * way, out to the edges they give: a cop on patrol or fighting back squeezes
+ * past only on the road. A cop that won't take the line found yet, so as not
+ * to pull across the path of a rider or a car coming up behind it, gives the
+ * line it does take (`keepTo`), and holds back as that line needs. A cop's
+ * bike can roll backwards, but a cop held back to a stop stays put rather than
+ * roll back, unless, at a standstill behind a rider stopped in its way, its
+ * line takes it round them but not before it reaches their back: then it
+ * paddles back (`PADDLING_BACK`), steering for that line, until it gets round
+ * them in time; and it goes round a rider on their far side if it gets round
+ * them there in time, or will once it has paddled back.
  */
 export function lineAround(
   me: Readonly<Motion>,
@@ -321,8 +345,9 @@ export function lineAround(
   carsAndObstacles: readonly Footprint[],
   edge: number,
   squeezeEdge: number,
-  keepTo: (line: number) => number = (line) => line,
+  cop: ACopsWay | null = null,
 ) {
+  const keepTo = cop?.keepTo ?? ((line: number) => line);
   // Where the cars and obstacles it is alongside or coming up to leave it no room.
   const unsafe: Room[] = [];
   let headOn = false;
@@ -380,6 +405,12 @@ export function lineAround(
       (me.speed > CRAWLING || getsThereFirst(me, other.offset + side * BIKE_WIDTH, line, room, 0, evadingAt))
     );
   };
+  /**
+   * Whether it is a cop at a standstill, boxed in behind a rider stopped in front of it, whose `line` takes it clear
+   * past them, but not before it reaches their back: it paddles back until it does.
+   */
+  const paddlesBackRound = (other: Readonly<Motion>, line: number) =>
+    cop !== null && me.speed <= 0 && other.speed <= 0 && Math.abs(line - other.offset) >= BIKE_WIDTH && !takesItRound(other, line);
 
   /** What the riders it is catching take up: the lines it keeps off, and their bikes, as a bike squeezing past them sees them. */
   const caughtUp: Stretch[] = [];
@@ -419,17 +450,21 @@ export function lineAround(
     return keepTo(nearestClearLine(racingLine, me.offset, blocked, unsafe, edge, squeeze, getsAcross));
   };
   let line = lineFor(farSides);
-  // It goes round a rider on their far side only if the line it takes there gets it clear of them in time; otherwise it
-  // keeps to its side of them, and waits.
-  for (let tooClose = [...farSides].filter((other) => !takesItRound(other, line)); tooClose.length > 0; ) {
+  // It goes round a rider on their far side only if the line it takes there gets it clear of them in time, or, a cop,
+  // once it has paddled back; otherwise it keeps to its side of them, and waits.
+  const tooCloseFor = (taking: number) => [...farSides].filter((other) => !takesItRound(other, taking) && !paddlesBackRound(other, taking));
+  for (let tooClose = tooCloseFor(line); tooClose.length > 0; ) {
     for (const other of tooClose) farSides.delete(other);
     line = lineFor(farSides);
-    tooClose = [...farSides].filter((other) => !takesItRound(other, line));
+    tooClose = tooCloseFor(line);
   }
-  // It holds back to the speed of a rider in its way, unless its line takes it round them in time.
+  // It holds back to the speed of a rider in its way, unless its line takes it round them in time. Braking to a stop,
+  // a cop then stays put rather than roll backwards, unless it paddles back to get round them.
   let holdBehind = Infinity;
   for (const other of inTheWay) {
-    holdBehind = Math.min(holdBehind, heldBackTo(other.speed - 0.5, takesItRound(other, line)));
+    const heldBack = heldBackTo(other.speed - 0.5, takesItRound(other, line));
+    const stopped = cop !== null && me.speed <= 0;
+    holdBehind = Math.min(holdBehind, !stopped ? heldBack : paddlesBackRound(other, line) ? -PADDLING_BACK : Math.max(0, heldBack));
   }
   // Boxed in, with a car coming at it: it brakes hard, to drop back behind whoever is boxing it in and get out of the way.
   if (headOn && line === me.offset) holdBehind = 0;
@@ -485,7 +520,8 @@ function sideOf(me: Readonly<Motion>, other: Readonly<Motion>, ahead: number): n
 function sideToPass(me: Readonly<Motion>, other: Readonly<Motion>, ahead: number, squeezeEdge: number): number {
   const away = sideOf(me, other, ahead);
   const inItsPath = me.speed <= CRAWLING && ahead > 0 && Math.abs(other.offset - me.offset) < BIKE_WIDTH;
-  const room = (side: number) => squeezeEdge - side * other.offset > BIKE_WIDTH;
+  // Room as squeezing past sees it: a gap between their bike, a bike's width either side of their middle, and the edge.
+  const room = (side: number) => side * other.offset + BIKE_WIDTH < squeezeEdge;
   return !inItsPath || room(away) || !room(-away) ? away : -away;
 }
 
