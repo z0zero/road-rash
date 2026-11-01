@@ -1,7 +1,7 @@
 import type { Random } from "./random";
 import { BIKE_LENGTH, BIKE_WIDTH, clamp } from "./riding";
 import { STEP_SECONDS } from "./steps";
-import type { Moving, Track } from "./track";
+import type { Moving, Track, TrackPosition } from "./track";
 
 /** The body a car is built on, which sets its size. */
 export type CarKind = "hatchback" | "saloon" | "van" | "pickup";
@@ -121,6 +121,42 @@ export interface Traffic {
 
 /** A closed road: no traffic at all. */
 export const CLOSED_ROAD: Traffic = { cars: [], step() {} };
+
+/** A car a test puts on the road: where it is, and how it drives on. */
+export interface TestCar extends TrackPosition {
+  /** Metres per second in its own direction of travel, which it keeps whatever is in its way: 0, standing still, unless given. */
+  readonly speed?: number;
+  /** Whether it drives towards the riders, against the race direction. */
+  readonly oncoming?: boolean;
+}
+
+/**
+ * Saloons where a test puts them (`placed`), on a road closed to every other
+ * car: each stands still, or drives on at a steady speed in its own
+ * direction, keeping to its offset, whatever is in its way.
+ */
+export function testCars(placed: readonly TestCar[]): Traffic {
+  const { kind, length, width } = KINDS.find((each) => each.kind === "saloon") ?? KINDS[0];
+  const cars: Car[] = placed.map(({ distance, offset, speed = 0, oncoming = false }, id) => ({
+    id,
+    kind,
+    oncoming,
+    length,
+    width,
+    distance,
+    offset,
+    speed,
+    cruise: speed,
+    lane: offset,
+    laneChangeIn: Infinity,
+  }));
+  return {
+    cars,
+    step() {
+      for (const car of cars) car.distance += velocityOf(car) * STEP_SECONDS;
+    },
+  };
+}
 
 /** A car's speed along the track (m/s): negative for an oncoming car. */
 export function velocityOf(car: Car): number {

@@ -3,6 +3,7 @@
 import { advance } from "@react-three/fiber";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { startGameAudio, type GameAudio } from "@/audio/game-audio";
+import type { Press } from "@/input/menus";
 import { listenToPlayer, type PlayerControls } from "@/input/player-controls";
 import { NO_INPUT } from "@/race";
 import { Scene } from "@/renderer/Scene";
@@ -14,21 +15,23 @@ import { PauseMenu } from "@/ui/PauseMenu";
 import { ResultsScreen } from "@/ui/ResultsScreen";
 import { SettingsScreen } from "@/ui/SettingsScreen";
 import { TitleScreen } from "@/ui/TitleScreen";
+import { askedInAddress } from "./race-address";
 import { GameSession } from "./session";
 
 /** The whole game: the 3D scene with the screens and HUD over it. Runs in the browser only. */
 export default function Game() {
   const controls = useRef<PlayerControls | null>(null);
   const audio = useRef<GameAudio | null>(null);
-  const [session] = useState(
-    () =>
-      new GameSession({
-        readInput: () => controls.current?.read() ?? NO_INPUT,
-        storage: browserStorage(),
-        newSeed: () => seedInAddress() ?? Math.floor(Math.random() * 2 ** 32),
-        now: () => performance.now(),
-      }),
-  );
+  const [session] = useState(() => {
+    const asked = askedInAddress(window.location.search);
+    return new GameSession({
+      readInput: () => controls.current?.read() ?? NO_INPUT,
+      storage: browserStorage(),
+      newSeed: () => asked.seed ?? Math.floor(Math.random() * 2 ** 32),
+      askedDifficulty: asked.difficulty,
+      now: () => performance.now(),
+    });
+  });
   const state = useSyncExternalStore(session.subscribe, session.getState, session.getState);
   const systemReducesMotion = useSyncExternalStore(
     subscribeToReducedMotion,
@@ -36,6 +39,8 @@ export default function Game() {
     () => false,
   );
   const reduceMotion = isMotionReduced(state.settings, systemReducesMotion);
+  /** Whether the browser is keeping the sound locked although a race has asked for it. */
+  const [soundLocked, setSoundLocked] = useState(false);
 
   useEffect(() => {
     const listening = listenToPlayer(window, session.togglePause);
@@ -48,7 +53,7 @@ export default function Game() {
 
   // The title screen is up: start the sound, which fetches the music now so it's ready for the race.
   useEffect(() => {
-    const playing = startGameAudio(session);
+    const playing = startGameAudio(session, setSoundLocked);
     audio.current = playing;
     return () => {
       playing.dispose();
@@ -56,13 +61,13 @@ export default function Game() {
     };
   }, [session]);
 
-  // The clicks that start a race start the sound too: browsers only let sound start from a click or a key press.
-  const startRace = () => {
-    audio.current?.unlock();
+  // The presses that start a race start the sound too: browsers only let sound start from a key press or click.
+  const startRace = (press: Press) => {
+    audio.current?.unlock(press.isTrusted);
     session.startRace();
   };
-  const restart = () => {
-    audio.current?.unlock();
+  const restart = (press: Press) => {
+    audio.current?.unlock(press.isTrusted);
     session.restart();
   };
   // The same function every render, so that the HUD subscribes to the race's events once.
@@ -80,10 +85,13 @@ export default function Game() {
   useEffect(() => {
     let last: number | null = null;
     let frame = requestAnimationFrame(function tick(now) {
+      const racingBeforePoll = session.getState().screen === "racing";
       controls.current?.poll();
+      const racingAfterPoll = session.getState().screen === "racing";
       // A punch or kick pressed while no race is ridden, on the pause menu say, goes nowhere: it is read and
-      // dropped here, so it isn't thrown the moment the race resumes.
-      if (session.getState().screen !== "racing") controls.current?.read();
+      // dropped here, so it isn't thrown the moment the race resumes. Nor is the kick of a gamepad's B that
+      // goes back to the race from the pause menu, in the poll between the two.
+      if (!racingBeforePoll || !racingAfterPoll) controls.current?.read();
       session.advance(last === null ? 0 : (now - last) / 1000);
       // R3F derives useFrame's delta from this timestamp: pass seconds, as its clock expects.
       advance(now / 1000);
@@ -98,7 +106,9 @@ export default function Game() {
       <Scene session={session} reduceMotion={reduceMotion} />
       {state.screen === "title" && (
         <TitleScreen
+          difficulty={state.raceOptions.difficulty}
           personalBest={state.personalBest}
+          onChooseDifficulty={session.chooseDifficulty}
           onStart={startRace}
           onControls={() => session.openFromTitle("controls")}
           onSettings={() => session.openFromTitle("settings")}
@@ -116,10 +126,15 @@ export default function Game() {
       {state.screen === "controls" && <ControlsScreen onBack={session.backToTitle} />}
       {state.screen === "credits" && <CreditsScreen onBack={session.backToTitle} />}
       {(state.screen === "racing" || state.screen === "paused") && (
-        <Hud session={session} reduceMotion={reduceMotion} inputDevice={inputDevice} />
+        <Hud session={session} reduceMotion={reduceMotion} inputDevice={inputDevice} soundLocked={soundLocked} />
       )}
       {state.screen === "paused" && (
-        <PauseMenu seed={state.seed} onResume={session.resume} onRestart={restart} onQuit={session.quitToTitle} />
+        <PauseMenu
+          raceOptions={state.raceOptions}
+          onResume={session.resume}
+          onRestart={restart}
+          onQuit={session.quitToTitle}
+        />
       )}
       {state.screen === "results" && state.results && (
         <ResultsScreen
@@ -127,7 +142,7 @@ export default function Game() {
           personalBest={state.personalBest}
           newBestTime={state.newBestTime}
           newBestPosition={state.newBestPosition}
-          seed={state.seed}
+          raceOptions={state.raceOptions}
           onRestart={restart}
           onTitle={session.quitToTitle}
         />
@@ -147,18 +162,6 @@ function subscribeToReducedMotion(onChange: () => void) {
 /** Whether the operating system asks for reduced motion. */
 function systemPrefersReducedMotion() {
   return window.matchMedia(REDUCED_MOTION).matches;
-}
-
-/**
- * The seed the page's address asks every race to use, as in `?seed=1234`, so
- * that a race from a bug report can be played again; null when it asks for
- * none, or for something that isn't a seed (a whole number below 2^32).
- */
-function seedInAddress(): number | null {
-  const asked = new URLSearchParams(window.location.search).get("seed");
-  if (asked === null || !/^\d{1,10}$/.test(asked)) return null;
-  const seed = Number(asked);
-  return seed < 2 ** 32 ? seed : null;
 }
 
 /** localStorage, or undefined where the browser refuses it (private modes, blocked storage). */

@@ -1,4 +1,5 @@
 import type { Cop, Rota } from "./cops";
+import type { DifficultyTuning } from "./difficulty";
 import type { RaceEvent } from "./events";
 import type { Footprint } from "./footprint";
 import type { Random } from "./random";
@@ -18,6 +19,8 @@ export const COUNTDOWN_STEPS = 3 * STEPS_PER_SECOND;
 export interface RaceState {
   /** Seeds every random choice the race makes. */
   readonly seed: number;
+  /** How the opponents ride and fight on the race's difficulty. */
+  readonly difficultyTuning: DifficultyTuning;
   /** The riders' random choices; the traffic and the remark draw from generators of their own. */
   readonly random: Random;
   readonly track: Track;

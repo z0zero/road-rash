@@ -3,6 +3,7 @@ import { getCoastalTrack } from "./coastal-track";
 import { knockDownRidersOnFoot, runIntoCarsAndObstacles, runIntoEachOther } from "./contact";
 import { alertThePlayer, decideCops, joinThePlayer, lineUpCops, moveCops } from "./cops";
 import { runBack } from "./crashing";
+import { DEFAULT_DIFFICULTY, DIFFICULTY_TUNING, type Difficulty } from "./difficulty";
 import type { RaceEvent } from "./events";
 import { lineUpRiders } from "./field";
 import { advanceAttacks, recoverStamina, throwAttack } from "./fighting";
@@ -11,12 +12,12 @@ import { decideOpponents, opponentsAttack } from "./opponents";
 import { clock, COUNTDOWN_STEPS, copsInTheRace, onTheirBikes, type RaceState } from "./race-state";
 import { createRandom } from "./random";
 import { finishCrossings, resultsOf, type RaceResults } from "./results";
-import { PLAYER, whereIs } from "./riders";
+import { PLAYER, whereIs, type Rider } from "./riders";
 import { ride, type Controls } from "./riding";
 import { snapshotOf, type RaceSnapshot } from "./snapshot";
 import { STEP_SECONDS, STEPS_PER_SECOND } from "./steps";
 import type { Track } from "./track";
-import { CLOSED_ROAD, createTraffic, type RiderOrCopOnTheRoad, type Traffic } from "./traffic";
+import { CLOSED_ROAD, createTraffic, testCars, type RiderOrCopOnTheRoad, type TestCar, type Traffic } from "./traffic";
 
 /** Once over the finish line, a rider lets go of the throttle and brakes to a stop. */
 const FINISHED_CONTROLS: Controls = { throttle: 0, brake: 0.7, steer: 0 };
@@ -49,15 +50,17 @@ export interface PlayerInput {
 
 export const NO_INPUT: PlayerInput = { throttle: 0, brake: 0, steer: 0, punch: false, kick: false };
 
-/** How the game creates a race: from its seed alone, with the field, the tuning and the track fixed (ADR 0004). */
+/** How the game creates a race: from its seed and difficulty, with the field, the track and the rest of the tuning fixed (ADR 0004). */
 export interface RaceOptions {
-  /** Seeds every random choice the race makes, so the same seed and inputs replay the same race. */
+  /** Seeds every random choice the race makes, so the same seed, difficulty and inputs replay the same race. */
   readonly seed: number;
+  /** How hard the opponents make the race: Normal unless given. */
+  readonly difficulty?: Difficulty;
 }
 
 /**
- * How the Race module's own tests may set a race up besides its seed, to try
- * one rule at a time. The game never does, and `@/race` doesn't export it:
+ * How the Race module's own tests may set a race up besides its options, to
+ * try one rule at a time. The game never does, and `@/race` doesn't export it:
  * every race in the game runs in traffic, with cops, on perfect bikes. Tests
  * reach it through `setUpRace` in their helpers.
  */
@@ -68,8 +71,13 @@ export interface TestSetup {
    * opponent's bike starts perfect.
    */
   readonly playerCondition?: number;
-  /** Whether cars drive on the road (the default). Without them, the race runs on a closed road. */
-  readonly traffic?: boolean;
+  /**
+   * The cars on the road: the traffic, as in every race (the default); none,
+   * on a closed road; or only the `cars` a test puts on a road closed to
+   * every other car, so that it can put one in a rider's way: each stands
+   * still, or drives on at a steady speed, whatever is in its way.
+   */
+  readonly traffic?: "flowing" | "closed" | { readonly cars: readonly TestCar[] };
   /** Whether cops wait along the track to join the race (the default). Without them, nobody is busted. */
   readonly cops?: boolean;
 }
@@ -156,26 +164,28 @@ function step(race: RaceState, input: PlayerInput) {
   if (race.stepsTaken === COUNTDOWN_STEPS) race.events.push({ type: "race-started" });
 }
 
+/** The cars on the road of a race with the seed `seed` and these `riders` lined up: its traffic, unless `setup` closes the road or puts a test's cars on it. */
+function trafficFor(setup: TestSetup, track: Track, seed: number, riders: readonly Rider[]): Traffic {
+  if (setup.traffic === "closed") return CLOSED_ROAD;
+  if (typeof setup.traffic === "object") return testCars(setup.traffic.cars);
+  const clearUntil = Math.max(...riders.map((rider) => rider.motion.distance)) + CLEAR_OF_THE_GRID;
+  return createTraffic(track, createRandom(seed ^ TRAFFIC_SEED), riders[PLAYER].motion, clearUntil);
+}
+
 export function createRace(options: RaceOptions): Race {
   return setUpRace(options, {});
 }
 
 /** A race created from `options` and set up for a test as `setup` says. Only the Race module's tests call it. */
-export function setUpRace({ seed }: RaceOptions, setup: TestSetup): Race {
+export function setUpRace({ seed, difficulty = DEFAULT_DIFFICULTY }: RaceOptions, setup: TestSetup): Race {
   const random = createRandom(seed);
   const track = getCoastalTrack();
-  const riders = lineUpRiders(track, random, setup.playerCondition);
-  const traffic: Traffic =
-    setup.traffic === false
-      ? CLOSED_ROAD
-      : createTraffic(
-          track,
-          createRandom(seed ^ TRAFFIC_SEED),
-          riders[PLAYER].motion,
-          Math.max(...riders.map((rider) => rider.motion.distance)) + CLEAR_OF_THE_GRID,
-        );
+  const difficultyTuning = DIFFICULTY_TUNING[difficulty];
+  const riders = lineUpRiders(track, random, difficultyTuning, setup.playerCondition);
+  const traffic = trafficFor(setup, track, seed, riders);
   const race: RaceState = {
     seed,
+    difficultyTuning,
     random,
     track,
     edge: track.roadHalfWidth + track.shoulderWidth,

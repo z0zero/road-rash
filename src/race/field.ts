@@ -1,3 +1,4 @@
+import type { DifficultyTuning } from "./difficulty";
 import { wholePatience } from "./opponent-fighting";
 import { paceFor } from "./opponent-riding";
 import { OPPONENTS, PLAYER_NAME } from "./opponents";
@@ -43,9 +44,15 @@ function lineUpOpponents(track: Track, count: number, random: Random): TrackPosi
  * Every rider lined up on the start grid, the player first: the player on the
  * start line, between the two lanes that run in the race direction, on a bike
  * in `playerCondition`, and the opponents strung out ahead of them, their
- * order drawn from `random`.
+ * order drawn from `random`, each to ride at its pace on the difficulty
+ * (`difficultyTuning`).
  */
-export function lineUpRiders(track: Track, random: Random, playerCondition: number = TUNING.fullCondition): Rider[] {
+export function lineUpRiders(
+  track: Track,
+  random: Random,
+  difficultyTuning: DifficultyTuning,
+  playerCondition: number = TUNING.fullCondition,
+): Rider[] {
   const riders: Rider[] = [
     {
       ...lineUp({ id: PLAYER, name: PLAYER_NAME, temperament: null, riding: null }, track.startDistance, track.laneWidth),
@@ -54,7 +61,7 @@ export function lineUpRiders(track: Track, random: Random, playerCondition: numb
   ];
   lineUpOpponents(track, OPPONENTS.length, random).forEach(({ distance, offset }, index) => {
     const { name, temperament, skill } = OPPONENTS[index];
-    const riding = { pace: paceFor(skill), lane: offset };
+    const riding = { pace: paceFor(skill, difficultyTuning), lane: offset };
     riders.push(lineUp({ id: PLAYER + 1 + index, name, temperament, riding }, distance, offset));
   });
   return riders;

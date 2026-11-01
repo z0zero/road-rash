@@ -1,3 +1,4 @@
+import type { DifficultyTuning } from "./difficulty";
 import type { AttackKind } from "./events";
 import { RACING, type Intent } from "./opponent-riding";
 import type { Temperament } from "./opponents";
@@ -124,18 +125,18 @@ export function whoseTurn<T extends { readonly motion: Readonly<Motion> }>(
   return nearest;
 }
 
-/** The player is fighting an opponent back while they have hit it within this many steps... */
+/**
+ * The player is fighting an opponent back while they have hit it within this
+ * many steps. Once an opponent's hit lands on a player who isn't, it gives
+ * them a breather (the difficulty's) before attacking them again, and on some
+ * difficulties on a player who is, too.
+ */
 const FIGHTING_BACK_STEPS = stepsIn(5);
-/** ...and otherwise, once an opponent's hit lands on them, it gives them this many steps before attacking them again. */
-const BREATHER_STEPS = stepsIn(3);
 
 /** Whether the player is fighting back against an opponent they last hit `stepsSinceThePlayerHitIt` steps ago. */
 export function isFightingBack(stepsSinceThePlayerHitIt: number): boolean {
   return stepsSinceThePlayerHitIt <= FIGHTING_BACK_STEPS;
 }
-
-/** An opponent gives up on a player who doesn't hit back once this many of its hits have landed on them unanswered. */
-const UNANSWERED_HITS = 3;
 
 /** An opponent whose hit has just landed on the player, and how it stands with them. */
 interface HittingThePlayer {
@@ -145,20 +146,19 @@ interface HittingThePlayer {
 }
 
 /**
- * What an opponent whose hit has just landed on the player does about it:
- * nothing while they fight it back, so a brawl is a brawl; but to a player
- * who doesn't hit back it gives a breather before it attacks them again, and
- * once `UNANSWERED_HITS` of its hits have landed on them unanswered, it loses
- * its patience with them and gives up on them.
+ * What an opponent whose hit has just landed on the player does about it: it
+ * gives them a breather before it attacks them again, unless they are
+ * fighting it back on a difficulty that gives no breather then, where a brawl
+ * is a brawl; and once as many of its hits as the difficulty allows
+ * (`difficultyTuning`) have landed on them unanswered, it loses its patience
+ * with them and gives up on them.
  */
-export function afterHittingThePlayer(opponent: HittingThePlayer): void {
-  if (isFightingBack(opponent.stepsSinceThePlayerHitIt)) {
-    opponent.breatherSteps = 0;
-    return;
-  }
-  opponent.breatherSteps = BREATHER_STEPS;
+export function afterHittingThePlayer(opponent: HittingThePlayer, difficultyTuning: DifficultyTuning): void {
+  const foughtBack = isFightingBack(opponent.stepsSinceThePlayerHitIt);
+  opponent.breatherSteps = foughtBack && !difficultyTuning.breatherWhenFoughtBack ? 0 : stepsIn(difficultyTuning.breatherSeconds);
+  if (foughtBack) return;
   opponent.patience.unansweredHits++;
-  if (opponent.patience.unansweredHits < UNANSWERED_HITS) return;
+  if (opponent.patience.unansweredHits < difficultyTuning.unansweredHits) return;
   opponent.patience.unansweredHits = 0;
   opponent.patience.steps = 0;
   opponent.patience.gaveUp = true;
@@ -166,10 +166,10 @@ export function afterHittingThePlayer(opponent: HittingThePlayer): void {
 
 /**
  * How many times a second an opponent of each temperament attacks the player
- * when the player is within its reach and it is free to. A bully attacks less
- * readily than a brawler, as its club hits hard and is ready again almost as
- * it strikes: about once every 1.2 s, where a brawler attacks about once a
- * second...
+ * when the player is within its reach and it is free to, on Normal (the
+ * difficulty makes it more or less often). A bully attacks less readily than
+ * a brawler, as its club hits hard and is ready again almost as it strikes:
+ * about once every 1.2 s, where a brawler attacks about once a second...
  */
 const ATTACKS_PER_SECOND: Record<Temperament, number> = { racer: 0.1, brawler: 1.8, bully: 1.3 };
 /** ...and, as a share of that, another opponent within its reach... */
@@ -186,10 +186,17 @@ const KICKS = 0.3;
  * Whether an opponent of a temperament attacks this step, and with what,
  * when the nearest rider within its reach is the player (`atThePlayer`) or
  * another opponent, and whether that rider is winding up a club swing
- * (`intoASwing`).
+ * (`intoASwing`). The difficulty (`difficultyTuning`) says how often it
+ * attacks the player.
  */
-export function opponentAttack(temperament: Temperament, atThePlayer: boolean, intoASwing: boolean, random: Random): AttackKind | null {
-  const rate = ATTACKS_PER_SECOND[temperament] * (atThePlayer ? 1 : AT_EACH_OTHER) * (intoASwing ? INTO_A_SWING : 1);
+export function opponentAttack(
+  temperament: Temperament,
+  atThePlayer: boolean,
+  intoASwing: boolean,
+  difficultyTuning: DifficultyTuning,
+  random: Random,
+): AttackKind | null {
+  const rate = ATTACKS_PER_SECOND[temperament] * (atThePlayer ? difficultyTuning.attacks : AT_EACH_OTHER) * (intoASwing ? INTO_A_SWING : 1);
   if (!random.chance(rate * STEP_SECONDS)) return null;
   return random.chance(KICKS) ? "kick" : "punch";
 }

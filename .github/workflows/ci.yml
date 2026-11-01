@@ -15,7 +15,8 @@ jobs:
   check:
     name: Lint, typecheck, unit tests, build and smoke test
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The smoke test alone takes 7 to 18 minutes, depending on the runner.
+    timeout-minutes: 45
     env:
       NEXT_TELEMETRY_DISABLED: 1
     steps:

@@ -9,7 +9,7 @@ See ADR 0004.
 - `src/race` imports nothing from React, Three.js, Next.js or browser APIs, and nothing from the rest of the game. **(lint, typecheck)**
 - No `Math.random`, `Date`, `Date.now` or `performance.now` inside it. Randomness comes from the race's seeded generator (`createRandom`). **(lint)**
 - The race moves only in fixed steps of `STEP_SECONDS` (1/60 s). Nothing in it depends on wall-clock time, frame rate or any order that isn't fixed by the code.
-- The same seed and the same inputs give identical snapshots, events and results.
+- The same seed, difficulty and inputs give identical snapshots, events and results.
 - The rest of the game reaches the Race module only through `@/race`. **(lint)**
 - Snapshots, events and results are plain data. Never change one after handing it out.
 - Game rules live in the Race module. The renderer, UI, input and audio hold no rules: they draw, show, read and play what the race says.
@@ -40,7 +40,7 @@ See ADR 0004.
 ## Tests
 
 - Test only at the agreed seams:
-  - **The Race module.** Create a race with a seed, feed it scripted input step by step, and assert on snapshots, events and results. To try one rule at a time, a test may set the race up on a closed road, without cops or on a worn bike, through the test helpers' `setUpRace`; `@/race` doesn't offer that, since the game never does it.
+  - **The Race module.** Create a race from its options (a seed, and a difficulty unless Normal), feed it scripted input step by step, and assert on snapshots, events and results. To try one rule at a time, a test may set the race up on a closed road (with cars where it puts them, standing still or driving on at a steady speed, if it needs any), without cops or on a worn bike, through the test helpers' `setUpRace`; `@/race` doesn't offer that, since the game never does it.
   - **Save data.**
   - **The browser smoke test** against the static export.
 - Rendering, input mapping and audio have no unit tests; the smoke test and play-testing cover them.

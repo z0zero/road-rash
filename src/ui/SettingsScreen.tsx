@@ -19,7 +19,7 @@ export function SettingsScreen({
   onBack: () => void;
 }) {
   return (
-    <Dialog title="Settings" onBack={onBack} panelClassName="w-[min(32rem,90vw)] gap-6 px-10">
+    <Dialog title="Settings" panelClassName="w-[min(32rem,90vw)] gap-6 px-10">
       <VolumeSlider
         label="Master volume"
         volume={settings.masterVolume}
@@ -41,7 +41,7 @@ export function SettingsScreen({
         checked={reduceMotion}
         onChange={(on) => onChange({ reduceMotion: on })}
       />
-      <Button autoFocus onClick={onBack}>
+      <Button data-back autoFocus onClick={onBack}>
         Back
       </Button>
     </Dialog>

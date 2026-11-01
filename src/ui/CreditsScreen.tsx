@@ -6,7 +6,7 @@ import { Dialog } from "./Dialog";
 /** Who made what, and the game's independence from Road Rash, reached from the title screen. Esc goes back. */
 export function CreditsScreen({ onBack }: { onBack: () => void }) {
   return (
-    <Dialog title="Credits" onBack={onBack} panelClassName="w-[min(36rem,92vw)] gap-6 px-10 text-center">
+    <Dialog title="Credits" panelClassName="w-[min(36rem,92vw)] gap-6 px-10 text-center">
       <dl className="flex flex-col gap-4">
         <div>
           <dt className="font-display text-xl uppercase tracking-wider text-sunset">Music</dt>
@@ -30,7 +30,7 @@ export function CreditsScreen({ onBack }: { onBack: () => void }) {
         Rev &amp; Wreck is inspired by Road Rash, but is not affiliated with Road Rash or Electronic Arts. Road
         Rash is a trademark of Electronic Arts.
       </p>
-      <Button autoFocus onClick={onBack}>
+      <Button data-back autoFocus onClick={onBack}>
         Back
       </Button>
     </Dialog>

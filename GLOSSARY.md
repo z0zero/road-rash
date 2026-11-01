@@ -10,6 +10,10 @@ A browser motorcycle combat racing game inspired by Road Rash on the SEGA Genesi
 One competition from the start line to the finish line on one track.
 _Avoid_: Match, round, stage, level
 
+**Seed**:
+The number a race is created from, with its difficulty: every random choice the race makes follows from it, from the order of the start grid to the traffic, so the same seed, difficulty and inputs give the same race. The pause and results screens show it beside the difficulty, and a page address that asks for both replays the race: races it again from the same start. The track has a seed of its own, fixed in the code, so every race is run on the same road.
+_Avoid_: Race ID, race number, code
+
 **Track**:
 The stretch of road a race is run on.
 _Avoid_: Course, map, route
@@ -23,16 +27,24 @@ A rider's rank in the race, from first (the leader) to last. Wrecked and busted 
 _Avoid_: Place, rank, standing
 
 **Standings**:
-Every rider's final position and finishing time once the race is over, or how their race ended, as the results list them. One rider's row is never "a standing": it is their position.
+Every rider's final position and finishing time once the race is over, or how their race ended, as the results list them, a row for each rider. On screen, a rider's row is never called "a standing": what it shows is their position, and their time or how their race ended.
 _Avoid_: Ranking, leaderboard, scoreboard
 
 **Qualified**:
 Having finished a race in third position or better.
 _Avoid_: Won, passed
 
+**Personal best**:
+The player's fastest finishing time and best position on a difficulty, each from any race they finished on it, kept in the browser between visits. Each difficulty keeps its own, since times on one don't compare with times on another.
+_Avoid_: Record, high score, PB
+
 **Remark**:
 A one-line comment on how the player's race went, from an opponent or a cop, shown with the results.
 _Avoid_: Quote, quip, taunt, banter
+
+**Difficulty**:
+How hard the opponents make a race: Easy, Normal or Hard, chosen on the title screen. On Easy they ride slower, attack the player less often, give them longer breathers and lose patience sooner, and catch-up holds them nearer the player; on Hard they ride closer to the limit and fight more. On both, a player who hits back still gets their breathers. Normal is tuned as v1.0.0 was. The track, the start grid and the rules for the traffic and the cops are the same on every difficulty, though the cars and cops then react to how the opponents ride; and each difficulty keeps its own personal best.
+_Avoid_: Level, mode, skill
 
 ### Riders
 
@@ -49,7 +61,7 @@ A rider controlled by the game's AI.
 _Avoid_: Enemy, bot, NPC
 
 **Catch-up**:
-Opponents far behind the player riding a little faster than their usual pace, and those far ahead a little slower, so the field stays near the player.
+Opponents far behind the player riding a little faster than their usual pace, and those far ahead a little slower, so the field stays near the player: up to 8%, from 75 m away to its most at 400 m, and on Easy from 25 m to its most at 150 m.
 _Avoid_: Rubber-banding
 
 **Temperament**:
@@ -57,11 +69,11 @@ How an opponent races and fights: a *racer* concentrates on racing and rarely at
 _Avoid_: Personality, style, AI type
 
 **Skill**:
-How close to the limit an opponent rides, from 0 (the least skilled) to 1 (the most). Racers are the most skilled.
+How close to the limit an opponent rides, compared with the rest of the field, from 0 (the least skilled) to 1 (the most); the difficulty then moves the whole field nearer the limit or further from it (see Pace). Racers are, on the whole, the most skilled, and bullies the least.
 _Avoid_: Level, difficulty, rating
 
 **Pace**:
-How fast an opponent rides when nothing gets in its way: a share of the fastest it could safely go at each point of the track, higher the more skilled it is. Catch-up and its intent raise or lower it a little.
+How fast an opponent rides when nothing gets in its way: a share of the fastest it could safely go at each point of the track, higher the more skilled it is and the harder the difficulty (0.89 times Normal's on Easy, 1.07 times on Hard). Catch-up and its intent raise or lower it a little.
 _Avoid_: Target speed, cruising speed
 
 **Intent**:
@@ -69,7 +81,7 @@ What an opponent is riding for at the moment: just racing, riding up alongside a
 _Avoid_: AI state, mode, goal
 
 **Patience**:
-How long a brawler or bully keeps riding alongside a player who rides well below its own pace, or who doesn't hit back. It wears thin while the player rides slowly beside it and builds back up while they keep up, and it runs out at once when three of its hits in a row have landed on a player who isn't fighting it back. Once it runs out, the opponent gives up on the player and just races, attacking them only if they hit it, until its patience is whole again.
+How long a brawler or bully keeps riding alongside a player who rides well below its own pace, or who doesn't hit back. It wears thin while the player rides slowly beside it and builds back up while they keep up, and it runs out at once when three of its hits in a row (two on Easy, four on Hard) have landed on a player who isn't fighting it back. Once it runs out, the opponent gives up on the player and just races, attacking them only if they hit it, until its patience is whole again.
 _Avoid_: Tolerance, temper
 
 **Bike**:
@@ -92,6 +104,10 @@ _Avoid_: Damage, durability, bike health
 A rider on their bike running into another rider on a bike, a cop, a car or an obstacle at a small speed difference (under 8 m/s) and being pushed apart, without crashing. A cop bumps off whatever it runs into, whatever the speed difference. A bike that bumps a car or an obstacle with no room to pass it on one side, before the edge of the shoulder, is pushed to its other side.
 _Avoid_: Nudge, collision
 
+**Squeezing past**:
+An opponent, or a cop, held to a standstill by what is in its way with no clear way round it, as when a rider stands beside it with a roadside rock ahead, rolling on at walking pace through the nearest gap its bike fits through, never across the path of a car or an obstacle close ahead. Boxed in like that in the path of a car coming at it, it squeezes out of the car's way. An opponent goes out onto the shoulder for it if need be, and so does a cop riding to bust someone or pulling over; a cop on patrol or fighting back squeezes past only on the road. Held back behind a rider who has all but stopped, it rolls on round them at walking pace too, rather than wait behind them: on its side of them, or on their other side if its own has no room for its bike before the edge it squeezes out to. It rolls on round them only if, steering as it does, the line it takes gets it clear of them before it reaches their back, and crawling, it cuts across the path of a car or an obstacle close ahead, never one coming towards it, only if it gets across before it gets there, or once it is moving across too fast to stop short of it; otherwise it waits behind them rather than run into them. It judges all this as if it rolled on at walking pace, as it will, so that slowing down never changes its mind.
+_Avoid_: Nudging through, forcing past
+
 **Run-in**:
 Two riders on their bikes, or a rider and a cop, running into each other at a larger speed difference than a bump: the faster rider crashes. A cop never does: the spec puts a cop out of the race only when it is beaten in a fight, so a cop that runs into a rider only bumps them.
 _Avoid_: Collision, impact
@@ -109,7 +125,7 @@ A rider off their bike after a crash, once they have stopped tumbling along the 
 _Avoid_: Running, walking, dismounted
 
 **Knock-down**:
-A car running into a rider on foot and throwing them to the ground: they tumble again, then get up and carry on back to their bike. It is not a crash, so it costs their bike nothing. Not a knock-off, which a hit does.
+A car driving into a rider on foot and throwing them to the ground: they tumble again, then get up and carry on back to their bike. It is not a crash, so it costs their bike nothing. Not a knock-off, which a hit does. Only a car closing in on them along its own way, at over 1 m/s, with them in front of its middle, knocks them down; one coming at them that fast does even if they run into it. One going their way, slower than them, that they catch up or brush as they run away from it only pushes them clear of it, and they go round it; so does one standing still, or one already half past them when they touch it.
 _Avoid_: Run over, hit
 
 **Wrecked**:
@@ -139,8 +155,12 @@ A brawler's or bully's go at fighting the player. One at a time rides alongside 
 _Avoid_: Queue, slot
 
 **Breather**:
-The 3 s an opponent whose hit has just landed on the player gives them before it attacks them again, unless the player is fighting it back: has hit it in the last 5 s.
+The 3 s (5 s on Easy, 1 s on Hard) an opponent whose hit has just landed on the player gives them before it attacks them again. On Normal it gives none to a player who is fighting it back, who has hit it in the last 5 s; on Easy and Hard it gives them one all the same.
 _Avoid_: Cooldown, grace period
+
+**Fighting back**:
+The player fighting an opponent back: having hit it in the last 5 s. Its hits on them then don't wear its patience, it attacks them even while it waits its turn or has given up on them, and on Normal it gives them no breather (see Breather, Patience, Turn). A cop fights back too: hit by a rider, it comes after them and swings its club at them, until a while after it was last hit.
+_Avoid_: Revenge, aggro
 
 **Weapon**:
 A club a rider swings instead of punching. A rider takes one with a hit thrown at its holder during the wind-up of a swing, and drops it in a crash.
@@ -169,7 +189,7 @@ One of the traffic's cars: a hatchback, saloon, van or pickup, driving in the ra
 _Avoid_: Vehicle, NPC
 
 **Closed road**:
-A road with no traffic, which a test can set a race up on; the game's races always run in traffic.
+A road with no traffic, which a test can set a race up on, with cars where it puts them if it needs one in a rider's way, each standing still or driving on at a steady speed; the game's races always run in traffic.
 _Avoid_: Empty road, private road
 
 **Traffic**:
@@ -203,10 +223,6 @@ _Avoid_: Waiting, idling
 **Cop alert**:
 The warning on the HUD, with the siren, that a cop in the race is near the player: within 150 m.
 _Avoid_: Wanted level, police alert
-
-**Fighting back**:
-A cop hit by a rider coming after them and swinging its club at them, until a while after it was last hit.
-_Avoid_: Revenge, aggro
 
 **Busted**:
 The end of a rider's race because a cop caught them after a crash: a cop within 80 m of a rider who crashes rides to them at the arrest pace, and busts them if it reaches them, once they are on their feet, before they are back on their bike.

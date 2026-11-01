@@ -13,12 +13,18 @@ function sayOr(controls: readonly PadControl[]): string {
   return controls.map(({ name }) => (name.length === 1 ? name : `the ${say(name)}`)).join(" or ");
 }
 
-/** Every binding on the keyboard and on a gamepad, reached from the title screen. Esc goes back. */
+/**
+ * Every binding on the keyboard and on a gamepad, reached from the title screen. Esc goes back.
+ *
+ * The tallest of the screens a `Dialog` shows. It is wide enough for each row, and each note but the first, to stay on
+ * one line, even in a wide font such as Linux's DejaVu Sans. In a short window, its gaps, rows and Back are tighter, and
+ * its padding and title too, as every screen's are (see `Dialog`).
+ */
 export function ControlsScreen({ onBack }: { onBack: () => void }) {
   const labels = useKeyboardLabels();
   return (
-    <Dialog title="Controls" onBack={onBack} panelClassName="w-[min(42rem,94vw)] gap-6 px-6 sm:px-10">
-      <table className="w-full border-separate border-spacing-y-2 text-left">
+    <Dialog title="Controls" panelClassName="w-[min(52rem,94vw)] gap-6 px-6 sm:px-10 short:gap-1.5">
+      <table className="w-full border-separate border-spacing-y-2 text-left short:border-spacing-y-1">
         <thead>
           <tr className="font-display text-xl uppercase tracking-wider text-sunset">
             <th scope="col" className="font-normal">
@@ -48,15 +54,16 @@ export function ControlsScreen({ onBack }: { onBack: () => void }) {
           ))}
         </tbody>
       </table>
-      <div className="flex flex-col gap-1 text-center text-sm text-sand/80">
+      <div className="flex flex-col gap-1 text-center text-sm text-balance text-sand/80 short:gap-0.5">
         <p>Gamepad buttons are named as on an Xbox controller: A is the bottom one, B the right one and X the left one.</p>
         <p>
-          In menus, {sayOr(GAMEPAD_MENUS.move)} moves between buttons and {sayOr(GAMEPAD_MENUS.press)} presses them.
+          In menus, the arrow keys, {sayOr(GAMEPAD_MENUS.move)} move between buttons, and {sayOr(GAMEPAD_MENUS.press)}{" "}
+          presses them.
         </p>
         <p>After a crash, steer to run back to your bike, and brake to stand still.</p>
         {labels === null && <p>The letter keys are where they are on a US keyboard, whatever yours are labelled.</p>}
       </div>
-      <Button autoFocus onClick={onBack}>
+      <Button data-back autoFocus onClick={onBack} className="short:py-2">
         Back
       </Button>
     </Dialog>

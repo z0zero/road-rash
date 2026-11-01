@@ -1,27 +1,30 @@
+import type { Press } from "@/input/menus";
+import type { RaceOptions } from "@/race";
 import { Button } from "./Button";
 import { Dialog } from "./Dialog";
-import { RaceSeed } from "./RaceSeed";
+import { RaceReplay } from "./RaceReplay";
 
-/** The pause menu: resume, restart or quit to the title, with the race's seed for a bug report. */
+/** The pause menu: resume, restart or quit to the title, with the race's difficulty and seed for a bug report. */
 export function PauseMenu({
-  seed,
+  raceOptions,
   onResume,
   onRestart,
   onQuit,
 }: {
-  seed: number;
+  /** The race's seed and difficulty. */
+  raceOptions: Required<RaceOptions>;
   onResume: () => void;
-  onRestart: () => void;
+  onRestart: (press: Press) => void;
   onQuit: () => void;
 }) {
   return (
-    <Dialog title="Paused" panelClassName="gap-4 px-10 [&>h2]:mb-2">
-      <Button autoFocus onClick={onResume}>
+    <Dialog title="Paused" escGoesBack={false} panelClassName="gap-4 px-10 [&>h2]:mb-2">
+      <Button data-back autoFocus onClick={onResume}>
         Resume
       </Button>
       <Button onClick={onRestart}>Restart</Button>
       <Button onClick={onQuit}>Quit to title</Button>
-      <RaceSeed seed={seed} />
+      <RaceReplay raceOptions={raceOptions} />
     </Dialog>
   );
 }

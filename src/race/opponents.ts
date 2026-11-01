@@ -32,8 +32,8 @@ export interface OpponentProfile {
 
 /**
  * The fourteen opponents, in rider-id order (the player is rider 0, so these
- * are riders 1 to 14). Racers are the most skilled riders, since riding is all
- * they do; bullies the least.
+ * are riders 1 to 14). Racers are, on the whole, the most skilled riders,
+ * since riding is all they do, and bullies the least.
  */
 export const OPPONENTS: readonly OpponentProfile[] = [
   { name: "Cinder", temperament: "racer", skill: 1 },
@@ -84,7 +84,7 @@ export function decideOpponents(
   const player = riders[PLAYER];
   // Catch-up keeps the field near the player, so it stops once the player's race is over.
   const catchUp = (rider: Rider) =>
-    player.status === "racing" ? catchUpFor(rider.motion.distance - whereIs(player).distance) : 1;
+    player.status === "racing" ? catchUpFor(rider.motion.distance - whereIs(player).distance, race.difficultyTuning.catchUp) : 1;
   const playerToFight = player.status === "racing" && !player.crash ? player.motion : null;
   for (const rider of riders) {
     rider.stepsSinceThePlayerHitIt++;
@@ -122,9 +122,10 @@ export function decideOpponents(
 /**
  * Brawlers, bullies and racers among the riders on their bikes (`riding`)
  * attack the nearest rider within their reach now and then, the player far
- * more often than each other; never a cop. A player who doesn't fight an
- * opponent back gets a breather after each of its hits, and is spared by
- * those `waiting` their turn and those that have given up on them.
+ * more often than each other; never a cop. The player gets a breather after
+ * each of an opponent's hits, unless they fight it back on a difficulty that
+ * gives none then, and a player who doesn't fight an opponent back is spared
+ * by those `waiting` their turn and those that have given up on them.
  */
 export function opponentsAttack(race: RaceState, riding: readonly Rider[], waiting: ReadonlySet<Rider>): void {
   for (const opponent of riding) {
@@ -132,11 +133,13 @@ export function opponentsAttack(race: RaceState, riding: readonly Rider[], waiti
     const nearest = nearestWithinReach(opponent.motion, targetsFor(race, opponent), punchOf(opponent));
     // Opponents leave the cops alone.
     if (nearest?.kind !== "rider") continue;
-    // A player who doesn't fight an opponent back gets a breather after each of its hits, and is spared by those
-    // waiting their turn and those that have given up on them.
-    const spared = opponent.breatherSteps > 0 || waiting.has(opponent) || opponent.patience.gaveUp;
-    if (isPlayer(nearest) && spared && !isFightingBack(opponent.stepsSinceThePlayerHitIt)) continue;
-    const kind = opponentAttack(opponent.temperament, isPlayer(nearest), isMidSwing(nearest.attack), race.random);
+    // The player gets a breather after each of its hits (one fighting it back only on some difficulties), and a
+    // player who doesn't fight it back is spared by those waiting their turn and those that have given up on them.
+    const fightingBack = isFightingBack(opponent.stepsSinceThePlayerHitIt);
+    const breather = opponent.breatherSteps > 0 && (race.difficultyTuning.breatherWhenFoughtBack || !fightingBack);
+    const spared = breather || (!fightingBack && (waiting.has(opponent) || opponent.patience.gaveUp));
+    if (isPlayer(nearest) && spared) continue;
+    const kind = opponentAttack(opponent.temperament, isPlayer(nearest), isMidSwing(nearest.attack), race.difficultyTuning, race.random);
     // A club reaches further than a kick: a club holder swings at a rider its kick can't reach.
     if (kind) throwAttack(race, opponent, kind === "kick" && !withinReach(opponent.motion, nearest.motion, kind) ? "punch" : kind);
   }

@@ -1,11 +1,21 @@
 import { useEffect, useRef, useState } from "react";
-import { PLAYER, QUALIFYING_POSITION, type RaceOutcome, type RaceResults, type Remark, type Standing } from "@/race";
+import type { Press } from "@/input/menus";
+import {
+  PLAYER,
+  QUALIFYING_POSITION,
+  type RaceOptions,
+  type RaceOutcome,
+  type RaceResults,
+  type Remark,
+  type Standing,
+} from "@/race";
 import { liveryOf } from "@/renderer/liveries";
 import type { PersonalBest } from "@/save-data/save-data";
 import { Button } from "./Button";
-import { formatPosition, formatRaceTime } from "./format";
+import { useBackKey } from "./Dialog";
+import { difficultyName, formatPosition, formatRaceTime } from "./format";
 import { PANEL, PANEL_TITLE } from "./panel";
-import { RaceSeed } from "./RaceSeed";
+import { RaceReplay } from "./RaceReplay";
 
 const BANNERS: Record<RaceOutcome, string> = { finished: "Finished", wrecked: "Wrecked", busted: "Busted" };
 
@@ -13,9 +23,10 @@ const BANNERS: Record<RaceOutcome, string> = { finished: "Finished", wrecked: "W
  * The buttons can't be pressed, or take the focus, until this long after the
  * results come up (milliseconds), when Restart takes the focus unless the
  * player has already moved it to a button. A gamepad's A presses the button
- * in focus, and A is also a throttle, so a rider still pressing it as the
- * race ends, or pushing the stick that moves the focus, would otherwise
- * restart the race before they had read the results.
+ * in focus and its B goes back to the title, but A is also a throttle and B
+ * a kick, so a rider still pressing them as the race ends, or pushing the
+ * stick that moves the focus, would otherwise leave the results before they
+ * had read them. Esc goes back to the title from then on too, as B does.
  */
 const FOCUS_RESTART_AFTER_MS = 1500;
 
@@ -27,23 +38,25 @@ export function ResultsScreen({
   personalBest,
   newBestTime,
   newBestPosition,
-  seed,
+  raceOptions,
   onRestart,
   onTitle,
 }: {
   results: RaceResults;
+  /** The personal best on the race's difficulty, this race counted. */
   personalBest: PersonalBest;
   newBestTime: boolean;
   newBestPosition: boolean;
-  /** The race's seed, shown for a bug report. */
-  seed: number;
-  onRestart: () => void;
+  /** The race's seed and difficulty, shown for a bug report. */
+  raceOptions: Required<RaceOptions>;
+  onRestart: (press: Press) => void;
   onTitle: () => void;
 }) {
   const newBests = [newBestTime && "time", newBestPosition && "position"].filter(Boolean).join(" and ");
   const restart = useRef<HTMLButtonElement>(null);
   const buttons = useRef<HTMLDivElement>(null);
   const [ready, setReady] = useState(false);
+  useBackKey();
   useEffect(() => {
     const readying = window.setTimeout(() => setReady(true), FOCUS_RESTART_AFTER_MS);
     return () => window.clearTimeout(readying);
@@ -52,34 +65,43 @@ export function ResultsScreen({
     if (ready && !buttons.current?.contains(document.activeElement)) restart.current?.focus(SHOW_FOCUS);
   }, [ready]);
   return (
+    // Centred by its margins, and no wider than the window leaves room for, as a screen over the game is (see `Dialog`).
+    // In a short window, the spacing is tighter, and the column beside the standings wider, for a new best to fit on
+    // one line: so the whole panel is in view even after a first finish with a new best, in a wide font too.
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="results-title"
-      className="absolute inset-0 flex items-center justify-center overflow-y-auto bg-night/55 p-4 backdrop-blur-[2px]"
+      className="absolute inset-0 flex flex-col overflow-y-auto bg-night/55 p-4 backdrop-blur-[2px]"
     >
-      <div className={`flex w-[min(52rem,94vw)] flex-col gap-6 px-8 py-7 md:flex-row md:gap-10 ${PANEL}`}>
-        <div className="flex flex-col items-center gap-4 md:w-72 md:shrink-0">
-          <h2 id="results-title" className={`text-6xl ${PANEL_TITLE}`}>
+      <div className={`m-auto flex w-[min(52rem,94vw)] max-w-full flex-col gap-6 px-8 py-7 short:py-4 md:flex-row md:gap-10 ${PANEL}`}>
+        <div className="flex flex-col items-center gap-4 short:gap-2 md:w-72 md:shrink-0 short:md:w-80">
+          <h2 id="results-title" className={`text-6xl short:text-5xl ${PANEL_TITLE}`}>
             {BANNERS[results.outcome]}
           </h2>
           <p
             data-testid="qualified"
-            className={`font-display text-3xl uppercase italic ${results.qualified ? "text-sunset" : "text-sand/70"}`}
+            className={`font-display text-3xl short:text-2xl uppercase italic ${results.qualified ? "text-sunset" : "text-sand/70"}`}
           >
             {results.qualified ? "Qualified!" : "Not qualified"}
           </p>
           {!results.qualified && results.outcome === "finished" && (
-            <p className="-mt-3 text-sm text-sand/70">Finish {formatPosition(QUALIFYING_POSITION)} or better to qualify.</p>
+            <p className="-mt-3 text-sm text-sand/70 short:-mt-1.5">
+              Finish {formatPosition(QUALIFYING_POSITION)} or better to qualify.
+            </p>
           )}
           {results.remark ? (
             <SaidAfterTheRace remark={results.remark} />
           ) : (
-            <p data-testid="racing-on" className="w-full border-l-4 border-sand/30 py-0.5 pl-4 text-left text-lg italic text-sand/70">
+            <p
+              data-testid="racing-on"
+              className="w-full border-l-4 border-sand/30 py-0.5 pl-4 text-left text-lg italic text-sand/70 short:text-base"
+            >
               The rest of the field is racing to the finish&hellip;
             </p>
           )}
-          <dl className="grid w-full grid-cols-2 gap-x-6 gap-y-2 text-lg">
+          {/* Each label has the room its figure leaves, so that "Best on Normal" stays on one line in a wide font too. */}
+          <dl className="grid w-full grid-cols-[1fr_auto] gap-x-6 gap-y-2 text-lg short:gap-y-0.5 short:text-base">
             <dt className="text-sand/80">Position</dt>
             <dd data-testid="results-position" className="text-right font-semibold tabular-nums text-sand">
               {results.position === null ? "–" : `${formatPosition(results.position)} of ${results.standings.length}`}
@@ -88,7 +110,7 @@ export function ResultsScreen({
             <dd data-testid="results-time" className="text-right font-semibold tabular-nums text-sand">
               {results.time === null ? "–" : formatRaceTime(results.time)}
             </dd>
-            <dt className="text-sand/80">Personal best</dt>
+            <dt className="text-sand/80">Best on {difficultyName(raceOptions.difficulty)}</dt>
             <dd data-testid="personal-best" className="text-right font-semibold tabular-nums text-sand">
               {personalBest.time === null ? "–" : formatRaceTime(personalBest.time)}
             </dd>
@@ -98,15 +120,17 @@ export function ResultsScreen({
             </dd>
           </dl>
           {newBests && (
-            <p className="text-center font-display text-2xl uppercase italic text-sunset">New best {newBests}!</p>
+            <p className="text-center font-display text-2xl uppercase italic text-sunset short:text-lg">New best {newBests}!</p>
           )}
-          <div ref={buttons} inert={!ready} className="flex flex-col gap-3">
-            <Button ref={restart} onClick={onRestart}>
+          <div ref={buttons} inert={!ready} className="flex flex-col gap-3 short:gap-2">
+            <Button ref={restart} onClick={onRestart} className="short:py-2">
               Restart
             </Button>
-            <Button onClick={onTitle}>Back to title</Button>
+            <Button data-back onClick={onTitle} className="short:py-2">
+              Back to title
+            </Button>
           </div>
-          <RaceSeed seed={seed} />
+          <RaceReplay raceOptions={raceOptions} />
         </div>
         <Standings standings={results.standings} complete={results.complete} />
       </div>
@@ -121,7 +145,7 @@ export function ResultsScreen({
 function SaidAfterTheRace({ remark }: { remark: Remark }) {
   return (
     <figure data-testid="remark" className="w-full border-l-4 border-sunset/80 py-0.5 pl-4 text-left">
-      <blockquote className="text-lg italic leading-snug text-sand">&ldquo;{remark.line}&rdquo;</blockquote>
+      <blockquote className="text-lg italic leading-snug text-sand short:text-base">&ldquo;{remark.line}&rdquo;</blockquote>
       <figcaption className="mt-1.5 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-sunset">
         {remark.by.kind === "rider" ? (
           <span

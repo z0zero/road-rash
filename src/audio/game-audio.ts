@@ -1,5 +1,6 @@
 import type { GameSession, RaceView, Screen, SessionState } from "@/game/session";
 import { clamp } from "@/math";
+import type { Settings } from "@/save-data/save-data";
 import {
   isPlayer,
   PLAYER,
@@ -35,15 +36,33 @@ export type SoundSource = Pick<GameSession, "getState" | "subscribe" | "onRaceEv
 /** The game's sound. */
 export interface GameAudio {
   /**
-   * Creates the audio context, or resumes it. Call it straight from a click
-   * that starts a race (Start Race, Restart): browsers only let sound start
-   * from a click or a key press. Never throws: if the browser blocks sound,
-   * the game carries on without it.
+   * Creates the audio context, or resumes it. Call it straight from the press
+   * that starts a race (Start Race, Restart), saying whether it was the
+   * player's own key press or click, which browsers let sound start from,
+   * rather than one the game made for a gamepad (see `Press`). After a
+   * gamepad's press, a browser may keep the sound locked until the next key
+   * press or click. Never throws: if the browser blocks sound, the game
+   * carries on without it.
    */
-  unlock(): void;
+  unlock(byAKeyOrClick: boolean): void;
   /** Stops everything and lets go of the browser's audio. */
   dispose(): void;
 }
+
+/**
+ * A browser that lets the sound start does so at once; one still holding it
+ * back this long after a race asked for it without a key press or click
+ * (milliseconds) is keeping it locked until one. One still holding it back
+ * this long after a key press or click asked for it isn't waiting for one.
+ */
+const LOCKED_AFTER_MS = 1000;
+
+/**
+ * The input that browsers let sound start from: a key press, a click or a
+ * tap. (A gamepad's press counts in some browsers, but not in Safari, nor in
+ * Firefox before 155.)
+ */
+const GESTURES = ["keydown", "mousedown", "pointerup", "touchend"] as const;
 
 /** The music's level while the game is paused: it ducks under the pause menu. */
 const PAUSED_MUSIC_LEVEL = 0.3;
@@ -88,14 +107,37 @@ const LOUDEST_GRAVEL_SPEED = 25;
 /**
  * Starts the game's sound. Call it once the title screen is up: it fetches the
  * music straight away, so the music is ready when the race starts. Nothing
- * plays until `unlock`.
+ * plays until `unlock`. A browser can keep the sound locked even then, as
+ * some do when a gamepad starts the race: `onLockChange` hears when it does,
+ * so that the player can be told a key press or click turns it on, and when
+ * the sound starts after all, from the next one. It never says so to a player
+ * who would hear nothing anyway, with the volumes all the way down, nor after
+ * a key press or click that gave the page the player's activation has failed
+ * to start the sound: such a browser isn't waiting for one.
  */
-export function startGameAudio(session: SoundSource): GameAudio {
+export function startGameAudio(session: SoundSource, onLockChange: (locked: boolean) => void = () => {}): GameAudio {
   const loading = new AbortController();
   const musicBytes = fetchMusic(loading.signal);
   let sound: Sound | null = null;
   /** Set once the sound has broken: the game carries on without it from then on. */
   let broken = false;
+  /** Whether the browser is keeping the sound locked, as `onLockChange` last heard. */
+  let locked = false;
+  /** Set once a key press or click that could start the sound has asked for it and the browser still held it back: it never says it is locked again. */
+  let notWaitingForAKey = false;
+  /** Checks whether the browser held the sound back from a race asked for without a key press or click... */
+  let lockCheck: number | undefined;
+  /** ...and from a key press or click; undefined when none is due. */
+  let keyCheck: number | undefined;
+
+  const setLocked = (now: boolean) => {
+    const told = now && !notWaitingForAKey && wouldBeHeard(session.getState().settings);
+    if (told === locked) return;
+    locked = told;
+    onLockChange(told);
+  };
+  /** Whether the browser is holding the sound back: there is sound, the page can be seen, but it isn't playing. */
+  const heldBack = () => sound !== null && !document.hidden && sound.context.state !== "running";
 
   /** Runs `action` on the sound, if there is any; if the sound breaks, the game carries on without it. */
   const withSound = (action: (sound: Sound) => void) => {
@@ -107,6 +149,7 @@ export function startGameAudio(session: SoundSource): GameAudio {
       sound.close();
       sound = null;
       broken = true;
+      setLocked(false);
     }
   };
 
@@ -117,14 +160,38 @@ export function startGameAudio(session: SoundSource): GameAudio {
   const stopHearingFrames = session.onFrame((view) => withSound((sound) => sound.frame(view)));
   const followVisibility = () => withSound((sound) => sound.setAudible(!document.hidden));
   document.addEventListener("visibilitychange", followVisibility);
+  /**
+   * A key press or click while the browser holds the sound back asks it again
+   * to play it: now it may. If it still doesn't, after one that gave the page
+   * the player's activation, which browsers let sound start from, it isn't
+   * waiting for one. Only the player's own count: not one the game makes, such
+   * as the Enter a gamepad's A presses a choice with, which no browser plays
+   * sound for.
+   */
+  const askAgain = (event: Event) => {
+    if (!event.isTrusted || !heldBack()) return;
+    // Asked even after a press that gave no activation, such as Esc: Safari starts the sound from any key press.
+    withSound((sound) => sound.setAudible(true));
+    if (!givesActivation(event)) return;
+    keyCheck ??= window.setTimeout(() => {
+      keyCheck = undefined;
+      if (!heldBack()) return;
+      notWaitingForAKey = true;
+      setLocked(false);
+    }, LOCKED_AFTER_MS);
+  };
+  for (const gesture of GESTURES) window.addEventListener(gesture, askAgain, { capture: true, passive: true });
 
   return {
-    unlock() {
+    unlock(byAKeyOrClick) {
       if (broken || loading.signal.aborted) return;
       if (!sound) {
         sound = Sound.create();
         if (!sound) return;
         const context = sound.context;
+        context.addEventListener("statechange", () => {
+          if (context.state === "running") setLocked(false);
+        });
         void musicBytes
           .then((bytes) => (bytes ? context.decodeAudioData(bytes) : null))
           .catch(() => null)
@@ -136,6 +203,15 @@ export function startGameAudio(session: SoundSource): GameAudio {
         sound.setAudible(true);
         sound.follow(session.getState());
       });
+      window.clearTimeout(lockCheck);
+      // Asked for from a key press or click, the sound plays now if the browser ever lets it. Asked for without
+      // one, as from a gamepad's press, it may be kept locked until one, even just after one.
+      if (byAKeyOrClick) setLocked(false);
+      else {
+        // Still locked from the last race, it is told so again at once, unless the volumes have gone down since.
+        setLocked(locked);
+        lockCheck = window.setTimeout(() => setLocked(heldBack()), LOCKED_AFTER_MS);
+      }
     },
     dispose() {
       loading.abort();
@@ -143,10 +219,53 @@ export function startGameAudio(session: SoundSource): GameAudio {
       stopHearingEvents();
       stopHearingFrames();
       document.removeEventListener("visibilitychange", followVisibility);
+      for (const gesture of GESTURES) window.removeEventListener(gesture, askAgain, { capture: true });
+      window.clearTimeout(lockCheck);
+      window.clearTimeout(keyCheck);
       sound?.close();
       sound = null;
     },
   };
+}
+
+/**
+ * The keys that give the page no activation pressed alone (`KeyboardEvent.key`),
+ * as the HTML standard and Chromium have it: Esc, and the modifier keys, with
+ * Firefox's old name for the Windows key.
+ */
+const NOT_ACTIVATING_KEYS: ReadonlySet<string> = new Set([
+  "Escape",
+  "Alt",
+  "AltGraph",
+  "CapsLock",
+  "Control",
+  "Fn",
+  "FnLock",
+  "Hyper",
+  "Meta",
+  "NumLock",
+  "OS",
+  "ScrollLock",
+  "Shift",
+  "Super",
+  "Symbol",
+  "SymbolLock",
+]);
+
+/**
+ * Whether the player's key press, click or tap `event`, heard as it happens,
+ * gave the page their activation, which browsers let sound start from: as the
+ * browser says, which by then it has counted, or where it can't say, any but
+ * Esc or a modifier key pressed alone.
+ */
+function givesActivation(event: Event): boolean {
+  if (navigator.userActivation) return navigator.userActivation.isActive;
+  return !(event instanceof KeyboardEvent && NOT_ACTIVATING_KEYS.has(event.key));
+}
+
+/** Whether anything would be heard at the player's volumes: not with the master volume, or both the others, at 0. */
+function wouldBeHeard({ masterVolume, musicVolume, effectsVolume }: Settings): boolean {
+  return masterVolume > 0 && (musicVolume > 0 || effectsVolume > 0);
 }
 
 /** How the player hears a sound: how loud (0 to 1) and how far left or right (-1 to 1). */
