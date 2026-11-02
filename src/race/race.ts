@@ -75,7 +75,8 @@ export interface TestSetup {
    * The cars on the road: the traffic, as in every race (the default); none,
    * on a closed road; or only the `cars` a test puts on a road closed to
    * every other car, so that it can put one in a rider's way: each stands
-   * still, or drives on at a steady speed, whatever is in its way.
+   * still, or drives on at a steady speed, changing lanes when it is told to,
+   * whatever is in its way.
    */
   readonly traffic?: "flowing" | "closed" | { readonly cars: readonly TestCar[] };
   /** Whether cops wait along the track to join the race (the default). Without them, nobody is busted. */

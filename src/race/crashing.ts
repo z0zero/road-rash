@@ -104,6 +104,8 @@ function canRemount(crash: Crash, bike: Readonly<Motion>): boolean {
 
 /** A rider at their bike looks this many seconds ahead for a car that would run into them as they ride off on it... */
 const LOOKING_OUT_FOR_CARS = 0.5;
+/** ...or pass within this many metres of its side, near enough for them to drift into it as they set off... */
+const PASSING_CLOSE = 0.3;
 /** ...and waits by the bike for it to go by, standing this many metres clear of its side... */
 const STANDING_CLEAR = 0.1;
 /** ...which a car going by at speed takes a second or less to do... */
@@ -125,19 +127,20 @@ function wayOf(car: Footprint): readonly [number, number] {
  * The cars, of `cars` (by their footprints), that carried on at their speed
  * for `LOOKING_OUT_FOR_CARS` would run into the bike `bike` if its rider rode
  * off on it now, along the road at `TUNING.remountSpeed`: those whose way
- * takes in the bike's, and that meet it on the way fast enough to crash them,
- * at `TUNING.bumpSpeedLimit` or more. A car standing still over or beside the
- * bike, or crawling along their way in a queue, would only bump them, so it
- * is never one; nor is a cop's bike or another rider's, since in a run-in
- * only the faster of two bikes crashes, never one setting off, and never a
- * cop.
+ * takes in the bike's, or passes within `PASSING_CLOSE` of its side, and that
+ * meet it on the way fast enough to crash them, at `TUNING.bumpSpeedLimit` or
+ * more. A car standing still over or beside the bike, or crawling along their
+ * way in a queue, would only bump them, so it is never one; nor is a cop's
+ * bike or another rider's, since in a run-in only the faster of two bikes
+ * crashes, never one setting off, and never a cop.
  */
 function carsComing(bike: Readonly<Motion>, cars: readonly Footprint[]): Footprint[] {
   return cars.filter((car) => {
     const closing = car.velocity - TUNING.remountSpeed;
     if (Math.abs(closing) < TUNING.bumpSpeedLimit) return false;
     const [left, right] = wayOf(car);
-    if (bike.offset + BIKE_WIDTH / 2 <= left || bike.offset - BIKE_WIDTH / 2 >= right) return false;
+    const reach = BIKE_WIDTH / 2 + PASSING_CLOSE;
+    if (bike.offset + reach <= left || bike.offset - reach >= right) return false;
     // How far its middle is ahead of the bike's now, and once carried on: they meet if they are nose to tail or closer between.
     const now = car.distance - bike.distance;
     const then = now + closing * LOOKING_OUT_FOR_CARS;

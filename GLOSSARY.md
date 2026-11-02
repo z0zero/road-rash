@@ -125,7 +125,7 @@ A rider off their bike after a crash, once they have stopped tumbling along the 
 _Avoid_: Running, walking, dismounted
 
 **Remounting**:
-A rider on foot getting back on their bike as soon as they reach it, which sets off slowly, with at least half their stamina back. But while a car is coming that, carried on half a second at its speed, would run into the bike as they rode off, they wait by it instead, stepping out of the car's way, and get on once no car is coming, or after three seconds at most; the player's HUD says "Car coming!" meanwhile. Only a car that would meet the bike fast enough to crash them keeps them waiting: never one standing still over or beside it, or crawling along in a queue going their way, which they would only bump, nor a cop or another rider. A cop can bust a rider waiting by their bike, as one running back to it, so a rider with a cop riding to bust them close by doesn't wait: they chance the car.
+A rider on foot getting back on their bike as soon as they reach it, which sets off slowly, with at least half their stamina back. But while a car is coming that, carried on half a second at its speed, would run into the bike as they rode off, or pass within 0.3 m of its side, near enough for them to drift into it as they set off, they wait by it instead, stepping out of the car's way, and get on once no car is coming, or after three seconds at most; the player's HUD says "Car coming!" meanwhile. Only a car that would meet the bike fast enough to crash them keeps them waiting: never one standing still over or beside it, or crawling along in a queue going their way, which they would only bump, nor a cop or another rider. A cop can bust a rider waiting by their bike, as one running back to it, so a rider with a cop riding to bust them close by doesn't wait: they chance the car.
 _Avoid_: Getting up, respawning
 
 **Knock-down**:
@@ -193,7 +193,7 @@ One of the traffic's cars: a hatchback, saloon, van or pickup, driving in the ra
 _Avoid_: Vehicle, NPC
 
 **Closed road**:
-A road with no traffic, which a test can set a race up on, with cars where it puts them if it needs one in a rider's way, each standing still or driving on at a steady speed; the game's races always run in traffic.
+A road with no traffic, which a test can set a race up on, with cars where it puts them if it needs one in a rider's way, each standing still or driving on at a steady speed, changing lanes when it says; the game's races always run in traffic.
 _Avoid_: Empty road, private road
 
 **Traffic**:
