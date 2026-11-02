@@ -19,6 +19,7 @@ import { ClubIcon } from "./ClubIcon";
 import { formatRaceTime, toKmh } from "./format";
 import { useKeyboardLabels } from "./key-names";
 import { Alternatives, keyCombos, padCombos } from "./KeyCaps";
+import { PANEL, PANEL_TITLE } from "./panel";
 
 /** How long "GO!" stays up after the countdown, in seconds of race time. */
 const GO_SECONDS = 0.8;
@@ -38,8 +39,9 @@ const HIT_BACK_PROMPT_SECONDS = 4;
  * flashing unless motion is reduced), callouts when a club changes hands
  * with the player or a cop fights back, goes down or busts someone, the
  * hit-back prompt, naming the controls of `inputDevice`, the one the player is
- * using, and a note while the browser keeps the sound locked. It is updated
- * straight from the frame loop through refs, never through React state.
+ * using, a note while the player waits at their bike for a car to go by, and
+ * a note while the browser keeps the sound locked. It is updated straight from
+ * the frame loop through refs, never through React state.
  */
 export function Hud({
   session,
@@ -71,6 +73,7 @@ export function Hud({
   const nearestClub = useRef<HTMLSpanElement>(null);
   const nearestIsCop = useRef<HTMLSpanElement>(null);
   const copAlert = useRef<HTMLDivElement>(null);
+  const carComing = useRef<HTMLDivElement>(null);
   const callout = useRef<HTMLDivElement>(null);
   /** The stretch of race time the callout shows for. */
   const calloutShown = useRef({ from: 0, until: 0 });
@@ -136,6 +139,7 @@ export function Hud({
         setShown(copAlert.current, current.cops.some((cop) => cop.near));
         const copComing = current.cops.some((cop) => cop.busting === PLAYER);
         setText(status.current, statusOf(player, copComing));
+        setShown(carComing.current, player.waitingForACar);
         setShown(playerClub.current, player.weapon === "club");
         // A callout or the hit-back prompt goes once its time is up, or straight away in a race that has started over.
         const { from, until } = calloutShown.current;
@@ -159,6 +163,12 @@ export function Hud({
         data-testid="rider-status"
         className="absolute inset-x-0 top-[40%] text-center text-4xl uppercase italic text-sunset drop-shadow-[0_4px_0_rgba(27,16,38,0.85)] empty:hidden"
       />
+      {/* In the rider status's place, which is empty while it shows. */}
+      <div ref={carComing} data-testid="car-coming" role="status" className="absolute inset-x-0 top-[40%] hidden">
+        <div className={`mx-auto w-fit px-6 py-2 ${PANEL} ${reduceMotion ? "" : "animate-prompt-in"}`}>
+          <span className={`${PANEL_TITLE} text-4xl leading-none`}>Car coming!</span>
+        </div>
+      </div>
       <div
         ref={callout}
         data-testid="callout"
@@ -414,10 +424,12 @@ function calloutFor(event: RaceEvent, { riders, cops }: RaceSnapshot): string | 
 /**
  * What the player is doing, if they are off their bike: tumbling after a
  * crash, or after a car knocked them down, then on foot, with a cop riding
- * to bust them from the moment it sets off if `copComing`.
+ * to bust them from the moment it sets off if `copComing`; but nothing while
+ * they wait at their bike for a car to go by, which the car-coming note says
+ * in its place.
  */
 function statusOf(player: RiderSnapshot, copComing: boolean): string {
-  if (player.status !== "racing" || player.crash === null) return "";
+  if (player.status !== "racing" || player.crash === null || player.waitingForACar) return "";
   if (player.crash === "on-foot") return copComing ? "Cop coming! Back to your bike!" : "Back to your bike!";
   return `${player.crash === "knocked-down" ? "Knocked down!" : "Crash!"}${copComing ? " Cop coming!" : ""}`;
 }
