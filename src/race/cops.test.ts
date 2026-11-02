@@ -475,7 +475,7 @@ describe("busting", () => {
 
   it("leaves alone a rider who crashes more than 80 m from it: a cop following the player then pulls over onto the shoulder until they are back on their bike", WHOLE_RACES, () => {
     // Following 1.5 s behind a player riding 54 m/s or more, the cop is over 80 m behind them.
-    const { race, cop, speed, behind } = crashedAtSpeedAheadOfTheFollowingCop([7, 5, 4, 6, 2]);
+    const { race, cop, speed, behind } = crashedAtSpeedAheadOfTheFollowingCop([7, 5, 4, 6, 2, 9]);
     expect(speed).toBeGreaterThanOrEqual(54);
     expect(behind).toBeGreaterThan(80);
     expect(cop().busting).toBeNull();
