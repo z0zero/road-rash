@@ -75,15 +75,16 @@ function signOnTheShoulder() {
 }
 
 /**
- * A started race on a closed road with no cops, set up besides as `setup`
- * says, in which the player has kicked the racer who lined up nearest them off
- * the road, ahead of `sign` (on the right shoulder), and ridden beside it on
- * its inside, so that it can't come back onto the road, until it has stopped
- * behind the sign, or behind whatever stands there; the player is beside it,
- * all but stopped too.
+ * A started race (`seed` 12 unless given) on a closed road with no cops, set
+ * up besides as `setup` says, in which the player has kicked the racer who
+ * lined up nearest them off the road, ahead of `sign` (on the right shoulder),
+ * and ridden beside it on its inside, so that it can't come back onto the
+ * road, until it has stopped behind the sign, or behind whatever stands there;
+ * the player is beside it, all but stopped too. In few races does it stop
+ * there: in most, it gets past the sign first, or the kick misses.
  */
-function pinnedBehindASign(sign: ObstaclePlacement, setup: TestSetup = {}) {
-  const race = startedRace(8, { ...CLOSED_ROAD, ...NO_COPS, ...setup });
+function pinnedBehindASign(sign: ObstaclePlacement, setup: TestSetup = {}, seed = 12) {
+  const race = startedRace(seed, { ...CLOSED_ROAD, ...NO_COPS, ...setup });
   const target = nearestOpponent(race, "racer");
   const them = () => race.snapshot().riders[target];
   const alongside = rideAlongside(race, target);
@@ -307,7 +308,7 @@ describe("the opponents", () => {
     // A car pulled over onto the shoulder beside the sign the racer is pinned behind, so that it can't squeeze past it
     // while the player stands beside it.
     const sign = signOnTheShoulder();
-    const { race, them } = pinnedBehindASign(sign, { traffic: { cars: [{ distance: sign.distance, offset: 7.8 }] } });
+    const { race, them } = pinnedBehindASign(sign, { traffic: { cars: [{ distance: sign.distance, offset: 7.8 }] } }, 8);
     stepFor(race, 1, { ...NO_INPUT, brake: 1 });
     // The player rolls on, out of the racer's reach, and stops dead in the outer lane, in the racer's way back onto the road.
     let lastOffset = player(race).offset;

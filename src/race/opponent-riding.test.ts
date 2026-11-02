@@ -345,6 +345,68 @@ describe("a faster rider coming up behind", () => {
     expect(then.line).toBeGreaterThanOrEqual(2.2 + 0.8);
   });
 
+  it("keeps looking out for a faster rider coming up behind it until they are two seconds from getting alongside it", () => {
+    // Riding at 25 m/s in the outer lane, with a saloon going 12 m/s 20 m ahead of its front, and a rider 12 m behind
+    // it, 2.2 m out, coming up at 35 m/s: closing at 10 m/s, fast enough to crash into it, they would be alongside it in
+    // 0.9 s.
+    const me = bike(1000, 4.5, 25);
+    const comingUp = bike(988, 2.2, 35);
+    const car = saloon(1023.3, 4.5, 12);
+    const lookingOutFor = new Map<Readonly<Motion>, number>();
+    const first = lineAround(me, 4.5, [me, comingUp], [car], EDGE, SHOULDER_EDGE, null, lookingOutFor);
+    // They ease off to 31 m/s, 1.5 s from getting alongside it, closing too slowly to crash into it.
+    comingUp.speed = 31;
+
+    const then = lineAround(me, 4.5, [me, comingUp], [car], EDGE, SHOULDER_EDGE, null, lookingOutFor);
+
+    // It holds behind the car rather than pull out round it in front of them, as it would if it hadn't been looking
+    // out for them, a metre clear of the car's side.
+    expect(first.line).toBe(4.5);
+    expect(then.line).toBe(4.5);
+    expect(lineAround(me, 4.5, [me, comingUp], [car], EDGE, SHOULDER_EDGE).line).toBeCloseTo(4.5 - 0.9 - 1);
+  });
+
+  it("gets out of the way of a rock it can't stop short of in front of a faster rider coming up behind it more than a second back, closing on it at little more than a bump", () => {
+    // Braking from 13.2 m/s in the outer lane, 4 m out, with a fallen rock 0.75 m across its base each way 5.7 m ahead
+    // of its middle, in its lane: it would need 7.3 m to stop, but has 4 m. A rider is 12.7 m behind it, 3.1 m out,
+    // at 23 m/s: closing at 9.8 m/s, they would reach it in 1.1 s.
+    const me = bike(1000, 4, 13.2);
+    const rock: Footprint = { distance: 1005.7, offset: 4.5, movingTo: 4.5, velocity: 0, halfLength: 0.75, halfWidth: 0.75 };
+    const comingUp = (distance: number, speed: number) => {
+      const them = bike(distance, 3.1, speed);
+      return lineAround(me, 4.5, [me, them], [rock], EDGE, SHOULDER_EDGE).line;
+    };
+
+    // It goes round the rock's left, a metre clear of its side, into the rider's path, rather than run into the rock:
+    // they have time to see it, and would hardly do more than bump it.
+    expect(comingUp(987.3, 23)).toBeCloseTo(4.5 - 0.75 - 1);
+    // A rider closing on it at 10.5 m/s, though 1.05 s from reaching it, or at 9.8 m/s but 0.97 s from reaching it, it
+    // keeps out of the path of, squeezing past the rock's right instead.
+    expect(comingUp(987, 23.7)).toBeGreaterThanOrEqual(4.5 + 0.75 + 0.4);
+    expect(comingUp(988.5, 23)).toBeGreaterThanOrEqual(4.5 + 0.75 + 0.4);
+  });
+
+  it("keeps a bike whose steering has carried it out of the path of a car it can't stop short of, towards a faster rider coming up behind it, out of the car's path", () => {
+    // Riding at 30 m/s, 3.9 m out, with a saloon stopped in the outer lane 30 m ahead of its front, and a rider 12 m
+    // behind it, 2.6 m out, coming up at 41 m/s, who would be alongside it in 0.8 s.
+    const me = bike(1000, 3.9, 30);
+    const comingUp = bike(988, 2.6, 41);
+    const car = saloon(1033.3, 4.5, 0);
+    const lookingOutFor = new Map<Readonly<Motion>, number>();
+    lineAround(me, 4.5, [me, comingUp], [car], EDGE, SHOULDER_EDGE, null, lookingOutFor);
+    // Its steering has carried it on to 3.1 m out, out of the car's path but nearer the rider's line than it was, by
+    // the time it has braked to 28 m/s and they are 11.7 m behind it.
+    Object.assign(me, { distance: 1009, offset: 3.1, speed: 28 });
+    comingUp.distance = 997.3;
+
+    const { line } = lineAround(me, 4.5, [me, comingUp], [car], EDGE, SHOULDER_EDGE, null, lookingOutFor);
+
+    // Still looking out for them, from where it was when it began to, it stays out of the car's path, which reaches
+    // 4.5 - 0.9 - 0.4 m, rather than get back there, 0.8 m from their line, and run into the car.
+    expect(lookingOutFor.get(comingUp)).toBe(3.9);
+    expect(line).toBeLessThanOrEqual(4.5 - 0.9 - 0.4);
+  });
+
   it("doesn't make way for a faster rider coming up behind it close beside its path", () => {
     // On its racing line, with a rider 8 m behind it, a metre to its right, coming up 12 m/s faster.
     const me = bike(1000, 1.5, 25);
@@ -505,5 +567,37 @@ describe("squeezing past", () => {
     // Out of its path, which reaches from -4.5 - 0.9 - 0.4 m to -4.5 + 0.9 + 0.4 m, and still rolling, so as to steer.
     expect(line < -5.8 || line > -3.2).toBe(true);
     expect(holdBehind).toBeGreaterThan(0);
+  });
+
+  it("squeezes a bike past a car stopped in its lane that it can't stop short of out onto the shoulder, when a rider alongside it keeps it from getting round the car's other side", () => {
+    // Riding at 35 m/s in the outer lane, with a saloon stopped in it 25 m ahead of its front (it would need 51 m to
+    // stop), and nobody coming up behind it.
+    const me = bike(1000, 4.5, 35);
+    const car = saloon(1028.3, 4.5, 0);
+    const alongside = bike(1000.5, 3.3, 35);
+
+    const { line } = lineAround(me, 4.5, [me, alongside], [car], EDGE, SHOULDER_EDGE);
+
+    // With a rider alongside it 1.2 m to its left, it squeezes past the car's right, beyond the car's path (which
+    // reaches 4.5 + 0.9 + 0.4 m), out onto the shoulder, rather than run into it; alone, it would go round its left.
+    expect(line).toBeGreaterThanOrEqual(4.5 + 0.9 + 0.4);
+    expect(line).toBeLessThanOrEqual(SHOULDER_EDGE);
+    expect(lineAround(me, 4.5, [me], [car], EDGE, SHOULDER_EDGE).line).toBeCloseTo(4.5 - 0.9 - 1);
+  });
+
+  it("keeps a bike boxed in on the road by a rider alongside it, rather than squeeze out onto the shoulder, while a car coming towards it is still far ahead", () => {
+    // Riding at 38 m/s, 3.4 m out on the oncoming side, with a rider alongside it on its right, 0.7 m nearer the middle
+    // of the road, and a car coming towards it in the outer oncoming lane, 140 m off at 25 m/s.
+    const me = bike(1000, -3.4, 38);
+    const field = [me, bike(998, -2.7, 38)];
+    const boxedInBy = (car: Footprint) => lineAround(me, -1.5, field, [car], EDGE, SHOULDER_EDGE);
+
+    const { line, holdBehind } = boxedInBy(saloon(1140, -4.5, -25));
+
+    // It stays where it is, braking hard to drop back behind the rider, as it does once the car is close, rather than
+    // ride the shoulder; had the car stopped in its lane 30 m ahead, it would have squeezed past it out onto the shoulder.
+    expect(line).toBe(-3.4);
+    expect(holdBehind).toBe(0);
+    expect(boxedInBy(saloon(1033.3, -4.5, 0)).line).toBeLessThanOrEqual(-6);
   });
 });
