@@ -41,6 +41,7 @@ See ADR 0004.
 
 - Test only at the agreed seams:
   - **The Race module.** Create a race from its options (a seed, and a difficulty unless Normal), feed it scripted input step by step, and assert on snapshots, events and results. To try one rule at a time, a test may set the race up on a closed road (with cars where it puts them, standing still or driving on at a steady speed, if it needs any), without cops or on a worn bike, through the test helpers' `setUpRace`; `@/race` doesn't offer that, since the game never does it.
+  - **Finding a way around, in the Race module.** Where a set-up is too fine for a race to reach, such as a bike a few centimetres outside a slow car's path, moving across at a given speed, or a rider a given distance behind it, closing at a given speed, a test may ask `lineAround` (`opponent-riding.ts`) directly where a bike would ride and how fast it may go, a step at a time, given the motions of the bikes around it and the cars and obstacles on the road: every opponent and every cop finds its way around with it, and its tests have done so since 1.1.0.
   - **Save data.**
   - **The browser smoke test** against the static export.
 - Rendering, input mapping and audio have no unit tests; the smoke test and play-testing cover them.

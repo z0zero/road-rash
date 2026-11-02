@@ -3,6 +3,7 @@ import type { FighterState } from "./fighting";
 import type { Patience } from "./opponent-fighting";
 import type { OpponentRiding } from "./opponent-riding";
 import type { Temperament } from "./opponents";
+import type { Motion } from "./riding";
 import type { Moving } from "./track";
 
 /** The player is always rider 0. */
@@ -26,6 +27,11 @@ export interface Opponent extends RiderState {
   readonly temperament: Temperament;
   /** How it rides this race. */
   readonly riding: OpponentRiding;
+  /**
+   * The riders coming up behind it that it looks out for, from one step to the next, each with where it was when it
+   * began to (see `opponentControls`).
+   */
+  readonly lookingOutFor: Map<Readonly<Motion>, number>;
 }
 
 /** What the race keeps track of for every rider, the player or an opponent, besides what it does for anyone who fights. */
