@@ -6,6 +6,8 @@ import type { Footprint } from "./footprint";
 import {
   BRAKING_LEAD,
   EDGE_MARGIN,
+  EVASIVE_RESPONSE,
+  EVASIVE_SPEED,
   levelWith,
   lineAround,
   PLANNED_BRAKING,
@@ -316,8 +318,15 @@ function ridingBack(me: Readonly<Motion>, line: number, behind: readonly Behind[
 
 /** Making way for those behind it, a cop gets this many metres clear of their path, sideways... */
 const MAKING_WAY = 0.3;
-/** ...and steers for a line at least this many metres to that side while it is still in their path, so as to steer as fast as it can. */
-const OUT_OF_THE_WAY = 1.5;
+/**
+ * ...and steers for a line at least this many metres to that side while it is
+ * still in their path, so as to steer as fast as it can: steering briskly for
+ * a line this far off, or further, takes a bike sideways as fast as it can. It
+ * never steers that fast against the way it is steering, nor on past the line
+ * it wants but where a step that fast takes it out of their path (see
+ * `bustingIntent`).
+ */
+const OUT_OF_THE_WAY = EVASIVE_SPEED / EVASIVE_RESPONSE;
 
 /**
  * The way a cop at `me`, slowing down to `slowingTo` m/s and needing to brake
@@ -376,16 +385,19 @@ function makingWay(
  * brakes no harder than one coming up behind it in its path can, and pulls up
  * on their other side when it can't get to the nearer one as it is, or would
  * brake there harder than that; should even that take it past them, it first
- * gets clear of that one's path, steering out of it as fast as it can, and
- * never moves into or across the path of another who would keep it from
- * braking hard enough (see `makingWay`). Once past them, it gets out of the
- * path of whoever keeps it from braking as hard as it can before it pulls up
- * beside them. If they are behind it, it
- * stops and rides back down the road to them, holding back for anyone or
- * anything behind it in its path (see `ridingBack`). It finds its way around
- * the riders on the road (`field`, the motions of everyone on a bike) and the
- * cars and obstacles on it as on patrol, and never pulls across the path of one
- * coming up behind it. Offsets stay within `edge`.
+ * gets clear of that one's path, steering out of it as fast as it can, though
+ * never that fast against the way it is steering, nor on past the line it wants
+ * unless a step that fast takes it out of their path: on a line still in their
+ * path it holds that line rather than shake from side to side. It never moves
+ * into or across the path of another who would keep it from braking hard
+ * enough, unless every line would; then it takes the one that lets it brake
+ * hardest (see `makingWay`). Once past them, it gets out of the path of whoever
+ * keeps it from braking as hard as it can before it pulls up beside them. If
+ * they are behind it, it stops and rides back down the road to them, holding
+ * back for anyone or anything behind it in its path (see `ridingBack`). It
+ * finds its way around the riders on the road (`field`, the motions of everyone
+ * on a bike) and the cars and obstacles on it as on patrol, and never pulls
+ * across the path of one coming up behind it. Offsets stay within `edge`.
  */
 function bustingIntent(
   me: Readonly<Motion>,
@@ -411,9 +423,18 @@ function bustingIntent(
   const { line, holdBehind } = makingWay(me, beside, otherSide, pace, needs, behind, edge, route);
   const speed = pace > 0 ? Math.min(pace, holdBehind) : Math.max(pace, -ridingBack(me, line, behind));
   const braking = brakingFor(me, speed, behind);
-  // Kept from braking as hard as it needs to by one in its path, it steers out of it as fast as it can.
+  // Kept from braking as hard as it needs to by one in its path, it steers out of it as fast as it can, though never that
+  // fast against the way it is steering, and on past its line only where a step that fast takes it out of their path: at
+  // a line still in their path it holds it, rather than steer flat out past it one way and then the other.
   const across = line - me.offset;
-  const held = (braking ?? BRAKING) < needs && Math.abs(across) < OUT_OF_THE_WAY && across !== 0;
+  const aStep = Math.min(EVASIVE_SPEED, maxSidewaysSpeed(Math.abs(me.speed))) * STEP_SECONDS;
+  const outInAStep = () => (brakingFor({ ...me, offset: me.offset + Math.sign(across) * aStep }, speed, behind) ?? BRAKING) >= needs;
+  const held =
+    (braking ?? BRAKING) < needs &&
+    Math.abs(across) < OUT_OF_THE_WAY &&
+    across !== 0 &&
+    Math.sign(across) !== -Math.sign(me.steering) &&
+    (Math.abs(across) > aStep || outInAStep());
   return { speed, line: held ? me.offset + Math.sign(across) * OUT_OF_THE_WAY : line, hurrying: true, braking };
 }
 
