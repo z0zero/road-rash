@@ -1,6 +1,6 @@
 import type { Random } from "./random";
 import { BIKE_LENGTH, BIKE_WIDTH, clamp } from "./riding";
-import { STEP_SECONDS } from "./steps";
+import { STEP_SECONDS, stepsIn } from "./steps";
 import type { Moving, Track, TrackPosition } from "./track";
 
 /** The body a car is built on, which sets its size. */
@@ -128,12 +128,19 @@ export interface TestCar extends TrackPosition {
   readonly speed?: number;
   /** Whether it drives towards the riders, against the race direction. */
   readonly oncoming?: boolean;
+  /**
+   * For a car that changes lanes: the offset of the middle of the lane it
+   * moves across to, as a car changing lanes does, and how many seconds after
+   * the race is set up it starts to. Unless given, it keeps to its offset.
+   */
+  readonly laneChange?: { readonly to: number; readonly after: number };
 }
 
 /**
  * Saloons where a test puts them (`placed`), on a road closed to every other
  * car: each stands still, or drives on at a steady speed in its own
- * direction, keeping to its offset, whatever is in its way.
+ * direction, keeping to its offset or changing lanes when it is told to,
+ * whatever is in its way.
  */
 export function testCars(placed: readonly TestCar[]): Traffic {
   const { kind, length, width } = KINDS.find((each) => each.kind === "saloon") ?? KINDS[0];
@@ -150,12 +157,24 @@ export function testCars(placed: readonly TestCar[]): Traffic {
     lane: offset,
     laneChangeIn: Infinity,
   }));
+  let steps = 0;
   return {
     cars,
     step() {
-      for (const car of cars) car.distance += velocityOf(car) * STEP_SECONDS;
+      steps++;
+      cars.forEach((car, id) => {
+        const change = placed[id].laneChange;
+        if (change && steps > stepsIn(change.after)) car.lane = change.to;
+        driveOn(car);
+      });
     },
   };
+}
+
+/** Moves a car on by a step at its speed, and across towards the middle of its lane at `LANE_CHANGE_SPEED`. */
+function driveOn(car: Car) {
+  car.distance += velocityOf(car) * STEP_SECONDS;
+  car.offset += clamp(car.lane - car.offset, -LANE_CHANGE_SPEED * STEP_SECONDS, LANE_CHANGE_SPEED * STEP_SECONDS);
 }
 
 /** A car's speed along the track (m/s): negative for an oncoming car. */
@@ -357,10 +376,7 @@ export function createTraffic(track: Track, random: Random, player: Around, clea
         changeLanes(car, riders);
         keepDistance(car, riders);
       }
-      for (const car of cars) {
-        car.distance += (car.oncoming ? -car.speed : car.speed) * STEP_SECONDS;
-        car.offset += clamp(car.lane - car.offset, -LANE_CHANGE_SPEED * STEP_SECONDS, LANE_CHANGE_SPEED * STEP_SECONDS);
-      }
+      for (const car of cars) driveOn(car);
 
       const { back, front } = windowAround(player.distance);
       for (let i = cars.length - 1; i >= 0; i--) {
