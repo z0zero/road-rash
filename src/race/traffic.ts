@@ -63,7 +63,7 @@ const ROCK_STOP = 3;
 const FOLLOWING_GAP = 8;
 const FOLLOWING_SECONDS = 1;
 /** ...braking at up to this many m/s² to keep its distance, and pulling away again at up to this many. */
-const BRAKING = 6;
+export const CAR_BRAKING = 6;
 const ACCELERATION = 2;
 
 /** A car on the road: someone driving by who isn't racing. */
@@ -313,12 +313,12 @@ export function createTraffic(track: Track, random: Random, player: Around, clea
   const keepDistance = (car: Car, riders: readonly RiderOrCopOnTheRoad[]) => {
     let wanted = car.cruise;
     const rock = rockAhead(car, car.distance, car.offset);
-    if (rock) wanted = Math.min(wanted, Math.sqrt(2 * BRAKING * Math.max(0, rock.gap - ROCK_STOP)));
+    if (rock) wanted = Math.min(wanted, Math.sqrt(2 * CAR_BRAKING * Math.max(0, rock.gap - ROCK_STOP)));
     for (const rider of car.oncoming ? [] : riders) {
       const gap = rider.distance - car.distance - car.length / 2 - BIKE_LENGTH / 2;
       const inItsLane = Math.abs(rider.offset - car.offset) < (car.width + BIKE_WIDTH) / 2;
       if (!rider.onTheirBike || !inItsLane || gap <= -BIKE_LENGTH || rider.speed >= car.speed) continue;
-      wanted = Math.min(wanted, rider.speed + Math.sqrt(2 * BRAKING * Math.max(0, gap - FOLLOWING_GAP)));
+      wanted = Math.min(wanted, rider.speed + Math.sqrt(2 * CAR_BRAKING * Math.max(0, gap - FOLLOWING_GAP)));
     }
     for (const them of cars) {
       if (them === car || them.oncoming !== car.oncoming) continue;
@@ -328,9 +328,10 @@ export function createTraffic(track: Track, random: Random, player: Around, clea
       if (!sideBySide || along <= 0) continue;
       if (ahead < FOLLOWING_GAP + car.speed * FOLLOWING_SECONDS) wanted = Math.min(wanted, them.speed);
       // And it slows in time for a much slower car further on, such as one stopped short of a fallen rock.
-      wanted = Math.min(wanted, them.speed + Math.sqrt(2 * BRAKING * Math.max(0, ahead - FOLLOWING_GAP)));
+      wanted = Math.min(wanted, them.speed + Math.sqrt(2 * CAR_BRAKING * Math.max(0, ahead - FOLLOWING_GAP)));
     }
-    car.speed += clamp(wanted - car.speed, -BRAKING * STEP_SECONDS, ACCELERATION * STEP_SECONDS);
+    // It never backs up, even for a cop rolling backwards in front of it: it stops and waits.
+    car.speed += clamp(Math.max(0, wanted) - car.speed, -CAR_BRAKING * STEP_SECONDS, ACCELERATION * STEP_SECONDS);
   };
 
   const windowAround = (distance: number) => ({

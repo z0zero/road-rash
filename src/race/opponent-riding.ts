@@ -44,8 +44,8 @@ export function catchUpFor(gap: number, { near, far, most }: CatchUp): number {
 
 /** Opponents hold their line through a bend using at most this share of the sideways speed steering gives... */
 const CORNER_GRIP = 0.78;
-/** ...and plan to brake for the bends ahead at this rate (m/s²), short of the bike's full braking. */
-const PLANNED_BRAKING = 8;
+/** ...and plan to brake for the bends ahead, and for what is in their way, at this rate (m/s²), short of the bike's full braking. */
+export const PLANNED_BRAKING = 8;
 /** Opponents, and cops, brake for what lies this many seconds ahead, to allow for the time braking takes to bite. */
 export const BRAKING_LEAD = 0.3;
 /** How hard an opponent opens the throttle per m/s below the speed it wants, and brakes per m/s above it. */
@@ -134,19 +134,22 @@ const EVASIVE_SPEED = 6;
  * A cop at a standstill, boxed in behind a rider stopped just in front of it,
  * with too little room to get round them, paddles back at this speed (m/s),
  * steering for its line round them, since a bike can't move sideways while it
- * stands still; but only until it has the room, and never once they are no
- * longer in its way, `ALONGSIDE` metres ahead of it (see `lineAround`).
+ * stands still; but only until it has the room, never once they are no longer
+ * in its way, `ALONGSIDE` metres ahead of it, and never with anyone or anything
+ * just behind it in its path (see `lineAround`).
  */
 const PADDLING_BACK = 0.5;
 
 /**
  * How a cop finds its way around, besides as an opponent does (see
  * `lineAround`): the line it takes when it would take `line`, so as never to
- * pull across the path of a rider or a car coming up behind it. Its bike can
- * roll backwards, as a rider's can't.
+ * pull across the path of a rider or a car coming up behind it; and whether it
+ * has room to roll back, with nobody and nothing just behind it in its path.
+ * Its bike can roll backwards, as a rider's can't.
  */
 export interface ACopsWay {
   readonly keepTo: (line: number) => number;
+  readonly roomBehind: boolean;
 }
 
 /** What an opponent is up to besides racing. */
@@ -349,10 +352,11 @@ interface Room {
  * line it does take (`keepTo`), and holds back as that line needs. A cop's
  * bike can roll backwards, but a cop held back to a stop stays put rather than
  * roll back, unless, at a standstill behind a rider stopped in its way, its
- * line takes it round them but not before it reaches their back: then it
- * paddles back (`PADDLING_BACK`), steering for that line, until it gets round
- * them in time; and it goes round a rider on their far side if it gets round
- * them there in time, or will once it has paddled back.
+ * line takes it round them but not before it reaches their back, and it has
+ * room behind it (`roomBehind`): then it paddles back (`PADDLING_BACK`),
+ * steering for that line, until it gets round them in time; and it goes round
+ * a rider on their far side if it gets round them there in time, or will once
+ * it has paddled back.
  */
 export function lineAround(
   me: Readonly<Motion>,
@@ -423,10 +427,15 @@ export function lineAround(
   };
   /**
    * Whether it is a cop at a standstill, boxed in behind a rider stopped in front of it, whose `line` takes it clear
-   * past them, but not before it reaches their back: it paddles back until it does.
+   * past them, but not before it reaches their back, with room behind it: it paddles back until it does.
    */
   const paddlesBackRound = (other: Readonly<Motion>, line: number) =>
-    cop !== null && me.speed <= 0 && other.speed <= 0 && Math.abs(line - other.offset) >= BIKE_WIDTH && !takesItRound(other, line);
+    cop !== null &&
+    cop.roomBehind &&
+    me.speed <= 0 &&
+    other.speed <= 0 &&
+    Math.abs(line - other.offset) >= BIKE_WIDTH &&
+    !takesItRound(other, line);
 
   /** What the riders it is catching take up: the lines it keeps off, and their bikes, as a bike squeezing past them sees them. */
   const caughtUp: Stretch[] = [];

@@ -317,7 +317,7 @@ describe("keeping to a line", () => {
     // cop does while someone comes up behind it in the offsets it would cross.
     const me = bike(1000, 7.5, 0);
 
-    const { line, holdBehind } = lineAround(me, 1.5, [me, bike(1002.95, 7.35, 0)], [], EDGE, EDGE, { keepTo: () => me.offset });
+    const { line, holdBehind } = lineAround(me, 1.5, [me, bike(1002.95, 7.35, 0)], [], EDGE, EDGE, { keepTo: () => me.offset, roomBehind: true });
 
     // On that line it would run into their back: it waits behind them, neither rolling on nor paddling back, since that
     // line doesn't take it round them.
@@ -327,8 +327,8 @@ describe("keeping to a line", () => {
 });
 
 describe("a cop held back behind a rider", () => {
-  /** A cop finds its way as an opponent does, here with nobody coming up behind it to keep it to its line. */
-  const AS_A_COP = { keepTo: (line: number) => line };
+  /** A cop finds its way as an opponent does, here with nobody coming up behind it to keep it to its line, and room behind it. */
+  const AS_A_COP = { keepTo: (line: number) => line, roomBehind: true };
 
   it("stays put at a standstill behind a rider who has all but stopped in its path, rather than roll backwards", () => {
     // Stopped in its lane, with a rider crawling at 0.3 m/s half a metre ahead of its front: it would run into their
@@ -361,6 +361,27 @@ describe("a cop held back behind a rider", () => {
     expect(close.line).toBeLessThanOrEqual(1.5 - 0.8);
     expect(close.holdBehind).toBe(-0.5);
     expect(clear.holdBehind).toBeGreaterThan(0);
+  });
+
+  it("waits at a standstill behind a rider stopped in its path, rather than paddle back, with no room behind it", () => {
+    // Nose to tail with them, 0.1 m short of their back, as above, but with someone or something just behind it.
+    const me = bike(1000, 1.5, 0);
+
+    const { holdBehind } = lineAround(me, 1.5, [me, bike(1002.1, 1.5, 0)], [], EDGE, EDGE, { ...AS_A_COP, roomBehind: false });
+
+    expect(holdBehind).toBe(0);
+  });
+
+  it("goes round a rider stopped just in front of it on their road side when a bike's width from their middle reaches the edge it squeezes out to, rather than wait for room on the other", () => {
+    // On the shoulder, riding to bust someone, squeezing out as far as 9 m: at a standstill 8.3 m out, 2.2 m behind a
+    // rider stopped 8.2 m out, a bike's width from whose middle is 9 m out, leaving no room for its bike on that side.
+    const me = bike(1000, 8.3, 0);
+
+    const { line, holdBehind } = lineAround(me, 7, [me, bike(1002.2, 8.2, 0)], [], 9, 9, AS_A_COP);
+
+    // Round them on their left, paddling back at 0.5 m/s until it can get clear of them before it reaches them.
+    expect(line).toBeLessThanOrEqual(8.2 - 0.8);
+    expect(holdBehind).toBe(-0.5);
   });
 });
 
