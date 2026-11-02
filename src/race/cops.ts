@@ -148,6 +148,7 @@ function patrolIntent(
   following: boolean,
   track: Track,
   field: readonly Readonly<Motion>[],
+  cops: readonly Readonly<Motion>[],
   carsAndObstacles: readonly Footprint[],
 ): CopIntent {
   const edge = track.roadHalfWidth - EDGE_MARGIN;
@@ -156,7 +157,7 @@ function patrolIntent(
   const gap = following ? FOLLOW_SECONDS * Math.max(0, player.speed) : HOLD_BACK_GAP;
   const speed = Math.min(safe, player.speed + Math.max(-FOLLOW_MOST_EASING, FOLLOW_GAIN * (behind - gap)));
   // It squeezes past only on the road, and never pulls across the path of a rider or a car coming up behind it.
-  const way = aCopsWay(me, behindTheCop(me, field, carsAndObstacles));
+  const way = copsWayAround(me, field, cops, carsAndObstacles);
   const { line, holdBehind, evading } = lineAround(me, PATROL_LINE, field, carsAndObstacles, edge, edge, way);
   return { speed: Math.min(clamp(speed, 0, TUNING.cops.topSpeed), holdBehind), line, hurrying: evading };
 }
@@ -179,23 +180,30 @@ interface Behind {
   /** The offsets it takes up, from left to right: a car changing lanes, from where it is to the lane it is moving over to. */
   readonly left: number;
   readonly right: number;
-  /** How hard it brakes (m/s²) for what is in its way: a bike as an opponent plans to, a car as the traffic does. */
+  /** How hard it brakes (m/s²) for what is in its way: a rider's bike as an opponent plans to, a cop's as hard as a cop can, a car as the traffic does. */
   readonly braking: number;
 }
 
 /**
- * Everyone on a bike (`field`), and every car and obstacle on the road
- * (`carsAndObstacles`) but for the cars coming the other way, that is behind
- * a cop at `me`, or no more than a bike's length in front of its back.
+ * Everyone on a bike (`field`, with the `cops` among them), and every car and
+ * obstacle on the road (`carsAndObstacles`) but for the cars coming the other
+ * way, that is behind a cop at `me`, or no more than a bike's length in front
+ * of its back.
  */
-function behindTheCop(me: Readonly<Motion>, field: readonly Readonly<Motion>[], carsAndObstacles: readonly Footprint[]): Behind[] {
+function behindTheCop(
+  me: Readonly<Motion>,
+  field: readonly Readonly<Motion>[],
+  cops: readonly Readonly<Motion>[],
+  carsAndObstacles: readonly Footprint[],
+): Behind[] {
   const behind: Behind[] = [];
   const add = (distance: number, halfLength: number, velocity: number, left: number, right: number, braking: number) => {
     const gap = me.distance - distance - halfLength - BIKE_HALF_LENGTH;
     if (gap > -BIKE_LENGTH) behind.push({ gap, velocity, left, right, braking });
   };
   for (const other of field) {
-    if (other !== me) add(other.distance, BIKE_HALF_LENGTH, other.speed, other.offset - BIKE_HALF_WIDTH, other.offset + BIKE_HALF_WIDTH, PLANNED_BRAKING);
+    const braking = cops.includes(other) ? BRAKING : PLANNED_BRAKING;
+    if (other !== me) add(other.distance, BIKE_HALF_LENGTH, other.speed, other.offset - BIKE_HALF_WIDTH, other.offset + BIKE_HALF_WIDTH, braking);
   }
   for (const thing of carsAndObstacles) {
     const [left, right] = [Math.min(thing.offset, thing.movingTo) - thing.halfWidth, Math.max(thing.offset, thing.movingTo) + thing.halfWidth];
@@ -251,6 +259,20 @@ function aCopsWay(me: Readonly<Motion>, behind: readonly Behind[]): ACopsWay {
 }
 
 /**
+ * How a cop at `me` finds its way around (see `lineAround`) among everyone on
+ * a bike (`field`, with the `cops` among them) and the cars and obstacles on
+ * the road (`carsAndObstacles`): as `aCopsWay` says.
+ */
+export function copsWayAround(
+  me: Readonly<Motion>,
+  field: readonly Readonly<Motion>[],
+  cops: readonly Readonly<Motion>[],
+  carsAndObstacles: readonly Footprint[],
+): ACopsWay {
+  return aCopsWay(me, behindTheCop(me, field, cops, carsAndObstacles));
+}
+
+/**
  * The hardest a cop at `me` brakes (m/s²), slowing down to `slowingTo` m/s
  * along the track: no harder than lets those `behind` it in its path, braking
  * as they do for what is in their way, slow down to that speed short of it,
@@ -259,10 +281,15 @@ function aCopsWay(me: Readonly<Motion>, behind: readonly Behind[]): ACopsWay {
  * rolling backwards.
  */
 function brakingFor(me: Readonly<Motion>, slowingTo: number, behind: readonly Behind[]): number | undefined {
+  return brakingAhead(me, slowingTo, inThePath(behind, me.offset, me.offset));
+}
+
+/** The hardest a cop at `me` brakes (m/s²), slowing down to `slowingTo` m/s, in front of `them` (see `brakingFor`). */
+function brakingAhead(me: Readonly<Motion>, slowingTo: number, them: readonly Behind[]): number | undefined {
   if (me.speed <= 0) return undefined;
   const slowed = Math.max(0, Math.min(me.speed, slowingTo));
   let hardest = BRAKING;
-  for (const { gap, velocity, braking } of inThePath(behind, me.offset, me.offset)) {
+  for (const { gap, velocity, braking } of them) {
     if (velocity <= slowed) continue;
     // Slowing down to that speed as they can, they would close on it by more than the gap between them, were it down
     // to it already: by this much (m), which it must keep ahead of them by, slowing down to it no harder than `hardest`.
@@ -287,19 +314,25 @@ function ridingBack(me: Readonly<Motion>, line: number, behind: readonly Behind[
   return fastest;
 }
 
-/** Making way for those behind it, a cop gets this many metres clear of their path, sideways. */
+/** Making way for those behind it, a cop gets this many metres clear of their path, sideways... */
 const MAKING_WAY = 0.3;
+/** ...and steers for a line at least this many metres to that side while it is still in their path, so as to steer as fast as it can. */
+const OUT_OF_THE_WAY = 1.5;
 
 /**
  * The way a cop at `me`, slowing down to `slowingTo` m/s and needing to brake
  * `needs` m/s² hard to do so in time, takes when it wants `line`, or else
  * `otherwise` (see `lineAround`, as `route` takes it there): the first of them
- * it can take, where those `behind` it in its path let it brake that hard (see
- * `brakingFor`); or else the first line, nearest `line` and then nearer the
+ * it can take, where those `behind` it in its path let it brake that hard all
+ * the way there; or else the first line, nearest `line` and then nearer the
  * middle of the road, `MAKING_WAY` clear of the path of one of them that would
- * keep it from braking that hard, that it can take and where they let it; or
- * else the first of all those that, as far as it gets there, lets it brake
- * that hard; or else `line`. Lines stay within `edge`.
+ * keep it from braking that hard, that it can take and where they let it all
+ * the way there; or else the first of all those that, as far as it gets there,
+ * lets it brake that hard; or else, of all of them, the one that, as far as it
+ * gets there, lets it brake hardest. On its way to a line, those whose path it
+ * moves into or across must let it brake that hard, but for one whose path it
+ * is in already and moves out of, away from the middle of it (see `brakingFor`).
+ * Lines stay within `edge`.
  */
 function makingWay(
   me: Readonly<Motion>,
@@ -311,14 +344,26 @@ function makingWay(
   edge: number,
   route: (line: number) => ReturnType<typeof lineAround>,
 ): ReturnType<typeof lineAround> {
-  const brakesAt = (offset: number) => (brakingFor({ ...me, offset }, slowingTo, behind) ?? BRAKING) >= needs;
+  const inItsPath = inThePath(behind, me.offset, me.offset);
+  const brakingTowards = (towards: number) => {
+    const across = inThePath(behind, Math.min(me.offset, towards), Math.max(me.offset, towards));
+    const leaving = (them: Behind) =>
+      inItsPath.includes(them) && inThePath([them], towards, towards).length === 0 && Math.sign(towards - me.offset) * ((them.left + them.right) / 2 - me.offset) < 0.01;
+    return brakingAhead(me, slowingTo, across.filter((them) => !leaving(them))) ?? BRAKING;
+  };
   const clearOf = inThePath(behind, Math.min(me.offset, line), Math.max(me.offset, line))
     .filter(({ velocity }) => velocity > slowingTo)
     .flatMap(({ left, right }) => [left - BIKE_HALF_WIDTH - MAKING_WAY, right + BIKE_HALF_WIDTH + MAKING_WAY])
     .filter((offset) => Math.abs(offset) <= edge)
     .sort((a, b) => Math.abs(a - line) - Math.abs(b - line) || Math.abs(a) - Math.abs(b));
-  const ways = [line, otherwise, ...clearOf].filter(brakesAt).map((towards) => ({ towards, way: route(towards) }));
-  return (ways.find(({ towards, way }) => way.line === towards) ?? ways.find(({ way }) => brakesAt(way.line)))?.way ?? route(line);
+  const ways = [line, otherwise, ...clearOf].map((towards) => ({ towards, way: route(towards) }));
+  const braking = (offset: number) => brakingTowards(offset) >= needs;
+  const hardest = ways.reduce((best, way) => (brakingTowards(way.way.line) > brakingTowards(best.way.line) ? way : best));
+  return (
+    ways.find(({ towards, way }) => braking(towards) && way.line === towards) ??
+    ways.find(({ towards, way }) => braking(towards) && braking(way.line)) ??
+    hardest
+  ).way;
 }
 
 /**
@@ -331,7 +376,11 @@ function makingWay(
  * brakes no harder than one coming up behind it in its path can, and pulls up
  * on their other side when it can't get to the nearer one as it is, or would
  * brake there harder than that; should even that take it past them, it first
- * gets clear of that one's path (see `makingWay`). If they are behind it, it
+ * gets clear of that one's path, steering out of it as fast as it can, and
+ * never moves into or across the path of another who would keep it from
+ * braking hard enough (see `makingWay`). Once past them, it gets out of the
+ * path of whoever keeps it from braking as hard as it can before it pulls up
+ * beside them. If they are behind it, it
  * stops and rides back down the road to them, holding back for anyone or
  * anything behind it in its path (see `ridingBack`). It finds its way around
  * the riders on the road (`field`, the motions of everyone on a bike) and the
@@ -342,6 +391,7 @@ function bustingIntent(
   me: Readonly<Motion>,
   rider: Moving,
   field: readonly Readonly<Motion>[],
+  cops: readonly Readonly<Motion>[],
   carsAndObstacles: readonly Footprint[],
   edge: number,
 ): CopIntent {
@@ -350,16 +400,21 @@ function bustingIntent(
   const side = rider.offset >= 0 ? 1 : -1;
   const [beside, otherSide] = [-side, side].map((towards) => clamp(rider.offset + towards * PULL_UP_BESIDE, -edge, edge));
   const pace = clamp(pullingUp, -ARREST_PACE, ARREST_PACE);
-  const behind = behindTheCop(me, field, carsAndObstacles);
+  const behind = behindTheCop(me, field, cops, carsAndObstacles);
   // Braking down to its pace before it gets to them takes braking this hard (m/s²), or as hard as it can, which those
-  // behind it in its path may not let it do there: it makes way for them first.
-  const needs = gap > 0 ? Math.min(BRAKING, (me.speed ** 2 - pace ** 2) / (2 * gap)) : 0;
+  // behind it in its path may not let it do there: it makes way for them first. Past them, it needs to stop as hard as
+  // it can, out of their way, before it rides back to them.
+  const needs = gap > 0 ? Math.min(BRAKING, (me.speed ** 2 - pace ** 2) / (2 * gap)) : BRAKING;
   const way = aCopsWay(me, behind);
   // It squeezes past out onto the shoulder if need be, as far as `edge`.
   const route = (towards: number) => lineAround(me, towards, field, carsAndObstacles, edge, edge, way);
   const { line, holdBehind } = makingWay(me, beside, otherSide, pace, needs, behind, edge, route);
   const speed = pace > 0 ? Math.min(pace, holdBehind) : Math.max(pace, -ridingBack(me, line, behind));
-  return { speed, line, hurrying: true, braking: brakingFor(me, speed, behind) };
+  const braking = brakingFor(me, speed, behind);
+  // Kept from braking as hard as it needs to by one in its path, it steers out of it as fast as it can.
+  const across = line - me.offset;
+  const held = (braking ?? BRAKING) < needs && Math.abs(across) < OUT_OF_THE_WAY && across !== 0;
+  return { speed, line: held ? me.offset + Math.sign(across) * OUT_OF_THE_WAY : line, hurrying: true, braking };
 }
 
 /** A cop fighting back swings its club about once every this many seconds. */
@@ -379,11 +434,12 @@ function fightingBackIntent(
   rider: Moving,
   track: Track,
   field: readonly Readonly<Motion>[],
+  cops: readonly Readonly<Motion>[],
   carsAndObstacles: readonly Footprint[],
 ): CopIntent {
   const edge = track.roadHalfWidth - EDGE_MARGIN;
   const level = levelWith(me, rider, edge);
-  const behind = behindTheCop(me, field, carsAndObstacles);
+  const behind = behindTheCop(me, field, cops, carsAndObstacles);
   // It squeezes past only on the road.
   const { line, holdBehind } = lineAround(me, level.line, field, carsAndObstacles, edge, edge, aCopsWay(me, behind));
   const safe = safeSpeedAt(track, me.distance + me.speed * BRAKING_LEAD, COP_LIMITS);
@@ -408,11 +464,12 @@ function pullingOverIntent(
   side: Side,
   track: Track,
   field: readonly Readonly<Motion>[],
+  cops: readonly Readonly<Motion>[],
   carsAndObstacles: readonly Footprint[],
 ): CopIntent {
   const shoulder = side * (track.roadHalfWidth + BIKE_WIDTH);
   const onTheShoulder = side * me.offset >= track.roadHalfWidth + BIKE_WIDTH / 2;
-  const behind = behindTheCop(me, field, carsAndObstacles);
+  const behind = behindTheCop(me, field, cops, carsAndObstacles);
   // It squeezes past out onto the shoulder if need be, as far as the line it pulls over to.
   const { line, holdBehind } = lineAround(me, shoulder, field, carsAndObstacles, Math.abs(shoulder), Math.abs(shoulder), aCopsWay(me, behind));
   const speed = onTheShoulder ? 0 : Math.min(CREEP, holdBehind);
@@ -517,6 +574,7 @@ export function decideCops(
     cop.attackCooldownSteps = stepsIn(COP_ATTACK_EVERY_SECONDS);
   }
   const player = whereIs(riders[PLAYER]);
+  const copsOnBikes = copsInTheRace(race).map((cop) => cop.motion);
   takeTurns(cops, race.rota, player, (cop) => cop.busting !== null || cop.fightingBack !== null || cop.standingBySteps > 0);
   return cops.map((cop) => {
     // A cop keeps the side of the road it pulls over to only while it goes on pulling over.
@@ -524,11 +582,11 @@ export function decideCops(
     cop.pullingOverTo = null;
     if (cop.status !== "riding") return null;
     if (cop.busting !== null) {
-      return bustingIntent(cop.motion, whereIs(riders[cop.busting]), everyoneOnABike, carsAndObstacles, edge);
+      return bustingIntent(cop.motion, whereIs(riders[cop.busting]), everyoneOnABike, copsOnBikes, carsAndObstacles, edge);
     }
     const fighting = cop.fightingBack === null ? null : riders[cop.fightingBack];
     if (fighting && !fighting.crash) {
-      return fightingBackIntent(cop.motion, fighting.motion, track, everyoneOnABike, carsAndObstacles);
+      return fightingBackIntent(cop.motion, fighting.motion, track, everyoneOnABike, copsOnBikes, carsAndObstacles);
     }
     // Standing by a rider it has busted, or on patrol while the player is down, a cop pulls over onto the shoulder;
     // and so does one holding back from a player who rides slowly, or following one it has found itself in front of,
@@ -537,10 +595,10 @@ export function decideCops(
     // across the middle of the road on its way there.
     const pullingOver = () => {
       cop.pullingOverTo = pullingOverTo ?? (cop.motion.offset >= 0 ? 1 : -1);
-      return pullingOverIntent(cop.motion, cop.pullingOverTo, track, everyoneOnABike, carsAndObstacles);
+      return pullingOverIntent(cop.motion, cop.pullingOverTo, track, everyoneOnABike, copsOnBikes, carsAndObstacles);
     };
     if (cop.standingBySteps > 0 || riders[PLAYER].crash) return pullingOver();
-    const patrol = patrolIntent(cop.motion, player, cop.following, track, everyoneOnABike, carsAndObstacles);
+    const patrol = patrolIntent(cop.motion, player, cop.following, track, everyoneOnABike, copsOnBikes, carsAndObstacles);
     const inFront = cop.motion.distance - player.distance > BIKE_LENGTH;
     return (!cop.following || inFront) && patrol.speed < HOLD_BACK_SLOWEST ? pullingOver() : patrol;
   });
