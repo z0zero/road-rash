@@ -117,37 +117,38 @@ function digestsOf(race: Race, hitsBack: HitsBack) {
 }
 
 /**
- * Digests of two races recorded with v1.0.0 (seed 1, on a closed road with no
+ * Digests of two races recorded with v1.0.0 (seed 6, on a closed road with no
  * cops, so that nothing of the riding fixes since touches them): every ten
  * seconds of race until the player finished, then the rest of the field to
- * the finish and the results. Hitting back always, the player finished 11th
- * in 3:16.84; hitting back now and then, they took 13 hits, the opponents'
+ * the finish and the results. Hitting back always, the player finished 13th
+ * in 3:16.61; hitting back now and then, they took 14 hits, the opponents'
  * breathers, patience and attacks on the player deciding what came next, and
- * finished 13th in 3:16.66.
+ * finished 14th in 3:23.84.
  */
 const RECORDED_ON_V1: Record<HitsBack, readonly string[]> = {
   always: [
-    "13d27736b9565c", "16bc41d081b3d7", "055fc3a36cc674", "0374600ebe28ea", "082b25d76bb991",
-    "13447577b11809", "17d27997c5c221", "12dd096a574678", "034eaf823f5369", "1f5a246e6da7a3",
-    "1b63fa3d70d453", "133c133a0d705c", "003060df7b57f9", "023120bcb2388f", "0eb557fac3cc0d",
-    "198432ee249331", "05373aee90b5a2", "06ef081e64a184", "0063fe0ba7900e", "1f30a5b66aed89",
+    "096e873442e970", "0674ba1739cd28", "0c321a01324bae", "0d7ab3f61a6213", "11d64694328d52",
+    "044b4f9da3c589", "1d7fe8d767f408", "11d032788c60de", "057d99d2ffba1d", "13c71b820d0957",
+    "062593faa48fb0", "15418f0f38be71", "00cd84ee700a27", "0fc952eab6a62d", "03317ae0ae9b1e",
+    "06591c0040f4bb", "06842867f2eac2", "1c86cb3a7810c3", "1185dc3c03db05", "17d8bee8238dd9",
   ],
   "now and then": [
-    "13d27736b9565c", "05c14e8350ee2c", "1bc30c2cf9ed18", "19944937cb9a12", "130d878905a552",
-    "11d5d752ee73f2", "1ca38a44f4afdb", "023eed50826989", "077a309fc978ca", "119df3cbd99563",
-    "177958a06e02a0", "09493d90ec3c2e", "05bfe33cacaa36", "04c1d587a8a571", "008cc367b563cf",
-    "07d8717a64b222", "023501885206d4", "0e2f8602f66b6e", "07a19c6bf0d0eb", "1ea2369ccaae69",
+    "096e873442e970", "0674ba1739cd28", "0fdf6da19f1def", "10115a5a163858", "173a0aa8ea7b68",
+    "194b31b479f12e", "0319f645397b79", "0868114bdd20ea", "1224f548a2da1b", "1ef3894b73bf0e",
+    "035eadaf86b60b", "01974a9b106702", "0319363357bc88", "187630717642a1", "048207607490e3",
+    "1b4b4027decc31", "08159338611ab7", "17c32d53b9d118", "17028c0f5802b1", "0f564d44ede24d",
+    "0e85875df21a0b",
   ],
 };
 
 describe("a race on Normal", () => {
   it("replays a race recorded with v1.0.0 byte for byte, whether Normal is asked for or left to the default", WHOLE_RACES, () => {
-    expect(digestsOf(setUpRace({ seed: 1, difficulty: "normal" }, { ...CLOSED_ROAD, ...NO_COPS }), "always")).toEqual(RECORDED_ON_V1.always);
-    expect(digestsOf(setUpRace({ seed: 1 }, { ...CLOSED_ROAD, ...NO_COPS }), "always")).toEqual(RECORDED_ON_V1.always);
+    expect(digestsOf(setUpRace({ seed: 6, difficulty: "normal" }, { ...CLOSED_ROAD, ...NO_COPS }), "always")).toEqual(RECORDED_ON_V1.always);
+    expect(digestsOf(setUpRace({ seed: 6 }, { ...CLOSED_ROAD, ...NO_COPS }), "always")).toEqual(RECORDED_ON_V1.always);
   });
 
   it("replays byte for byte a race recorded with v1.0.0 in which the player hits back only now and then, so that its breathers, patience and attacks come into play", WHOLE_RACES, () => {
-    expect(digestsOf(setUpRace({ seed: 1 }, { ...CLOSED_ROAD, ...NO_COPS }), "now and then")).toEqual(RECORDED_ON_V1["now and then"]);
+    expect(digestsOf(setUpRace({ seed: 6 }, { ...CLOSED_ROAD, ...NO_COPS }), "now and then")).toEqual(RECORDED_ON_V1["now and then"]);
   });
 
   it("is the race created when no difficulty is asked for, in traffic and with cops", () => {

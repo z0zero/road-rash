@@ -57,7 +57,7 @@ The rider controlled by the person playing the game.
 _Avoid_: User, hero
 
 **Opponent**:
-A rider controlled by the game's AI.
+A rider controlled by the game's AI. It looks behind it: it never pulls across the path of a rider coming up behind it fast enough to crash into it, who would be alongside it within a second, though it doesn't make way for them.
 _Avoid_: Enemy, bot, NPC
 
 **Catch-up**:

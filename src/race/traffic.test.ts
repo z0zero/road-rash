@@ -68,7 +68,7 @@ function behindACar(seed = 1) {
  * as cars do short of the fallen rock near 4 km while they can't change
  * lanes; returns the car's id. The first of `seeds` in which one does.
  */
-function behindAStoppedCar(seeds = [10, 16]) {
+function behindAStoppedCar(seeds = [10, 16, 43]) {
   for (const seed of seeds) {
     const race = startedRace(seed, NO_COPS);
     const pilot = autopilot(race);
@@ -96,7 +96,7 @@ function behindAStoppedCar(seeds = [10, 16]) {
  * still stood there; returns the car's id. The first of `seeds` in which
  * that happens.
  */
-function rearEndedAStoppedCar(seeds = [10, 16]) {
+function rearEndedAStoppedCar(seeds = [10, 16, 14]) {
   for (const seed of seeds) {
     let found;
     try {
