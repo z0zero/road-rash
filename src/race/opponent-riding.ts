@@ -143,9 +143,9 @@ const RIDING_OUT_A_KICK = 1;
  * Getting out of the way of a car or an obstacle, an opponent steers this
  * much more quickly to its line (1/s), and so does a cop in a hurry...
  */
-const EVASIVE_RESPONSE = 4;
+export const EVASIVE_RESPONSE = 4;
 /** ...at up to this many metres per second sideways. */
-const EVASIVE_SPEED = 6;
+export const EVASIVE_SPEED = 6;
 /**
  * A cop at a standstill, boxed in behind a rider stopped just in front of it,
  * with too little room to get round them, paddles back at this speed (m/s),

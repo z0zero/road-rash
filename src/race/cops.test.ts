@@ -922,33 +922,37 @@ describe("a cop moving across the road", () => {
 });
 
 describe("a cop riding to bust a crashed rider", () => {
-  it("rides no further past a player who crashes now and then than its reach, riding to bust them with an opponent following it in its path, and never waits in the race's lanes in front of them once they are back on their bike", WHOLE_RACES, () => {
-    // In this race on Easy, in which the player rides into a car now and then, the first cop, following them, rides to
-    // bust them after their crashes at 66 s and 86 s, the second time with an opponent following it 16 m behind, in its
-    // path: it brakes no harder than lets them stop short of it, making way for them.
-    const race = startedRace({ seed: 30, difficulty: "easy" });
-    const input = crashingNowAndThen(race);
-    let followed = 0;
-    let furthestPast = -Infinity;
-    const stoodInFront: string[] = [];
+  it.each([
+    ["easy", 36],
+    ["easy", 42],
+  ] as const)(
+    "reaches a player who crashes now and then, riding to bust them with an opponent following it in its path, and stops within its reach of them rather than ride past them (%s, seed %i)",
+    (difficulty, seed) => {
+      // In this race, in which the player rides into a car now and then and runs straight back to their bike, the first
+      // cop, following them, rides to bust them with an opponent following it in its path (after their crash at 87 s in
+      // seed 36, at 51 s in seed 42): it brakes no harder than lets them stop short of it, making way for them.
+      const race = startedRace({ seed, difficulty });
+      const input = crashingNowAndThen(race);
+      const bustings: { followed: boolean; furthestPast: number }[] = [];
+      let busting: { followed: boolean; furthestPast: number } | null = null;
 
-    for (let step = 0; step < 100 * STEPS_PER_SECOND && player(race).status === "racing"; step++) {
-      const wasBusting = race.snapshot().cops[0].busting === PLAYER;
-      race.step(input());
-      const me = player(race);
-      const { clock, cops } = race.snapshot();
-      if (cops[0].busting === PLAYER && !wasBusting && opponentFollowing(race, cops[0])) followed++;
-      if (cops[0].busting === PLAYER) furthestPast = Math.max(furthestPast, cops[0].distance - me.distance);
-      for (const cop of cops) {
-        const inFront = cop.status === "riding" && cop.busting === null && cop.distance - me.distance > 2 && cop.distance - me.distance < 150;
-        if (me.crash === null && inFront && Math.abs(cop.offset) < race.track.roadHalfWidth && Math.abs(cop.speed) < 1) stoodInFront.push(`${clock.toFixed(1)} s: ${cop.name}`);
+      for (let step = 0; step < 100 * STEPS_PER_SECOND && player(race).status === "racing"; step++) {
+        race.step(input());
+        const cop = race.snapshot().cops[0];
+        if (cop.busting !== PLAYER) busting = null;
+        else {
+          if (!busting) bustings.push((busting = { followed: opponentFollowing(race, cop), furthestPast: -Infinity }));
+          busting.furthestPast = Math.max(busting.furthestPast, cop.distance - player(race).distance);
+        }
       }
-    }
 
-    expect(followed).toBeGreaterThan(0);
-    expect(furthestPast).toBeLessThan(2.5);
-    expect(stoodInFront).toEqual([]);
-  });
+      // Riding to bust them with an opponent following it, it got to them, within its reach of them; and it never rode
+      // further past them than that.
+      expect(bustings.some(({ followed, furthestPast }) => followed && furthestPast > -2.5)).toBe(true);
+      expect(Math.max(...bustings.map(({ furthestPast }) => furthestPast))).toBeLessThan(2.5);
+    },
+    WHOLE_RACES.timeout,
+  );
 
   it("pulls over onto the shoulder once it finds itself in front of the player, rather than wait in the race's lanes in front of them: one that rode past them while they stood by their bike", WHOLE_RACES, () => {
     // In this race on Easy the player rides flat out into a car going their way, too far in front of the first cop to be
@@ -979,17 +983,50 @@ describe("a cop riding to bust a crashed rider", () => {
   });
 
   it.each([
+    ["easy", 100, "runs straight back to their bike"],
+    ["easy", 108, "runs straight back to their bike"],
+    ["normal", 25, "stays where they fell"],
+    ["normal", 40, "stays where they fell"],
+    ["normal", 66, "stays where they fell"],
+    ["easy", 20, "stays where they fell"],
+    ["easy", 39, "stays where they fell"],
+  ] as const)(
+    "gets down to its arrest pace by the time it reaches a player who crashed at speed, with an opponent following it in its path, making way for them, and stops within its reach of them rather than ride past them (%s, seed %i: the player %s)",
+    (difficulty, seed, onFoot) => {
+      // The player, riding at 44 m/s or more, rides flat out into a car going their way with the cop following them at its
+      // usual gap, 60 to 79 m behind, and an opponent following it within 60 m in its path.
+      const crashed = crashingAtSpeed({ seed, difficulty }, 30);
+      if (!crashed) throw new Error(`the player never crashed at speed in seed ${seed}`);
+      const { race, cop } = crashed;
+      expect(cop().busting).toBe(PLAYER);
+      expect(opponentFollowing(race, cop())).toBe(true);
+      const pilot = autopilot(race);
+      const down: PlayerInput = onFoot === "stays where they fell" ? { ...NO_INPUT, brake: 1 } : NO_INPUT;
+      let furthestPast = -Infinity;
+
+      for (let step = 0; step < 20 * STEPS_PER_SECOND && player(race).status === "racing"; step++) {
+        race.step(player(race).crash ? down : pilot());
+        if (cop().busting === PLAYER) furthestPast = Math.max(furthestPast, cop().distance - player(race).distance);
+      }
+
+      // Riding to bust them, it got to them, within its reach of them, and never further past them than that.
+      expect(furthestPast).toBeGreaterThan(-2.5);
+      expect(furthestPast).toBeLessThan(2.5);
+    },
+  );
+
+  it.each([
     ["normal", 25],
     ["normal", 40],
     ["normal", 66],
     ["easy", 20],
-    ["easy", 28],
     ["easy", 39],
   ] as const)(
-    "gets down to its arrest pace by the time it reaches them with an opponent following it in its path, making way for them, rather than ride past them (%s, seed %i)",
+    "rides no further past a player who crashed at speed and runs straight back to their bike than its reach, riding to bust them with an opponent following it in its path, making way for them (%s, seed %i)",
     (difficulty, seed) => {
-      // The player, riding at 41 m/s or more, rides flat out into a car going their way with the cop following them at its
-      // usual gap, 66 to 79 m behind, and an opponent following it within 60 m in its path.
+      // The player, riding at 47 m/s or more, rides flat out into a car going their way with the cop following them at its
+      // usual gap, 65 to 79 m behind, and an opponent following it within 60 m in its path. Making way for them, the cop
+      // gets no nearer than 7 to 25 m before the player is back on their bike.
       const crashed = crashingAtSpeed({ seed, difficulty }, 30);
       if (!crashed) throw new Error(`the player never crashed at speed in seed ${seed}`);
       const { race, cop } = crashed;
@@ -1007,6 +1044,34 @@ describe("a cop riding to bust a crashed rider", () => {
       expect(furthestPast).toBeLessThan(2.5);
     },
   );
+
+  it("holds its line rather than shake from side to side while an opponent following it in its path keeps it from braking hard enough and it can't get out of their path: it never steers fast one way and then straight back the other", () => {
+    // The player, riding at 54 m/s, rides flat out into a car going their way on Easy with the cop following them 78 m
+    // behind, and two opponents following it 49 and 61 m back in its path, which let it brake only gently; a third,
+    // coming up on its right, keeps it from getting out of their path that way. It steers for its line beside the
+    // player, still in their path, until it can get out of it.
+    const crashed = crashingAtSpeed({ seed: 28, difficulty: "easy" }, 30);
+    if (!crashed) throw new Error("the player never crashed at speed in seed 28");
+    const { race, cop } = crashed;
+    expect(cop().busting).toBe(PLAYER);
+    expect(opponentFollowing(race, cop())).toBe(true);
+    const pilot = autopilot(race);
+    const swings: string[] = [];
+    let offset = cop().offset;
+    let last = { way: 0, step: -Infinity };
+
+    for (let step = 0; step < 20 * STEPS_PER_SECOND && player(race).status === "racing"; step++) {
+      race.step(player(race).crash ? NO_INPUT : pilot());
+      const sideways = (cop().offset - offset) * STEPS_PER_SECOND;
+      offset = cop().offset;
+      if (cop().busting !== PLAYER || Math.abs(sideways) < 2) continue;
+      if (Math.sign(sideways) === -last.way && step - last.step <= 3) swings.push(`${race.snapshot().clock.toFixed(2)} s`);
+      last = { way: Math.sign(sideways), step };
+    }
+
+    // Riding to bust them, it never moved across at 2 m/s or more one way and then, within three steps, the other.
+    expect(swings).toEqual([]);
+  });
 
   it("rides back down the road to one who crashed behind it, but never speeds up towards a rider coming up behind it in its path", WHOLE_RACES, () => {
     // In this race on Easy, ridden with the autopilot, an opponent crashes 16 m behind the first cop as it follows the
