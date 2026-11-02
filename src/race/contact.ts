@@ -1,4 +1,4 @@
-import { crash, knockDown, type Body, type Crash } from "./crashing";
+import { BODY_SIZE, crash, knockDown, type Body, type Crash } from "./crashing";
 import type { Fighter } from "./fighting";
 import type { Footprint } from "./footprint";
 import { copsInTheRace, onTheirBikes, type RaceState } from "./race-state";
@@ -12,8 +12,6 @@ import { TUNING } from "./tuning";
 const BIKE_HALF_LENGTH = BIKE_LENGTH / 2;
 /** ...and this many to either side of it. */
 const BIKE_HALF_WIDTH = BIKE_WIDTH / 2;
-/** A rider on foot takes up about this many metres, along the track and across it. */
-const BODY_SIZE = 0.6;
 
 /** Half the size of what touches a car or an obstacle: metres from its middle to its front and back, and to its sides. */
 interface HalfSize {

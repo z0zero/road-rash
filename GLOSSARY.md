@@ -124,6 +124,10 @@ _Avoid_: KO, knocked out
 A rider off their bike after a crash, once they have stopped tumbling along the road: they run back to their bike and get back on it, which is remounting.
 _Avoid_: Running, walking, dismounted
 
+**Remounting**:
+A rider on foot getting back on their bike as soon as they reach it, which sets off slowly, with at least half their stamina back. But while a car is coming that, carried on half a second at its speed, would run into the bike as they rode off, they wait by it instead, stepping out of the car's way, and get on once no car is coming, or after three seconds at most; the player's HUD says "Car coming!" meanwhile. Only a car that would meet the bike fast enough to crash them keeps them waiting: never one standing still over or beside it, or crawling along in a queue going their way, which they would only bump, nor a cop or another rider. A cop can bust a rider waiting by their bike, as one running back to it, so a rider with a cop riding to bust them close by doesn't wait: they chance the car.
+_Avoid_: Getting up, respawning
+
 **Knock-down**:
 A car driving into a rider on foot and throwing them to the ground: they tumble again, then get up and carry on back to their bike. It is not a crash, so it costs their bike nothing. Not a knock-off, which a hit does. Only a car closing in on them along its own way, at over 1 m/s, with them in front of its middle, knocks them down; one coming at them that fast does even if they run into it. One going their way, slower than them, that they catch up or brush as they run away from it only pushes them clear of it, and they go round it; so does one standing still, or one already half past them when they touch it.
 _Avoid_: Run over, hit

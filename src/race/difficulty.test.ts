@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { createRace, isPlayer, NO_INPUT, PLAYER, type Difficulty, type PlayerInput, type Race, type RaceResults, type RiderId } from ".";
+import {
+  createRace,
+  isPlayer,
+  NO_INPUT,
+  PLAYER,
+  type Difficulty,
+  type PlayerInput,
+  type Race,
+  type RaceResults,
+  type RaceSnapshot,
+  type RiderId,
+} from ".";
 import {
   alongsideAn,
   attacksOnThePlayer,
@@ -90,6 +101,21 @@ function recordedRider(race: Race, hitsBack: HitsBack) {
 }
 
 /**
+ * A snapshot as v1.0.0 handed it out: without what snapshots have said since,
+ * whether a rider waits at their bike for a car to go by, which nobody does
+ * on a road closed to cars.
+ */
+function asOnV1(snapshot: RaceSnapshot) {
+  return {
+    ...snapshot,
+    riders: snapshot.riders.map(({ waitingForACar, ...rider }) => {
+      expect(waitingForACar).toBe(false);
+      return rider;
+    }),
+  };
+}
+
+/**
  * Races `race` with the recorded rider, hitting back as `hitsBack` says, until
  * their race is over, then the rest of the field to the finish, and returns a
  * digest of everything it handed out every ten seconds of race, and of the
@@ -103,7 +129,7 @@ function digestsOf(race: Race, hitsBack: HitsBack) {
   while (race.snapshot().riders[PLAYER].status === "racing" && steps < 400 * STEPS_PER_SECOND) {
     race.step(input());
     steps++;
-    digest.add(race.snapshot());
+    digest.add(asOnV1(race.snapshot()));
     digest.add(race.drainEvents());
     if (steps % (10 * STEPS_PER_SECOND) === 0) {
       digests.push(digest.value());

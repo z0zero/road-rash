@@ -510,6 +510,13 @@ const HIT_EARLY = "/?seed=9";
 const WRECKED_EARLY = "/?seed=17";
 
 /**
+ * A race in which a rider who just holds the throttle from the start crashes,
+ * and reaches their bike in the first twenty seconds as a car comes by that
+ * would run into them if they got on. Any seed will do in which that is so.
+ */
+const CAR_COMING_EARLY = "/?seed=223";
+
+/**
  * Rides the race at `WRECKED_EARLY`, with `query` added to its address,
  * holding the throttle until the results show, then lets go; returns the
  * results.
@@ -580,6 +587,24 @@ test("stops prompting the player to hit back as soon as they attack, and for goo
   expect(await playUntil(page, 15, async () => (await staminaNow(page)) < 100)).toBe(true);
   await page.keyboard.up("w");
   await expect(prompt).toBeHidden();
+});
+
+test("says a car is coming while the player waits by their bike for it to go by, in place of their status", async ({ page }) => {
+  // Twenty seconds of racing, a frame at a time.
+  test.slow();
+  await page.goto(CAR_COMING_EARLY);
+  await startRacing(page);
+  const note = page.getByTestId("car-coming");
+  await expect(note).toBeHidden();
+  await page.keyboard.down("w");
+
+  expect(await playUntil(page, 25, () => note.isVisible())).toBe(true);
+  await expect(note).toHaveRole("status");
+  await expect(note).toHaveText("Car coming!");
+  await expect(page.getByTestId("rider-status")).toBeEmpty();
+
+  expect(await playUntil(page, 3, async () => !(await note.isVisible()))).toBe(true);
+  await page.keyboard.up("w");
 });
 
 test("goes back to the title from the results with Esc once they can be pressed, though not for an Esc held from the race", async ({
