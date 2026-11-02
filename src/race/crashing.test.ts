@@ -1,21 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { NO_INPUT, PLAYER, STEP_SECONDS, type PlayerInput, type RiderSnapshot } from ".";
+import { NO_INPUT, PLAYER, STEP_SECONDS, type PlayerInput, type Race, type RaceEvent, type RiderSnapshot } from ".";
 import {
   alongsideARacer,
   chase,
+  CLOSED_ROAD,
   eventsDuring,
   eventsUntil,
   isCrash,
   kmh,
+  leftOnTheirOwn,
   nearestOpponent,
   NO_COPS,
   player,
+  playerCrashed,
   racerKnockedOff,
+  rideInto,
   secondsUntil,
   setUpRace,
   startedRace,
   stepFor,
+  STEPS_PER_SECOND,
 } from "./test-helpers";
+import type { TestCar } from "./traffic";
 
 
 describe("after a crash", () => {
@@ -198,5 +204,103 @@ describe("running into another rider", () => {
     expect(difference).toBeGreaterThan(8);
     expect(player(race).crash).toBe("tumbling");
     expect(race.snapshot().riders[target].crash).toBeNull();
+  });
+});
+
+/**
+ * A race with no cops, on a road closed to every car but `cars`, in which the
+ * field has ridden off and the player has ridden into the first roadside sign
+ * at least 100 m ahead of their start line at about 15 m/s: their bike stops
+ * against it, they are thrown on past it, and they are about to get up.
+ */
+function crashedIntoTheFirstSign(cars: readonly TestCar[] = []) {
+  const { track } = setUpRace({ seed: 1 }, CLOSED_ROAD);
+  const sign = track.obstacles.find((obstacle) => obstacle.kind === "sign" && obstacle.distance > track.startDistance + 100);
+  if (!sign) throw new Error("no sign near the start");
+  const race = leftOnTheirOwn(1, { ...NO_COPS, traffic: { cars } });
+  eventsUntil(race, rideInto(race, sign, 15), playerCrashed, 60);
+  return race;
+}
+
+/** Steps `race` with no input until the player gets back on their bike, and returns how many steps the race has taken by then, the countdown's too, and where their bike is. */
+function backOnTheirBike(race: Race) {
+  eventsUntil(race, NO_INPUT, (event) => event.type === "remounted", 10);
+  const { clock, riders } = race.snapshot();
+  return { steps: Math.round((3 + clock) * STEPS_PER_SECOND), bike: riders[PLAYER].bike };
+}
+
+/**
+ * The race of `crashedIntoTheFirstSign` with `count` cars, `apart` metres
+ * from middle to middle, coming down the road towards the riders at `speed`
+ * m/s, `across` metres right of the line of the player's bike, so that the
+ * first is about a quarter of a second from running into the bike, ridden
+ * off at 5 m/s, as the player reaches it.
+ */
+function reachingTheirBikeAsCarsCome(speed: number, { count = 1, apart = 0, across = 0 } = {}) {
+  const { steps, bike } = backOnTheirBike(crashedIntoTheFirstSign());
+  // A saloon's middle is 2.3 m from its front, a bike's 1 m from its.
+  const first = bike.distance + 3.3 + 0.25 * (speed + 5) + (speed * steps) / STEPS_PER_SECOND;
+  const cars = Array.from({ length: count }, (_, k) => ({ distance: first + k * apart, offset: bike.offset + across, speed, oncoming: true }));
+  return crashedIntoTheFirstSign(cars);
+}
+
+describe("getting back on as a car comes", () => {
+  it("waits by the bike, out of the car's way, until it has gone by, then gets on and rides off", () => {
+    const race = reachingTheirBikeAsCarsCome(25);
+    const car = () => race.snapshot().traffic[0];
+    const events: RaceEvent[] = [];
+    let waited = 0;
+    let touchedIt = false;
+    for (let step = 0; step < 10 * STEPS_PER_SECOND && !events.some((event) => event.type === "remounted"); step++) {
+      race.step(NO_INPUT);
+      events.push(...race.drainEvents());
+      const me = player(race);
+      if (!me.waitingForACar) continue;
+      waited++;
+      expect(me.crash).toBe("on-foot");
+      // A rider on foot takes up about 0.6 m either way.
+      const along = Math.abs(car().distance - me.distance) - car().length / 2 - 0.3;
+      const across = Math.abs(car().offset - me.offset) - car().width / 2 - 0.3;
+      if (along < 0 && across < 0) touchedIt = true;
+    }
+    const gotOnAt = player(race).distance;
+    const carAt = car().distance;
+    events.push(...eventsDuring(race, 3, { ...NO_INPUT, throttle: 1 }));
+
+    expect(events.filter((event) => event.type === "crash" || event.type === "knocked-down")).toEqual([]);
+    expect(carAt).toBeLessThan(gotOnAt);
+    expect(waited / STEPS_PER_SECOND).toBeGreaterThan(0.2);
+    expect(waited / STEPS_PER_SECOND).toBeLessThan(1);
+    expect(touchedIt).toBe(false);
+    expect(player(race).speed).toBeGreaterThan(kmh(30));
+  });
+
+  it("waits three seconds at most, however long the cars keep coming, then gets on", () => {
+    // A queue crawling along nose to tail, each car fast enough to crash a rider riding off towards it, and each
+    // brushing the bike's side, as it comes along the shoulder's far edge, beside the player's way back to the bike.
+    const race = reachingTheirBikeAsCarsCome(3, { count: 6, apart: 9, across: 1.2 });
+    let waited = 0;
+    eventsUntil(race, () => (player(race).waitingForACar && waited++, NO_INPUT), (event) => event.type === "remounted", 10);
+
+    expect(waited / STEPS_PER_SECOND).toBeCloseTo(3, 1);
+  });
+
+  it("doesn't wait for a car standing still at the bike, which they would only bump, but gets back on as soon as they reach it", () => {
+    const { track } = setUpRace({ seed: 1 }, CLOSED_ROAD);
+    const parked = { distance: track.startDistance + 100, offset: track.laneWidth / 2 };
+    const race = leftOnTheirOwn(1, { ...NO_COPS, traffic: { cars: [parked] } });
+    eventsUntil(race, rideInto(race, parked, 15), playerCrashed, 60);
+    secondsUntil(race, NO_INPUT, () => player(race).crash === "on-foot", 2);
+    const reach = (me: RiderSnapshot) => Math.hypot(me.bike.distance - me.distance, me.bike.offset - me.offset);
+    // Their bike has stopped against the car's back: its middle is 1 m from its front, a saloon's 2.3 m from its back.
+    expect(player(race).bike.distance + 1 + 0.05 + 2.3).toBeCloseTo(parked.distance, 6);
+
+    const runningBack = reach(player(race)) / 6;
+    const seconds = secondsUntil(race, NO_INPUT, () => {
+      expect(player(race).waitingForACar).toBe(false);
+      return player(race).crash === null;
+    }, 3);
+
+    expect(seconds).toBeLessThan(runningBack + 0.1);
   });
 });

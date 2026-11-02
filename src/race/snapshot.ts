@@ -40,6 +40,8 @@ export interface RiderSnapshot extends Moving {
    * after a car has knocked them down on foot.
    */
   readonly crash: CrashPhase | null;
+  /** Whether the rider, on foot by their bike, is waiting for a car to go by before getting back on it: the HUD says "Car coming!" while the player is. */
+  readonly waitingForACar: boolean;
   /** Where the rider's bike is: under them while they ride it, or wherever it slid to after a crash. */
   readonly bike: BikeSnapshot;
 }
@@ -170,6 +172,7 @@ export function snapshotOf(race: RaceState): RaceSnapshot {
         attack: rider.attack && { kind: rider.attack.kind, side: rider.attack.side, ...attackStage(rider.attack) },
         weapon: rider.weapon,
         crash: rider.crash?.phase ?? null,
+        waitingForACar: rider.status === "racing" && rider.crash?.waitingForACar === true,
         bike: movingOf(rider.motion),
       };
     }),

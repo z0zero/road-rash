@@ -128,7 +128,8 @@ function step(race: RaceState, input: PlayerInput) {
     const riding = onTheirBikes(race);
     // Everyone on a bike in the race, the cops too, whom riders and cops find their way around.
     const everyoneOnABike = [...riding.map((rider) => rider.motion), ...copsInTheRace(race).map((cop) => cop.motion)];
-    const carsAndObstacles = [...traffic.cars.map(footprintOfCar), ...race.obstacles];
+    const carsBefore = traffic.cars.map(footprintOfCar);
+    const carsAndObstacles = [...carsBefore, ...race.obstacles];
     const opponents = decideOpponents(race, riding, everyoneOnABike, carsAndObstacles);
     const player = riders[PLAYER];
     if (player.status === "racing" && !player.crash && !player.attack && (input.punch || input.kick)) {
@@ -140,7 +141,7 @@ function step(race: RaceState, input: PlayerInput) {
     // finish line braking to a stop), riders off them run back to them, and the cops and the traffic drive on...
     const distancesBefore = riders.map((rider) => whereIs(rider).distance);
     for (const rider of riders) {
-      if (rider.crash) runBack(race, rider, input);
+      if (rider.crash) runBack(race, rider, input, carsBefore);
       else {
         const controls = rider.status !== "racing" ? FINISHED_CONTROLS : (opponents.controls.get(rider) ?? input);
         ride(rider.motion, controls, track, STEP_SECONDS);

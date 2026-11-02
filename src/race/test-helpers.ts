@@ -10,7 +10,6 @@ import {
   STEP_SECONDS,
   type AttackKind,
   type CarSnapshot,
-  type ObstaclePlacement,
   type PlayerInput,
   type Race,
   type RaceEvent,
@@ -353,8 +352,8 @@ export function steerOnto(me: Moving, lane: number, wanted: number, sideways: nu
   };
 }
 
-/** Input that rides at about `speed` straight at `obstacle`, lined up with it. */
-export function rideInto(race: Race, obstacle: ObstaclePlacement, speed: number) {
+/** Input that rides at about `speed` straight at what is at `obstacle`, an obstacle or a car standing still, lined up with it. */
+export function rideInto(race: Race, obstacle: TrackPosition, speed: number) {
   let lastOffset = player(race).offset;
   return (): PlayerInput => {
     const me = player(race);

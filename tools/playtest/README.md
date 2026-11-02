@@ -19,7 +19,7 @@ Here "racer" and "brawler" name bots, not the opponents' temperaments.
 These are the bots' own faults, not the game's, but they blunt the measures where they show:
 
 - They see the whole race in every snapshot and answer in the same step: no reaction time, nothing out of view. They judge a bend's safe speed and how fast their bike moves across with the Race module's own rules (`race-rules.ts`).
-- They never look behind to make way for a faster rider, never stop on purpose, and never wait at their bike for a car to pass before getting back on, as a player could. That last bears on the remount rate.
+- They never look behind to make way for a faster rider and never stop on purpose. Waiting by their bike for a car to go by before getting back on is the Race module's rule, for every rider, so they do that as a player does.
 - The fallen rock at 4,058 m pins them. In the 1.1.0 runs, 43 of the bots' 45 stops of 2 s or more were there, and in one race of 768 (Easy, the racer at 0.75, seed 33) the bot stands there until the 7-minute cap, with a cop standing in the road beside it for 23.8 s.
 - They sit behind slow cars and rear-end them, which is most of their crashes into cars.
 - They ride into slower riders. At full pace on Easy the racer runs into opponents 1.4 times a race (0.4 on Normal and Hard), and 21 of Easy's 34 run-ins are the bot riding into a slower rider's back or moving across into them. That is most of why Easy's player is knocked down more (48 in 192 races, against 25 and 18).
