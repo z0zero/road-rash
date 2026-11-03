@@ -30,8 +30,9 @@ const SEEDS_25_TO_48: readonly (readonly [Difficulty, BotName, string])[] = [
 ];
 
 /**
- * The whole set behind the 1.1.0 release notes (CHANGELOG.md): the 32 runs of the play-test's measure, 768 races,
- * and the cut-in measure on every difficulty, 72 more.
+ * The whole set behind the 1.2.0 release notes (CHANGELOG.md): the 32 runs of the play-test's measure, 768 races,
+ * and the cut-in measure on every difficulty, 72 more. The notes' figures over 72 seeds, over 1,344 races and over 144
+ * cut-in races also take the extra runs README.md lists.
  */
 export const WHOLE_SET: readonly Job[] = [
   ...DIFFICULTIES.map((difficulty): Job => ({ kind: "cut-ins", difficulty, first: 1, last: 24 })),
