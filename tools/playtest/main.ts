@@ -19,7 +19,7 @@ const USAGE = `Usage: npm run playtest -- <what> [options]       (see tools/play
 
   <difficulty> <bot> <pace> <seeds>   one run: a bot's races on those seeds, such as: normal racer 1.0 1-24
   cut-ins <difficulty> <seeds>        the cut-in measure, the racer at full pace, such as: hard 1-24
-  all                                 the whole set behind the 1.1.0 release notes: ${WHOLE_SET.length} runs, but for
+  all                                 the whole set behind the 1.2.0 release notes: ${WHOLE_SET.length} runs, but for
                                       those whose logs are already there
   report <logs>... [--against <logs>...]
                                       the release notes' claims from logs (folders or files);
