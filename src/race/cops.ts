@@ -322,8 +322,9 @@ const MAKING_WAY = 0.3;
  * ...and steers for a line at least this many metres to that side while it is
  * still in their path, so as to steer as fast as it can: steering briskly for
  * a line this far off, or further, takes a bike sideways as fast as it can. It
- * never steers that fast against the way it is steering, nor on past the line
- * it wants but where a step that fast takes it out of their path (see
+ * steers for one this far off past a nearer line it wants only when that isn't
+ * against the way it is steering, and only where that line is more than a step
+ * that fast away or a step that fast takes it out of their path (see
  * `bustingIntent`).
  */
 const OUT_OF_THE_WAY = EVASIVE_SPEED / EVASIVE_RESPONSE;
@@ -385,10 +386,12 @@ function makingWay(
  * brakes no harder than one coming up behind it in its path can, and pulls up
  * on their other side when it can't get to the nearer one as it is, or would
  * brake there harder than that; should even that take it past them, it first
- * gets clear of that one's path, steering out of it as fast as it can, though
- * never that fast against the way it is steering, nor on past the line it wants
- * unless a step that fast takes it out of their path: on a line still in their
- * path it holds that line rather than shake from side to side. It never moves
+ * gets clear of that one's path, steering out of it as fast as it can: for a
+ * line it wants nearer than `OUT_OF_THE_WAY`, it steers for one that far off,
+ * past it, only when that isn't against the way it is steering, and only where
+ * the line it wants is more than a step that fast away or a step that fast
+ * takes it out of their path; on a line still in their path within such a
+ * step, it holds that line rather than shake from side to side. It never moves
  * into or across the path of another who would keep it from braking hard
  * enough, unless every line would; then it takes the one that lets it brake
  * hardest (see `makingWay`). Once past them, it gets out of the path of whoever
@@ -423,9 +426,10 @@ function bustingIntent(
   const { line, holdBehind } = makingWay(me, beside, otherSide, pace, needs, behind, edge, route);
   const speed = pace > 0 ? Math.min(pace, holdBehind) : Math.max(pace, -ridingBack(me, line, behind));
   const braking = brakingFor(me, speed, behind);
-  // Kept from braking as hard as it needs to by one in its path, it steers out of it as fast as it can, though never that
-  // fast against the way it is steering, and on past its line only where a step that fast takes it out of their path: at
-  // a line still in their path it holds it, rather than steer flat out past it one way and then the other.
+  // Kept from braking as hard as it needs to by one in its path, it steers out of it as fast as it can: for a line nearer
+  // than `OUT_OF_THE_WAY`, it steers for one that far off, past it, only when that isn't against the way it is steering,
+  // and only where its line is more than a step that fast away or a step that fast takes it out of their path. At a line
+  // still in their path within such a step it holds it, rather than steer flat out past it one way and then the other.
   const across = line - me.offset;
   const aStep = Math.min(EVASIVE_SPEED, maxSidewaysSpeed(Math.abs(me.speed))) * STEP_SECONDS;
   const outInAStep = () => (brakingFor({ ...me, offset: me.offset + Math.sign(across) * aStep }, speed, behind) ?? BRAKING) >= needs;
