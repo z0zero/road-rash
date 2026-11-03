@@ -34,9 +34,11 @@ Node 22.12 or newer. Install with `npm ci`.
 | `npm run dev` | Development server on http://localhost:3000 |
 | `npm run build` | Static export into `out/` |
 | `npm run lint` | ESLint, including the Race module's purity rules |
-| `npm run typecheck` | Type-checks the app, and the Race module without DOM types |
+| `npm run typecheck` | Type-checks the app, the Race module without DOM types, and the play-test bots |
 | `npm test` | Vitest unit tests: the Race module and save data |
 | `npm run test:smoke` | Playwright smoke test against `out/` (run `npm run build` first) |
+| `npm run playtest -- <difficulty> <bot> <pace> <first seed>-<last seed>` | A play-test bot rides those races headless and logs them in `playtest-logs/` (see `tools/playtest/README.md`) |
+| `npm run playtest:report -- <logs> [--against <logs>]` | The release notes' measured claims from those logs |
 
 Where to read next:
 - `AGENTS.md`: the code map.

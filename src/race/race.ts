@@ -75,7 +75,8 @@ export interface TestSetup {
    * The cars on the road: the traffic, as in every race (the default); none,
    * on a closed road; or only the `cars` a test puts on a road closed to
    * every other car, so that it can put one in a rider's way: each stands
-   * still, or drives on at a steady speed, whatever is in its way.
+   * still, or drives on at a steady speed, changing lanes when it is told to,
+   * whatever is in its way.
    */
   readonly traffic?: "flowing" | "closed" | { readonly cars: readonly TestCar[] };
   /** Whether cops wait along the track to join the race (the default). Without them, nobody is busted. */
@@ -128,7 +129,8 @@ function step(race: RaceState, input: PlayerInput) {
     const riding = onTheirBikes(race);
     // Everyone on a bike in the race, the cops too, whom riders and cops find their way around.
     const everyoneOnABike = [...riding.map((rider) => rider.motion), ...copsInTheRace(race).map((cop) => cop.motion)];
-    const carsAndObstacles = [...traffic.cars.map(footprintOfCar), ...race.obstacles];
+    const carsBefore = traffic.cars.map(footprintOfCar);
+    const carsAndObstacles = [...carsBefore, ...race.obstacles];
     const opponents = decideOpponents(race, riding, everyoneOnABike, carsAndObstacles);
     const player = riders[PLAYER];
     if (player.status === "racing" && !player.crash && !player.attack && (input.punch || input.kick)) {
@@ -140,7 +142,7 @@ function step(race: RaceState, input: PlayerInput) {
     // finish line braking to a stop), riders off them run back to them, and the cops and the traffic drive on...
     const distancesBefore = riders.map((rider) => whereIs(rider).distance);
     for (const rider of riders) {
-      if (rider.crash) runBack(race, rider, input);
+      if (rider.crash) runBack(race, rider, input, carsBefore);
       else {
         const controls = rider.status !== "racing" ? FINISHED_CONTROLS : (opponents.controls.get(rider) ?? input);
         ride(rider.motion, controls, track, STEP_SECONDS);

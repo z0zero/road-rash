@@ -1,9 +1,11 @@
 import { sendCopsTo } from "./busting";
 import type { CrashCause } from "./events";
-import type { RaceState } from "./race-state";
-import { isPlayer, type Rider } from "./riders";
-import { clamp, type Motion } from "./riding";
+import type { Footprint } from "./footprint";
+import { copsInTheRace, type RaceState } from "./race-state";
+import { isPlayer, whereIs, type Rider } from "./riders";
+import { BIKE_LENGTH, BIKE_WIDTH, clamp, type Motion } from "./riding";
 import { STEP_SECONDS, stepsIn } from "./steps";
+import { apart } from "./track";
 import { TUNING } from "./tuning";
 
 /**
@@ -12,6 +14,9 @@ import { TUNING } from "./tuning";
  * after a car has run into them on foot, then on foot again.
  */
 export type CrashPhase = "tumbling" | "knocked-down" | "on-foot";
+
+/** A rider on foot takes up about this many metres, along the track and across it. */
+export const BODY_SIZE = 0.6;
 
 /** A rider's own motion while off their bike, in track space. */
 export interface Body {
@@ -31,6 +36,10 @@ export interface Crash {
   /** Steps since the crash, or since the rider was last knocked down. */
   steps: number;
   readonly body: Body;
+  /** Whether the rider, on foot by their bike, is waiting for a car to go by before getting back on it... */
+  waitingForACar: boolean;
+  /** ...and for how many steps they have waited so, since they last got to their feet. */
+  waitedSteps: number;
 }
 
 /** Throws a rider off the bike whose motion is `bike`: they leave it at its speed and tumble to a stop. */
@@ -38,6 +47,8 @@ export function throwOff(bike: Readonly<Motion>): Crash {
   return {
     phase: "tumbling",
     steps: 0,
+    waitingForACar: false,
+    waitedSteps: 0,
     body: {
       distance: bike.distance,
       offset: bike.offset,
@@ -51,6 +62,8 @@ export function throwOff(bike: Readonly<Motion>): Crash {
 export function knockDown(crash: Crash, speed: number, sideways: number): void {
   crash.phase = "knocked-down";
   crash.steps = 0;
+  crash.waitingForACar = false;
+  crash.waitedSteps = 0;
   crash.body.speed = speed;
   crash.body.sideways = sideways;
 }
@@ -87,6 +100,88 @@ const TUMBLE_STEPS = stepsIn(TUNING.tumbleSeconds);
 function canRemount(crash: Crash, bike: Readonly<Motion>): boolean {
   const { body } = crash;
   return crash.phase === "on-foot" && Math.hypot(bike.distance - body.distance, bike.offset - body.offset) <= TUNING.remountReach;
+}
+
+/** A rider at their bike looks this many seconds ahead for a car that would run into them as they ride off on it... */
+const LOOKING_OUT_FOR_CARS = 0.5;
+/** ...or pass within this many metres of its side, near enough for them to drift into it as they set off... */
+const PASSING_CLOSE = 0.3;
+/** ...and waits by the bike for it to go by, standing this many metres clear of its side... */
+const STANDING_CLEAR = 0.1;
+/** ...which a car going by at speed takes a second or less to do... */
+const A_CAR_GOING_BY = 1;
+/**
+ * ...but they wait three seconds at most since they last got to their feet,
+ * about as long as one car crawling towards them would keep them, and then
+ * get on whatever comes: so a queue of cars crawling past never keeps them
+ * there, nor does anything else.
+ */
+const WAITING_AT_MOST = stepsIn(3);
+
+/** Where a car's way across the road runs, from where it is to the lane it is moving to, from its left side to its right (metres right of the centreline). */
+function wayOf(car: Footprint): readonly [number, number] {
+  return [Math.min(car.offset, car.movingTo) - car.halfWidth, Math.max(car.offset, car.movingTo) + car.halfWidth];
+}
+
+/**
+ * The cars, of `cars` (by their footprints), that carried on at their speed
+ * for `LOOKING_OUT_FOR_CARS` would run into the bike `bike` if its rider rode
+ * off on it now, along the road at `TUNING.remountSpeed`: those whose way
+ * takes in the bike's, or passes within `PASSING_CLOSE` of its side, and that
+ * meet it on the way fast enough to crash them, at `TUNING.bumpSpeedLimit` or
+ * more. A car standing still over or beside the bike, or crawling along their
+ * way in a queue, would only bump them, so it is never one; nor is a cop's
+ * bike or another rider's, since in a run-in only the faster of two bikes
+ * crashes, never one setting off, and never a cop.
+ */
+function carsComing(bike: Readonly<Motion>, cars: readonly Footprint[]): Footprint[] {
+  return cars.filter((car) => {
+    const closing = car.velocity - TUNING.remountSpeed;
+    if (Math.abs(closing) < TUNING.bumpSpeedLimit) return false;
+    const [left, right] = wayOf(car);
+    const reach = BIKE_WIDTH / 2 + PASSING_CLOSE;
+    if (bike.offset + reach <= left || bike.offset - reach >= right) return false;
+    // How far its middle is ahead of the bike's now, and once carried on: they meet if they are nose to tail or closer between.
+    const now = car.distance - bike.distance;
+    const then = now + closing * LOOKING_OUT_FOR_CARS;
+    const touching = car.halfLength + BIKE_LENGTH / 2;
+    return Math.min(now, then) < touching && Math.max(now, then) > -touching;
+  });
+}
+
+/**
+ * Whether a cop riding to bust `rider`, who is on foot, is near enough to
+ * reach them if they waited by their bike for a car to go by: within its
+ * busting reach of them, plus as far as it rides in `A_CAR_GOING_BY` at its
+ * arrest pace. Then they get on all the same, and chance the car rather
+ * than be busted.
+ */
+function copClose(race: RaceState, rider: Rider): boolean {
+  const reach = TUNING.cops.bustingReach + TUNING.cops.arrestPace * A_CAR_GOING_BY;
+  return copsInTheRace(race).some((cop) => cop.busting === rider.id && apart(cop.motion, whereIs(rider)) <= reach);
+}
+
+/**
+ * Moves a rider waiting by their bike (by their `body`) on by a step, while
+ * the `coming` cars go by: out of the way of the first whose way takes them
+ * in, sideways at a run, the shorter way, unless the road's `edge` leaves no
+ * room for them that way, to stand `STANDING_CLEAR` of its side; and
+ * otherwise standing still.
+ */
+function standClear(body: Body, coming: readonly Footprint[], edge: number) {
+  body.speed = 0;
+  body.sideways = 0;
+  for (const car of coming) {
+    const [left, right] = wayOf(car);
+    const leftOfIt = left - BODY_SIZE / 2 - STANDING_CLEAR;
+    const rightOfIt = right + BODY_SIZE / 2 + STANDING_CLEAR;
+    if (body.offset <= leftOfIt || body.offset >= rightOfIt) continue;
+    const toTheLeft = (body.offset - leftOfIt <= rightOfIt - body.offset && leftOfIt >= -edge) || rightOfIt > edge;
+    const clear = toTheLeft ? leftOfIt : rightOfIt;
+    body.sideways = clamp((clear - body.offset) / STEP_SECONDS, -TUNING.runSpeed, TUNING.runSpeed);
+    break;
+  }
+  move(body, edge);
 }
 
 /** Puts a rider back on their bike, which sets off slowly. */
@@ -159,15 +254,35 @@ export function crash(race: RaceState, rider: Rider, cause: CrashCause, impactSp
  * Moves a crashed rider on by a step: their bike slides on by itself while
  * they tumble, then run back to it, steered by the player's `input` for the
  * player, straight back for an opponent, and get back on once they reach it.
- * A rider whose race is over stands still once on their feet.
+ * Unless one of the `cars` (by their footprints) is coming that would run
+ * into them as they rode off, and no cop riding to bust them is close as
+ * they reach it: then they wait by their bike, out of its way, until no car
+ * is coming, or for `WAITING_AT_MOST`, when they go back to it and get on.
+ * Once waiting, they wait on, as a car is closest then. A rider whose race
+ * is over stands still once on their feet.
  */
-export function runBack(race: RaceState, rider: Rider, input: OnFootControls): void {
-  if (!rider.crash) return;
+export function runBack(race: RaceState, rider: Rider, input: OnFootControls, cars: readonly Footprint[]): void {
+  const { crash } = rider;
+  if (!crash) return;
   const { edge } = race;
   slide(rider.motion, edge);
-  const onFoot = rider.status !== "racing" ? STAND_STILL : isPlayer(rider) ? input : RUN_STRAIGHT_BACK;
-  carryOn(rider.crash, rider.motion, onFoot, edge);
-  if (rider.status === "racing" && canRemount(rider.crash, rider.motion)) getBackOn(race, rider);
+  const racing = rider.status === "racing";
+  const mayWait = racing && crash.waitedSteps < WAITING_AT_MOST;
+  if (crash.waitingForACar) {
+    const coming = mayWait ? carsComing(rider.motion, cars) : [];
+    crash.waitingForACar = coming.length > 0;
+    if (crash.waitingForACar) {
+      crash.steps++;
+      crash.waitedSteps++;
+      standClear(crash.body, coming, edge);
+      return;
+    }
+  }
+  const onFoot = !racing ? STAND_STILL : isPlayer(rider) ? input : RUN_STRAIGHT_BACK;
+  carryOn(crash, rider.motion, onFoot, edge);
+  if (!racing || !canRemount(crash, rider.motion)) return;
+  crash.waitingForACar = mayWait && carsComing(rider.motion, cars).length > 0 && !copClose(race, rider);
+  if (!crash.waitingForACar) getBackOn(race, rider);
 }
 
 /** A rider on foot who has reached their bike rides off on it again, with at least some stamina. */

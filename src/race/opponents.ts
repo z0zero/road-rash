@@ -114,7 +114,10 @@ export function decideOpponents(
   for (const rider of riding) {
     const intent = intents.get(rider);
     if (isPlayer(rider) || !intent) continue;
-    controls.set(rider, opponentControls(rider.motion, rider.riding, track, everyoneOnABike, catchUp(rider), intent, forTheOpponents));
+    controls.set(
+      rider,
+      opponentControls(rider.motion, rider.riding, track, everyoneOnABike, catchUp(rider), intent, forTheOpponents, rider.lookingOutFor),
+    );
   }
   return { controls, waiting };
 }

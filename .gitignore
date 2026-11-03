@@ -12,6 +12,9 @@
 /.next/
 /out/
 
+# play-test logs (tools/playtest), wherever npm runs it from
+playtest-logs/
+
 # misc
 .DS_Store
 *.pem

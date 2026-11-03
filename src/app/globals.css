@@ -50,15 +50,30 @@
 }
 
 /*
- * A window too short for the screens' full spacing: less than 768 px tall, as
- * many laptops' maximized browsers are, about 650 px tall on a 1366x768
- * screen, 700 on a 1280x800 one, and 730 or 580 on a 1920x1080 one at 125% or
- * 150% scaling. The tighter spacing fits every screen in a window down to
- * 1024x576. With the full spacing, the tallest screen, the results after a
- * first finish with a new best, needs a window about 760 px tall, its panel
- * and the overlay's padding: 768 leaves a few pixels to spare for other fonts.
+ * A window too short for the screens' full spacing: less than 768 px tall at
+ * the browser's default font size (16 px), as many laptops' maximized browsers
+ * are, about 650 px tall on a 1366x768 screen, 700 on a 1280x800 one, and 730
+ * or 580 on a 1920x1080 one at 125% or 150% scaling. The tighter spacing fits
+ * every screen in a window down to 1024x576. With the full spacing, the
+ * tallest screen, the results after a first finish with a new best, needs a
+ * window about 760 px tall, its panel and the overlay's padding: 768 leaves a
+ * few pixels to spare for other fonts.
+ *
+ * The step is in em, 48em being 768 px at 16 px: a media query takes the em
+ * from the browser's default font size, as the screens' sizes in rem do. With
+ * a larger default, such as Chrome's Large font size (20 px), the screens need
+ * a taller window, and the tighter spacing takes over in taller windows too,
+ * up to 958 px tall at 20 px.
  */
-@custom-variant short (@media (max-height: 767px));
+@custom-variant short (@media (max-height: 47.9375em));
+
+/*
+ * A window too narrow for Controls' table at its full size: less than 30em
+ * wide, 480 px at the default font size and 600 at Chrome's Large (20 px), as
+ * the table grows with the font. Windows 640 px wide or more keep the full
+ * size at any font size: the table fits in them up to the Large font size.
+ */
+@custom-variant cramped (@media (width < 30em) and (width < 640px));
 
 html,
 body {
