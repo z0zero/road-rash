@@ -32,6 +32,17 @@ export function report(paths: readonly string[], against: readonly string[]): st
   };
   const each = (difficulty: Difficulty, bot: BotName, pace: number, say: (races: Races) => string, label = `${bot} ${paceText(pace)}`) =>
     blocks(runOf(difficulty, bot, pace)).map(([seeds, races]) => `- ${label}, seeds ${seeds}: ${say(races)}`);
+  /** The same run in the other logs, as `each` gives it here. */
+  const eachThere = (difficulty: Difficulty, bot: BotName, pace: number, say: (races: Races) => string, label = `${bot} ${paceText(pace)}`) =>
+    blocks(baseRuns?.get(keyOf(difficulty, bot, pace)) ?? []).map(([seeds, races]) => `- in ${there}, ${label}, seeds ${seeds}: ${say(races)}`);
+  /** A run's seed ranges taken together (1-48, 1-72), each race set beside the same seed's in the other logs. */
+  const eachPaired = (difficulty: Difficulty, bot: BotName, pace: number, label = `${bot} ${paceText(pace)}`) => {
+    const theirs = baseRuns?.get(keyOf(difficulty, bot, pace)) ?? [];
+    return blocks(runOf(difficulty, bot, pace)).flatMap(([seeds, races]) => {
+      const others = onSeeds(theirs, races.rows);
+      return races.logs.length > 1 && others.length === races.rows.length ? [`- ${label} against ${there}, seeds ${seeds}, seed by seed: ${paired(races.rows, others)}`] : [];
+    });
+  };
 
   const all = racesIn(logs.runs);
   const whole = wholeSetRaces(logs.runs);
@@ -60,11 +71,18 @@ export function report(paths: readonly string[], against: readonly string[]): st
     wholeSet((races) => `opponents crashed into a rider ${byDifficulty(races, (r) => r.opp.rider ?? 0)} times, and the player into an opponent ${byDifficulty(races, (r) => r.crashes.rider)} times`),
   );
 
-  section("Easy: a first-timer (riding at 75% of a safe pace) still finishes 8th on average, seldom alone (13% of the race) and never knocked off.", each("easy", "racer", 0.75, firstTimer));
+  section("Easy: a first-timer (riding at 75% of a safe pace) still finishes about 8th on average (8.6), seldom alone (13% of the race) and never knocked off.", [
+    ...each("easy", "racer", FIRST_TIMER, firstTimer),
+    ...eachThere("easy", "racer", FIRST_TIMER, firstTimer),
+  ]);
 
   section("Easy: an average rider qualifies in two races of three or a little more (35 of 48).", each("easy", "racer", 0.85, qualifying));
 
-  section("Easy: the better bots qualify more often than in 1.1.0: 159 of the 240 Easy races, against 132.", qualifiers(whole, baseWhole, "easy", there), "Every Easy run of the whole set.");
+  section(
+    "Easy: the better bots qualify more often than in 1.1.0: 120 of their 144 Easy races, on 24 seeds, against 97.",
+    qualifiers(whole, baseWhole, "easy", there, [keyOf("easy", "racer", FIRST_TIMER), keyOf("easy", "racer", 0.85)]),
+    "Every Easy run of the whole set. The better bots are all but the first-timer (racer 0.75) and the average rider (racer 0.85).",
+  );
 
   const normal = [...each("normal", "racer", 0.92, qualifying, "racer 0.92 (a decent rider)"), ...each("normal", "racer", 1, qualifying, "racer 1.0 (an expert)")];
   if (baseRuns) {
@@ -90,7 +108,10 @@ export function report(paths: readonly string[], against: readonly string[]): st
     normal,
   );
 
-  section("Hard: an expert now qualifies in about three races of five (28 of 48, and 41 of 72), up from two of five.", each("hard", "racer", 1, qualifying));
+  section(
+    "Hard: an expert qualifies in about three races of five (28 of 48, and 41 of 72), against 21 of 48 and 32 of 72 in 1.1.0, a difference within the play-test's noise.",
+    [...each("hard", "racer", 1, qualifying), ...eachThere("hard", "racer", 1, qualifying), ...eachPaired("hard", "racer", 1)],
+  );
 
   section("Hard: one who hits back takes no more hits and qualifies about as often: over 72 seeds, 4.4 hits a race against 4.8, and 35 races qualified against 41.", [
     ...each("hard", "racer", 1, fighting),
@@ -143,6 +164,11 @@ export function report(paths: readonly string[], against: readonly string[]): st
       ...(baseAll.length > baseWhole.length ? [`- every run in ${there}, ${baseAll.length} races: ${remounts(baseAll)}`] : []),
     ],
     "How near the cop was isn't in the logs; how each of those races ended is.",
+  );
+
+  section(
+    "Known limitation: in bot races, though, opponents crashed into cars less than in 1.1.0: 263 times in 768, against 382.",
+    wholeSet((races) => `opponents crashed into cars ${byDifficulty(races, (r) => r.opp.traffic ?? 0)} times`),
   );
 
   const slower = [...runs.values()].filter((these) => these[0].difficulty === "easy" && these[0].bot === "racer" && these[0].pace < FIRST_TIMER);
@@ -315,19 +341,26 @@ function fighting(races: Races) {
   return `${s.q} of ${s.n} qualified; mean position ${f1(s.meanPosition)} ± ${f1(s.positionSE)}; hits taken ${f1(mean(hits))} ± ${f1(se(hits))} a race; knock-offs ${f2(knockOffCount(races.rows) / s.n)} a race`;
 }
 
-/** Each of a difficulty's runs in `mine` (the whole set's races), its qualifiers set beside those of the same races in `theirs`, then all together. */
-function qualifiers(mine: readonly Ridden[], theirs: readonly Ridden[], difficulty: Difficulty, there: string) {
+/**
+ * Each of a difficulty's runs in `mine` (the whole set's races), its qualifiers set beside those of the same races in
+ * `theirs`, then every run but those `apart` together, then all of them.
+ */
+function qualifiers(mine: readonly Ridden[], theirs: readonly Ridden[], difficulty: Difficulty, there: string, apart: readonly string[] = []) {
   const here = mine.filter(({ log }) => log.difficulty === difficulty);
   const others = theirs.filter(({ log }) => log.difficulty === difficulty);
   const keyOfRace = ({ log }: Ridden) => keyOf(log.difficulty, log.bot, log.pace);
   const count = (races: readonly Ridden[]) => races.filter(({ row }) => qualified(row)).length;
   const keys = [...new Set(here.map(keyOfRace))].sort((a, b) => order(a) - order(b));
   const against = (races: readonly Ridden[]) => (races.length ? `, against ${count(races)} of ${races.length} in ${there}` : "");
+  const rest = (races: readonly Ridden[]) => races.filter((race) => !apart.includes(keyOfRace(race)));
   return [
     ...keys.map((key) => {
       const these = here.filter((race) => keyOfRace(race) === key);
       return `- ${key.slice(difficulty.length + 1)}, seeds ${seedsOf(these.map(({ row }) => row))}: ${count(these)} of ${these.length} qualified${against(others.filter((race) => keyOfRace(race) === key))}`;
     }),
+    ...(apart.length && rest(here).length
+      ? [`- every ${capital(difficulty)} run of the whole set but ${apart.map((key) => key.slice(difficulty.length + 1)).join(" and ")}: ${count(rest(here))} of ${rest(here).length} qualified${against(rest(others))}`]
+      : []),
     ...(here.length ? [`- every ${capital(difficulty)} race of the whole set: ${count(here)} of ${here.length} qualified${against(others)}`] : []),
   ];
 }
