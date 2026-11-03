@@ -991,7 +991,7 @@ describe("a cop riding to bust a crashed rider", () => {
     ["easy", 20, "stays where they fell"],
     ["easy", 39, "stays where they fell"],
   ] as const)(
-    "gets down to its arrest pace by the time it reaches a player who crashed at speed, with an opponent following it in its path, making way for them, and stops within its reach of them rather than ride past them (%s, seed %i: the player %s)",
+    "rides to a player who crashed at speed, with an opponent following it in its path, and stops within its reach of them rather than ride past them (%s, seed %i: the player %s)",
     (difficulty, seed, onFoot) => {
       // The player, riding at 44 m/s or more, rides flat out into a car going their way with the cop following them at its
       // usual gap, 60 to 79 m behind, and an opponent following it within 60 m in its path.

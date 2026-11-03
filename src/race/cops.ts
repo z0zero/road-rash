@@ -263,7 +263,8 @@ function aCopsWay(me: Readonly<Motion>, behind: readonly Behind[]): ACopsWay {
 /**
  * How a cop at `me` finds its way around (see `lineAround`) among everyone on
  * a bike (`field`, with the `cops` among them) and the cars and obstacles on
- * the road (`carsAndObstacles`): as `aCopsWay` says.
+ * the road (`carsAndObstacles`): as `aCopsWay` says. Exported for the Race
+ * module's tests, which ask it directly where a cop would ride.
  */
 export function copsWayAround(
   me: Readonly<Motion>,

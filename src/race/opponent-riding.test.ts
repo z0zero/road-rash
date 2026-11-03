@@ -358,12 +358,18 @@ describe("a faster rider coming up behind", () => {
     comingUp.speed = 31;
 
     const then = lineAround(me, 4.5, [me, comingUp], [car], EDGE, SHOULDER_EDGE, null, lookingOutFor);
+    const notLookingOut = lineAround(me, 4.5, [me, comingUp], [car], EDGE, SHOULDER_EDGE);
+    // They ease off further, to 29 m/s, 2.25 s from getting alongside it.
+    comingUp.speed = 29;
+    const later = lineAround(me, 4.5, [me, comingUp], [car], EDGE, SHOULDER_EDGE, null, lookingOutFor);
 
     // It holds behind the car rather than pull out round it in front of them, as it would if it hadn't been looking
-    // out for them, a metre clear of the car's side.
+    // out for them, a metre clear of the car's side; once they are more than two seconds from getting alongside it, it
+    // stops looking out for them and pulls out round it.
     expect(first.line).toBe(4.5);
     expect(then.line).toBe(4.5);
-    expect(lineAround(me, 4.5, [me, comingUp], [car], EDGE, SHOULDER_EDGE).line).toBeCloseTo(4.5 - 0.9 - 1);
+    expect(notLookingOut.line).toBeCloseTo(4.5 - 0.9 - 1);
+    expect(later.line).toBeCloseTo(4.5 - 0.9 - 1);
   });
 
   it("gets out of the way of a rock it can't stop short of in front of a faster rider coming up behind it more than a second back, closing on it at little more than a bump", () => {
